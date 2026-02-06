@@ -118,7 +118,7 @@ public class WeatherController {
                 }
             }
         } catch (Exception e) {
-            System.err.println("파싱 오류: " + e.getMessage());
+            System.err.println("parsing error: " + e.getMessage());
         }
         return data;
     }
