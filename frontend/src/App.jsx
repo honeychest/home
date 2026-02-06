@@ -11,137 +11,204 @@ function App() {
     const cesiumContainer = useRef(null);
     const viewerRef = useRef(null);
     const nodeRef = useRef(null);
+    const selectedEntityRef = useRef(null);
+
     const [weatherList, setWeatherList] = useState([]);
     const [range, setRange] = useState({ min: 0, max: 0 });
-
-    // 💡 접기/펼치기 상태 추가 (기본값: 모바일이면 접힘, 웹이면 펼침)
+    const [selectedRegion, setSelectedRegion] = useState(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [obsTime, setObsTime] = useState(""); // 💡 데이터 기준 시간 상태
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
+    // 1. 화면 크기 감지 및 모바일 전체화면 트리거
     useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        const handleFullscreen = () => {
+            if (isMobile && !document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('touchstart', handleFullscreen, { once: true });
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('touchstart', handleFullscreen);
+        };
+    }, [isMobile]);
+
+    // 2. Cesium 뷰어 및 클릭 이벤트 초기화
+    useEffect(() => {
+        if (!cesiumContainer.current) return;
+
         const viewer = new Cesium.Viewer(cesiumContainer.current, {
-            terrainProvider: null, animation: false, timeline: false, baseLayerPicker: false, infoBox: false
+            terrainProvider: null,
+            animation: false,
+            timeline: false,
+            baseLayerPicker: false,
+            infoBox: false,
+            selectionIndicator: false,
+            fullscreenButton: true, // // 💡 Modified: 기본 전체화면 버튼 활성화
         });
         viewerRef.current = viewer;
-        viewer.scene.globe.depthTestAgainstTerrain = false;
-        viewer.scene.fog.enabled = false;
-        viewer.scene.skyAtmosphere.show = false;
-        viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(127.5, 36.0, 1200000.0) });
-        return () => viewer.destroy();
+        viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(127.5, 36.0, 1300000.0) });
+
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        handler.setInputAction((click) => {
+            const pickedObject = viewer.scene.pick(click.position);
+
+            // 이전 선택 초기화
+            if (selectedEntityRef.current) {
+                const prev = selectedEntityRef.current;
+                prev.polygon.outlineColor = Cesium.Color.WHITE.withAlpha(0.5);
+                prev.polygon.outlineWidth = 1;
+                prev.polygon.extrudedHeight = 0;
+            }
+
+            if (Cesium.defined(pickedObject) && pickedObject.id) {
+                const entity = pickedObject.id;
+                let height = 0;
+                const targetHeight = 60000;
+
+                entity.polygon.outlineColor = Cesium.Color.GRAY;
+                entity.polygon.outlineWidth = 4;
+                entity.polygon.extrudedHeight = new Cesium.CallbackProperty(() => {
+                    if (height < targetHeight) height += 6000;
+                    return height;
+                }, false);
+
+                selectedEntityRef.current = entity;
+                viewer.flyTo(entity, {
+                    offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-75), 700000),
+                    duration: 1.2
+                });
+
+                const fullName = entity.properties.name?._value || "";
+                let mappingName = null;
+                for (const [city, province] of Object.entries(CITY_TO_PROVINCE)) {
+                    if (fullName.includes(city)) { mappingName = province; break; }
+                }
+                if (!mappingName) mappingName = GEO_ORDER.find(name => fullName.includes(name));
+
+                setWeatherList(prev => {
+                    const found = prev.find(w => w.name === mappingName);
+                    if (found) setSelectedRegion({ ...found, displayName: fullName });
+                    return prev;
+                });
+            } else {
+                setSelectedRegion(null);
+                selectedEntityRef.current = null;
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+        return () => { handler.destroy(); viewer.destroy(); };
     }, []);
 
+    // 3. 날씨 데이터 페칭 및 지도 색상 적용
     useEffect(() => {
         fetch('/api/weather/all')
             .then(res => res.json())
             .then(data => {
-                const sorted = GEO_ORDER.map(name => ({ name, tmp: parseFloat(data[name] || 0) }));
+                const sorted = GEO_ORDER.map(name => ({
+                    name, ...data[name], tmp: parseFloat(data[name]?.tmp || 0)
+                }));
+
+                // 💡 첫 번째 유효한 데이터에서 기준 시간 추출
+                const validTime = sorted.find(d => d.baseTime)?.baseTime;
+                if (validTime) setObsTime(validTime);
+
                 const temps = sorted.map(d => d.tmp);
-                const currentMin = Math.min(...temps);
-                const currentMax = Math.max(...temps);
-
+                const minT = Math.min(...temps);
+                const maxT = Math.max(...temps);
                 setWeatherList(sorted);
-                setRange({ min: currentMin, max: currentMax });
+                setRange({ min: minT, max: maxT });
 
-                const viewer = viewerRef.current;
-                if (!viewer) return;
-                viewer.dataSources.removeAll();
+                Cesium.GeoJsonDataSource.load('/data/korea.json').then(ds => {
+                    viewerRef.current.dataSources.add(ds);
+                    ds.entities.values.forEach(entity => {
+                        const name = entity.properties.name?._value || "";
+                        let target = null;
+                        for (const [c, p] of Object.entries(CITY_TO_PROVINCE)) if (name.includes(c)) target = p;
+                        if (!target) target = GEO_ORDER.find(n => name.includes(n));
 
-                Cesium.GeoJsonDataSource.load('/data/korea.json', {
-                    stroke: Cesium.Color.WHITE.withAlpha(0.5), strokeWidth: 1
-                }).then(dataSource => {
-                    viewer.dataSources.add(dataSource);
-                    dataSource.entities.values.forEach(entity => {
-                        const fullName = entity.properties.name?._value || "";
-                        let targetName = null;
-                        for (const [city, province] of Object.entries(CITY_TO_PROVINCE)) {
-                            if (fullName.includes(city)) { targetName = province; break; }
-                        }
-                        if (!targetName) targetName = GEO_ORDER.find(name => fullName.includes(name));
-
-                        const regionData = sorted.find(d => d.name === targetName);
-                        if (regionData) {
-                            entity.polygon.material = getRelativeColor(regionData.tmp, currentMin, currentMax);
-                        } else {
-                            entity.polygon.material = Cesium.Color.WHITE.withAlpha(0.0);
-                        }
+                        const regionData = sorted.find(d => d.name === target);
+                        if (regionData) entity.polygon.material = getRelativeColor(regionData.tmp, minT, maxT);
                     });
                 });
             });
     }, []);
 
     return (
-        <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', backgroundColor: '#000' }}>
             <div ref={cesiumContainer} style={{ width: '100%', height: '100%' }} />
 
-            <Draggable
-                nodeRef={nodeRef}
-                bounds="parent"
-                handle=".drag-handle"
-                // 드래그 시작 시 버튼 위라면 드래그 무시
-                onStart={(e) => {
-                    if (e.target.closest('button')) return false;
-                }}
-            >
+            {/* 좌측 패널: 전국 기온 (데이터 시간 표시) */}
+            <Draggable nodeRef={nodeRef} bounds="parent" handle=".drag-handle">
                 <div ref={nodeRef} style={{
-                    position: 'absolute', top: '20px', left: '20px',
-                    width: isCollapsed ? '130px' : (window.innerWidth < 768 ? '210px' : '260px'),
-                    backgroundColor: 'rgba(0, 0, 0, 0.85)', color: 'white', padding: '15px',
-                    borderRadius: '15px', zIndex: 1000, userSelect: 'none',
-                    transition: 'width 0.2s ease-out'
+                    position: 'absolute', top: '15px', left: '15px',
+                    width: isCollapsed ? '90px' : (isMobile ? '160px' : '230px'),
+                    backgroundColor: 'rgba(0, 0, 0, 0.75)', color: 'white', padding: '12px',
+                    borderRadius: '12px', zIndex: 1000, transition: 'width 0.2s'
                 }}>
-                    {/* 헤더 부분 */}
-                    <div className="drag-handle" style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        cursor: 'move', paddingBottom: isCollapsed ? '0' : '10px',
-                        borderBottom: isCollapsed ? 'none' : '1px solid #444'
-                    }}>
-                        <h4 style={{ margin: 0, fontSize: '14px', whiteSpace: 'nowrap' }}>
-                            📍 {isCollapsed ? '기온' : '전국 기온'}
-                        </h4>
-                        <button
-                            // 💡 onClick 대신 onPointerDown을 사용하면 드래그보다 먼저 반응합니다.
-                            onPointerDown={(e) => {
-                                e.stopPropagation(); // 드래그 이벤트로 전파 차단
-                                setIsCollapsed(!isCollapsed);
-                            }}
-                            style={{
-                                background: '#555', border: 'none', color: 'white',
-                                borderRadius: '4px', cursor: 'pointer', fontSize: '11px',
-                                padding: '4px 8px', marginLeft: '10px', touchAction: 'none'
-                            }}
-                        >
+                    <div className="drag-handle" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'move' }}>
+                        <span style={{ fontSize: isMobile ? '11px' : '13px', fontWeight: 'bold' }}>
+                            {isCollapsed ? '🌡️' : `전국 기온 (${obsTime || '--:--'})`}
+                        </span>
+                        <button onPointerDown={(e) => { e.stopPropagation(); setIsCollapsed(!isCollapsed); }} style={{ background: '#444', border: 'none', color: '#fff', fontSize: '10px', padding: '2px 5px', borderRadius: '4px' }}>
                             {isCollapsed ? '펼치기' : '접기'}
                         </button>
                     </div>
-
-                    {/* 리스트 부분: display 대신 height와 opacity로 제어해야 레이아웃이 깨지지 않습니다. */}
-                    <div style={{
-                        display: isCollapsed ? 'none' : 'block',
-                        marginTop: '15px'
-                    }}>
-                        <div style={{ maxHeight: '50vh', overflowY: 'auto', paddingRight: '5px' }}>
-                            {weatherList.map((item, idx) => {
-                                const barColor = getRelativeColor(item.tmp, range.min, range.max).toCssColorString();
-                                const diff = range.max - range.min;
-                                const ratio = diff === 0 ? 0 : (item.tmp - range.min) / diff;
-                                const barWidth = (ratio * 85) + 15;
-
-                                return (
-                                    <div key={idx} style={{ marginBottom: '10px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                                            <span>{item.name}</span>
-                                            <span style={{ color: barColor, fontWeight: 'bold' }}>{item.tmp}°C</span>
-                                        </div>
-                                        <div style={{ width: '100%', height: '4px', backgroundColor: '#333', borderRadius: '2px', marginTop: '4px' }}>
-                                            <div style={{ width: `${barWidth}%`, height: '100%', backgroundColor: barColor, borderRadius: '2px' }} />
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                    {!isCollapsed && (
+                        <div style={{ marginTop: '10px', maxHeight: '45vh', overflowY: 'auto' }}>
+                            {weatherList.map((item, i) => (
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                                    <span>{item.name}</span>
+                                    <span style={{ fontWeight: 'bold', color: getRelativeColor(item.tmp, range.min, range.max).toCssColorString() }}>{item.tmp}°C</span>
+                                </div>
+                            ))}
                         </div>
-                    </div>
+                    )}
                 </div>
             </Draggable>
+
+            {/* 우측 상단: 슬림 상세 패널 */}
+            {selectedRegion && (
+                <div style={{
+                    position: 'absolute', top: '15px', right: '15px', width: isMobile ? '150px' : '200px',
+                    backgroundColor: 'rgba(15, 15, 15, 0.95)', color: 'white', padding: '12px',
+                    borderRadius: '12px', zIndex: 2000, border: '1px solid #00d4ff', boxShadow: '0 4px 15px #000',
+                    animation: 'fadeIn 0.2s ease-out'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <b style={{ fontSize: '14px', color: '#00d4ff' }}>{selectedRegion.displayName.split(' ')[0]}</b>
+                        <button onClick={() => { if (selectedEntityRef.current) selectedEntityRef.current.polygon.extrudedHeight = 0; setSelectedRegion(null); }} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+                    </div>
+                    <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '2px' }}><span>기온</span> <b>{selectedRegion.tmp}°C</b></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '2px' }}><span>습도</span> <b>{selectedRegion.hum}%</b></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>강수/풍속</span> <b>{selectedRegion.rain}㎜ / {selectedRegion.wind}m</b></div>
+                    </div>
+                </div>
+            )}
+
+            <style>{`
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+                
+                /* 💡 Modified: 로고와 도움말 버튼만 숨기고, 전체화면 버튼은 남겨둠 */
+                .cesium-widget-credits, .cesium-viewer-helpButtonContainer { display: none !important; }
+                
+                /* 전체화면 버튼 위치가 리스트와 겹친다면 아래 코드로 살짝 조정 가능합니다 */
+                .cesium-viewer-fullscreenContainer { 
+                    bottom: 20px !important; 
+                    right: 20px !important; 
+                }
+            
+                ::-webkit-scrollbar { width: 3px; }
+                ::-webkit-scrollbar-thumb { background: #555; borderRadius: 2px; }
+            `}</style>
         </div>
     );
 }
+
 export default App;
