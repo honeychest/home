@@ -59,7 +59,7 @@ public class WeatherController {
         String baseDate = dateTime.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String baseTime = dateTime.format(DateTimeFormatter.ofPattern("HHmm"));
 
-        // nx(%d), ny(%d)에 정수형 coords 배열 값을 정확히 매칭합니다.
+        // nx와 ny 자리에 %d를 사용하여 int 값을 대입합니다.
         String url = String.format("%s?serviceKey=%s&pageNo=1&numOfRows=1000&dataType=JSON&base_date=%s&base_time=%s&nx=%d&ny=%d",
                 baseUrl, serviceKey, baseDate, baseTime, coords[0], coords[1]);
 
@@ -71,6 +71,7 @@ public class WeatherController {
 
             return fetchWeatherRecursive(restTemplate, name, coords, dateTime.minusHours(1), currentHour, retryCount + 1);
         } catch (Exception e) {
+            // 한글 대신 영문 로그를 남겨 인코딩 문제를 방지합니다.
             System.err.println("API Request Error [" + name + "]: " + e.getMessage());
             return fetchWeatherRecursive(restTemplate, name, coords, dateTime.minusHours(1), currentHour, retryCount + 1);
         }
