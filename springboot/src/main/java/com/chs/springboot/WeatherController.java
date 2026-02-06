@@ -57,15 +57,13 @@ public class WeatherController {
         if (retryCount >= 5) return new HashMap<>();
 
         String baseDate = dateTime.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        // API 기준에 맞춰 분을 00으로 고정하거나 조정이 필요할 수 있습니다.
         String baseTime = dateTime.format(DateTimeFormatter.ofPattern("HHmm"));
 
-        // coords[0]와 coords[1]은 int이므로 String.format에서 %d를 쓰거나 자동으로 변환됩니다.
+        // nx(%d), ny(%d)에 정수형 coords 배열 값을 정확히 매칭합니다.
         String url = String.format("%s?serviceKey=%s&pageNo=1&numOfRows=1000&dataType=JSON&base_date=%s&base_time=%s&nx=%d&ny=%d",
                 baseUrl, serviceKey, baseDate, baseTime, coords[0], coords[1]);
 
         try {
-            // 버전 경고 방지를 위해 url 문자열을 직접 사용
             String json = restTemplate.getForObject(url, String.class);
             Map<String, String> data = extractAllFcstData(json, currentHour);
 
