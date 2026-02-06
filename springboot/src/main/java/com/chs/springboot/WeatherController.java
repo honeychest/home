@@ -53,42 +53,28 @@ public class WeatherController {
         return results;
     }
 
-    private Map<String, String> fetchWeatherRecursive(RestTemplate restTemplate, String name, int[] coords, LocalDateTime targetTime, String currentHour, int retryCount) {
-        if (retryCount > 5) return new HashMap<>();
+    private Map<String, String> fetchWeatherRecursive(RestTemplate restTemplate, String name, int[] coords, LocalDateTime dateTime, String currentHour, int retryCount) {
+        if (retryCount >= 5) return new HashMap<>();
 
-        // 초단기예보 생성 주기에 맞춘 base_time 설정 (HH30)
-        LocalDateTime baseTimeSource = targetTime.minusMinutes(45);
-        String baseDate = baseTimeSource.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String apiBaseTime = baseTimeSource.format(DateTimeFormatter.ofPattern("HH30"));
-        // UI 표시용 포맷 (HH:00)
-        String displayTime = baseTimeSource.format(DateTimeFormatter.ofPattern("HH:00"));
+        String baseDate = dateTime.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        // API 기준에 맞춰 분을 00으로 고정하거나 조정이 필요할 수 있습니다.
+        String baseTime = dateTime.format(DateTimeFormatter.ofPattern("HHmm"));
+
+        // coords[0]와 coords[1]은 int이므로 String.format에서 %d를 쓰거나 자동으로 변환됩니다.
+        String url = String.format("%s?serviceKey=%s&pageNo=1&numOfRows=1000&dataType=JSON&base_date=%s&base_time=%s&nx=%d&ny=%d",
+                baseUrl, serviceKey, baseDate, baseTime, coords[0], coords[1]);
 
         try {
-            URI uri = UriComponentsBuilder.fromHttpUrl(baseUrl)
-                    .queryParam("serviceKey", serviceKey)
-                    .queryParam("pageNo", "1")
-                    .queryParam("numOfRows", "60")
-                    .queryParam("dataType", "JSON")
-                    .queryParam("base_date", baseDate)
-                    .queryParam("base_time", apiBaseTime)
-                    .queryParam("nx", coords[0])
-                    .queryParam("ny", coords[1])
-                    .build(true).toUri();
+            // 버전 경고 방지를 위해 url 문자열을 직접 사용
+            String json = restTemplate.getForObject(url, String.class);
+            Map<String, String> data = extractAllFcstData(json, currentHour);
 
-            String response = restTemplate.getForObject(uri, String.class);
-            Map<String, String> result = extractAllFcstData(response, currentHour);
+            if (!data.isEmpty()) return data;
 
-            if (result.isEmpty() || !result.containsKey("tmp")) {
-                System.out.println("⚠️ " + name + " [" + apiBaseTime + "] 데이터 없음 -> 1시간 전 재시도");
-                return fetchWeatherRecursive(restTemplate, name, coords, targetTime.minusHours(1), currentHour, retryCount + 1);
-            }
-
-            // 💡 성공 시 해당 데이터의 기준 시간(UI 표시용) 추가
-            result.put("baseTime", displayTime);
-            return result;
+            return fetchWeatherRecursive(restTemplate, name, coords, dateTime.minusHours(1), currentHour, retryCount + 1);
         } catch (Exception e) {
-            System.err.println("❌ " + name + " 통신 실패: " + e.getMessage());
-            return fetchWeatherRecursive(restTemplate, name, coords, targetTime.minusHours(1), currentHour, retryCount + 1);
+            System.err.println("API Request Error [" + name + "]: " + e.getMessage());
+            return fetchWeatherRecursive(restTemplate, name, coords, dateTime.minusHours(1), currentHour, retryCount + 1);
         }
     }
 
@@ -109,10 +95,18 @@ public class WeatherController {
                         String category = item.path("category").asText();
                         String value = item.path("fcstValue").asText();
                         switch (category) {
-                            case "T1H": data.put("tmp", value); break;
-                            case "REH": data.put("hum", value); break;
-                            case "RN1": data.put("rain", value); break;
-                            case "WSD": data.put("wind", value); break;
+                            case "T1H":
+                                data.put("tmp", value);
+                                break;
+                            case "REH":
+                                data.put("hum", value);
+                                break;
+                            case "RN1":
+                                data.put("rain", value);
+                                break;
+                            case "WSD":
+                                data.put("wind", value);
+                                break;
                         }
                     }
                 }
