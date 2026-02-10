@@ -2,6 +2,7 @@ package com.chs.springboot;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,11 +12,15 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
 public class WeatherController {
+
+    @Autowired
+    private WeatherRepository weatherRepository;
 
     @Value("${weather.api.service-key}")
     private String serviceKey;
@@ -38,16 +43,67 @@ public class WeatherController {
         locations.put("제주특별자치도", new int[]{52, 38});
 
         Map<String, Map<String, String>> results = new HashMap<>();
+        LocalDateTime now = LocalDateTime.now();
+        // 현재 시각 정각 (예: 13:00:00)
+        LocalDateTime targetHour = now.withMinute(0).withSecond(0).withNano(0);
+        String currentHourStr = targetHour.format(DateTimeFormatter.ofPattern("HH00"));
+
+        // 1. DB 조회: 현재 정각에 해당하는 데이터가 있는지 확인
+        List<WeatherEntity> entities = weatherRepository.findAllByFcstDateTime(targetHour);
+        for (WeatherEntity entity : entities) {
+            Map<String, String> data = new HashMap<>();
+            data.put("tmp", entity.getTmp());
+            data.put("hum", entity.getHum());
+            data.put("rain", entity.getRain());
+            data.put("wind", entity.getWind());
+            // 프론트엔드용 시간 필드 추가 (기존 데이터 구조 유지)
+            data.put("baseTime", entity.getFcstDateTime().format(DateTimeFormatter.ofPattern("HHmm")));
+            results.put(entity.getRegion(), data);
+        }
+
+        // 모든 지역 데이터가 DB에 있으면 즉시 반환
+        if (results.size() >= locations.size()) {
+            System.out.println("Serving current hour data from DB...");
+            return results;
+        }
+
+        // 2. 데이터가 부족하면 API 호출
+        System.out.println("Data missing. Calling API...");
         RestTemplate restTemplate = new RestTemplate();
-        // 현재 정시(HH00)를 기준으로 예보값 필터링
-        String currentHour = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH00"));
 
         locations.forEach((name, coords) -> {
-            // 성공할 때까지 최대 5번 재귀 호출
-            Map<String, String> weatherData = fetchWeatherRecursive(restTemplate, name, coords, LocalDateTime.now(), currentHour, 0);
-            results.put(name, weatherData);
-        });
+            if (results.containsKey(name)) return;
 
+            Map<String, String> weatherData = fetchWeatherRecursive(restTemplate, name, coords, now, currentHourStr, 0);
+
+            if (weatherData != null && !weatherData.isEmpty()) {
+                // 프론트엔드에 전달할 데이터 준비
+                weatherData.put("baseTime", weatherData.get("fcstTime"));
+                results.put(name, weatherData); // <--- 여기서 한 번만 확실하게 담아줍니다.
+
+                // DB 저장은 별도로 진행
+                try {
+                    String fDate = weatherData.get("fcstDate");
+                    String fTime = weatherData.get("fcstTime");
+                    LocalDateTime fcstDT = LocalDateTime.parse(fDate + fTime, DateTimeFormatter.ofPattern("yyyyMMddHHmm"));
+
+                    if (!weatherRepository.existsByRegionAndFcstDateTime(name, fcstDT)) {
+                        WeatherEntity entity = new WeatherEntity();
+                        entity.setRegion(name);
+                        entity.setNx(String.valueOf(coords[0]));
+                        entity.setNy(String.valueOf(coords[1]));
+                        entity.setFcstDateTime(fcstDT);
+                        entity.setTmp(weatherData.get("tmp"));
+                        entity.setHum(weatherData.get("hum"));
+                        entity.setRain(weatherData.get("rain"));
+                        entity.setWind(weatherData.get("wind"));
+                        weatherRepository.save(entity);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Save error: " + e.getMessage());
+                }
+            }
+        });
         return results;
     }
 
@@ -57,20 +113,15 @@ public class WeatherController {
         String baseDate = dateTime.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String baseTime = dateTime.format(DateTimeFormatter.ofPattern("HHmm"));
 
-        // nx와 ny 자리에 %d를 사용하여 int 값을 대입합니다.
         String url = String.format("%s?serviceKey=%s&pageNo=1&numOfRows=1000&dataType=JSON&base_date=%s&base_time=%s&nx=%d&ny=%d",
                 baseUrl, serviceKey, baseDate, baseTime, coords[0], coords[1]);
 
         try {
             String json = restTemplate.getForObject(url, String.class);
             Map<String, String> data = extractAllFcstData(json, currentHour);
-
             if (!data.isEmpty()) return data;
-
             return fetchWeatherRecursive(restTemplate, name, coords, dateTime.minusHours(1), currentHour, retryCount + 1);
         } catch (Exception e) {
-            // 한글 대신 영문 로그를 남겨 인코딩 문제를 방지합니다.
-            System.err.println("API Request Error [" + name + "]: " + e.getMessage());
             return fetchWeatherRecursive(restTemplate, name, coords, dateTime.minusHours(1), currentHour, retryCount + 1);
         }
     }
@@ -80,36 +131,26 @@ public class WeatherController {
         try {
             ObjectMapper mapper = new ObjectMapper();
             JsonNode root = mapper.readTree(json);
-
-            // resultCode 검증
-            String resultCode = root.path("response").path("header").path("resultCode").asText();
-            if (!"00".equals(resultCode)) return data;
-
             JsonNode items = root.path("response").path("body").path("items").path("item");
+
             if (items.isArray()) {
                 for (JsonNode item : items) {
                     if (currentHour.equals(item.path("fcstTime").asText())) {
+                        data.put("fcstDate", item.path("fcstDate").asText());
+                        data.put("fcstTime", item.path("fcstTime").asText());
                         String category = item.path("category").asText();
                         String value = item.path("fcstValue").asText();
                         switch (category) {
-                            case "T1H":
-                                data.put("tmp", value);
-                                break;
-                            case "REH":
-                                data.put("hum", value);
-                                break;
-                            case "RN1":
-                                data.put("rain", value);
-                                break;
-                            case "WSD":
-                                data.put("wind", value);
-                                break;
+                            case "T1H": data.put("tmp", value); break;
+                            case "REH": data.put("hum", value); break;
+                            case "RN1": data.put("rain", value); break;
+                            case "WSD": data.put("wind", value); break;
                         }
                     }
                 }
             }
         } catch (Exception e) {
-            System.err.println("parsing error: " + e.getMessage());
+            System.err.println("Parsing error: " + e.getMessage());
         }
         return data;
     }

@@ -17,28 +17,17 @@ function App() {
     const [range, setRange] = useState({ min: 0, max: 0 });
     const [selectedRegion, setSelectedRegion] = useState(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
-    const [obsTime, setObsTime] = useState(""); // 💡 데이터 기준 시간 상태
+    const [obsTime, setObsTime] = useState("");
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-    // 1. 화면 크기 감지 및 모바일 전체화면 트리거
+    // 1. 화면 크기 감지 및 모바일 대응
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
-        const handleFullscreen = () => {
-            if (isMobile && !document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(() => {});
-            }
-        };
-
         window.addEventListener('resize', handleResize);
-        window.addEventListener('touchstart', handleFullscreen, { once: true });
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            window.removeEventListener('touchstart', handleFullscreen);
-        };
-    }, [isMobile]);
-
-    // 2. Cesium 뷰어 및 클릭 이벤트 초기화
+    // 2. Cesium 초기화 및 클릭 핸들러
     useEffect(() => {
         if (!cesiumContainer.current) return;
 
@@ -49,7 +38,7 @@ function App() {
             baseLayerPicker: false,
             infoBox: false,
             selectionIndicator: false,
-            fullscreenButton: true, // // 💡 Modified: 기본 전체화면 버튼 활성화
+            fullscreenButton: true,
         });
         viewerRef.current = viewer;
         viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(127.5, 36.0, 1300000.0) });
@@ -58,7 +47,6 @@ function App() {
         handler.setInputAction((click) => {
             const pickedObject = viewer.scene.pick(click.position);
 
-            // 이전 선택 초기화
             if (selectedEntityRef.current) {
                 const prev = selectedEntityRef.current;
                 prev.polygon.outlineColor = Cesium.Color.WHITE.withAlpha(0.5);
@@ -68,14 +56,12 @@ function App() {
 
             if (Cesium.defined(pickedObject) && pickedObject.id) {
                 const entity = pickedObject.id;
-                let height = 0;
-                const targetHeight = 60000;
-
+                let h = 0;
                 entity.polygon.outlineColor = Cesium.Color.GRAY;
                 entity.polygon.outlineWidth = 4;
                 entity.polygon.extrudedHeight = new Cesium.CallbackProperty(() => {
-                    if (height < targetHeight) height += 6000;
-                    return height;
+                    if (h < 60000) h += 6000;
+                    return h;
                 }, false);
 
                 selectedEntityRef.current = entity;
@@ -105,7 +91,7 @@ function App() {
         return () => { handler.destroy(); viewer.destroy(); };
     }, []);
 
-    // 3. 날씨 데이터 페칭 및 지도 색상 적용
+    // 3. 날씨 데이터 페칭 및 시간 설정 로직
     useEffect(() => {
         fetch('/api/weather/all')
             .then(res => res.json())
@@ -114,9 +100,12 @@ function App() {
                     name, ...data[name], tmp: parseFloat(data[name]?.tmp || 0)
                 }));
 
-                // 💡 첫 번째 유효한 데이터에서 기준 시간 추출
-                const validTime = sorted.find(d => d.baseTime)?.baseTime;
-                if (validTime) setObsTime(validTime);
+                // 💡 시간 추출 및 포맷팅 (예: 1400 -> 14:00)
+                const firstValidData = Object.values(data).find(d => d.baseTime);
+                if (firstValidData && firstValidData.baseTime) {
+                    const t = firstValidData.baseTime;
+                    setObsTime(t.length === 4 ? `${t.substring(0, 2)}:${t.substring(2, 4)}` : t);
+                }
 
                 const temps = sorted.map(d => d.tmp);
                 const minT = Math.min(...temps);
@@ -143,7 +132,7 @@ function App() {
         <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', backgroundColor: '#000' }}>
             <div ref={cesiumContainer} style={{ width: '100%', height: '100%' }} />
 
-            {/* 좌측 패널: 전국 기온 (데이터 시간 표시) */}
+            {/* 좌측 패널: 전국 기온 */}
             <Draggable nodeRef={nodeRef} bounds="parent" handle=".drag-handle">
                 <div ref={nodeRef} style={{
                     position: 'absolute', top: '15px', left: '15px',
@@ -155,7 +144,8 @@ function App() {
                         <span style={{ fontSize: isMobile ? '11px' : '13px', fontWeight: 'bold' }}>
                             {isCollapsed ? '🌡️' : `전국 기온 (${obsTime || '--:--'})`}
                         </span>
-                        <button onPointerDown={(e) => { e.stopPropagation(); setIsCollapsed(!isCollapsed); }} style={{ background: '#444', border: 'none', color: '#fff', fontSize: '10px', padding: '2px 5px', borderRadius: '4px' }}>
+                        <button onPointerDown={(e) => { e.stopPropagation(); setIsCollapsed(!isCollapsed); }}
+                                style={{ background: '#444', border: 'none', color: '#fff', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', cursor: 'pointer' }}>
                             {isCollapsed ? '펼치기' : '접기'}
                         </button>
                     </div>
@@ -172,7 +162,7 @@ function App() {
                 </div>
             </Draggable>
 
-            {/* 우측 상단: 슬림 상세 패널 */}
+            {/* 우측 상단: 상세 패널 */}
             {selectedRegion && (
                 <div style={{
                     position: 'absolute', top: '15px', right: '15px', width: isMobile ? '150px' : '200px',
@@ -182,7 +172,8 @@ function App() {
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <b style={{ fontSize: '14px', color: '#00d4ff' }}>{selectedRegion.displayName.split(' ')[0]}</b>
-                        <button onClick={() => { if (selectedEntityRef.current) selectedEntityRef.current.polygon.extrudedHeight = 0; setSelectedRegion(null); }} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+                        <button onClick={() => { if (selectedEntityRef.current) selectedEntityRef.current.polygon.extrudedHeight = 0; setSelectedRegion(null); }}
+                                style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '14px' }}>✕</button>
                     </div>
                     <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '2px' }}><span>기온</span> <b>{selectedRegion.tmp}°C</b></div>
@@ -194,16 +185,8 @@ function App() {
 
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-                
-                /* 💡 Modified: 로고와 도움말 버튼만 숨기고, 전체화면 버튼은 남겨둠 */
                 .cesium-widget-credits, .cesium-viewer-helpButtonContainer { display: none !important; }
-                
-                /* 전체화면 버튼 위치가 리스트와 겹친다면 아래 코드로 살짝 조정 가능합니다 */
-                .cesium-viewer-fullscreenContainer { 
-                    bottom: 20px !important; 
-                    right: 20px !important; 
-                }
-            
+                .cesium-viewer-fullscreenContainer { bottom: 20px !important; right: 20px !important; }
                 ::-webkit-scrollbar { width: 3px; }
                 ::-webkit-scrollbar-thumb { background: #555; borderRadius: 2px; }
             `}</style>
