@@ -16,10 +16,10 @@ import java.util.*;
 @CrossOrigin(origins = "*")
 public class WeatherController {
 
-    @Value("${weather.api.service-key}")
+    @Value("${WEATHER_API_SERVICE_KEY}")
     private String serviceKey;
 
-    @Value("${weather.api.base-url}")
+    @Value("${WEATHER_API_BASE_URL}")
     private String baseUrl;
 
     @Autowired
