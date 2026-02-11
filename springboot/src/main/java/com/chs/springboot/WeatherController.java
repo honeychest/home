@@ -4,23 +4,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/weather")
+@CrossOrigin(origins = "*")
 public class WeatherController {
-
-    @Autowired
-    private WeatherRepository weatherRepository;
 
     @Value("${weather.api.service-key}")
     private String serviceKey;
@@ -28,24 +22,44 @@ public class WeatherController {
     @Value("${weather.api.base-url}")
     private String baseUrl;
 
-    @GetMapping("/weather/all")
-    public Map<String, Map<String, String>> getAllWeather() {
-        Map<String, int[]> locations = new HashMap<>();
+    @Autowired
+    private WeatherRepository weatherRepository;
+
+    private final Map<String, int[]> locations = new LinkedHashMap<>();
+
+    public WeatherController() {
         locations.put("서울특별시", new int[]{60, 127});
         locations.put("경기도", new int[]{60, 120});
         locations.put("강원도", new int[]{73, 134});
-        locations.put("경상북도", new int[]{89, 90});
-        locations.put("경상남도", new int[]{91, 77});
-        locations.put("전라북도", new int[]{63, 89});
-        locations.put("전라남도", new int[]{51, 67});
-        locations.put("충청남도", new int[]{68, 100});
         locations.put("충청북도", new int[]{69, 107});
+        locations.put("충청남도", new int[]{68, 100});
+        locations.put("전라북도", new int[]{63, 89});
+        locations.put("경상북도", new int[]{89, 91});
+        locations.put("전라남도", new int[]{51, 67});
+        locations.put("경상남도", new int[]{91, 77});
         locations.put("제주특별자치도", new int[]{52, 38});
+    }
 
+    @GetMapping("/available-hours")
+    public List<Integer> getAvailableHours() {
+        // DB에 저장된 고유한 시간대 조회
+        List<Integer> hours = weatherRepository.findDistinctHours();
+        System.out.println("Available hours: " + hours);
+        return hours;
+    }
+
+    @GetMapping("/all")
+    public Map<String, Map<String, String>> getAllWeather(
+            @RequestParam(required = false) Integer hour  // 시간 선택 파라미터 (0-23)
+    ) {
         Map<String, Map<String, String>> results = new HashMap<>();
         LocalDateTime now = LocalDateTime.now();
-        // 현재 시각 정각 (예: 13:00:00)
-        LocalDateTime targetHour = now.withMinute(0).withSecond(0).withNano(0);
+
+        // hour 파라미터가 있으면 해당 시간으로, 없으면 현재 시간으로 설정
+        LocalDateTime targetHour = (hour != null)
+                ? now.withHour(hour).withMinute(0).withSecond(0).withNano(0)
+                : now.withMinute(0).withSecond(0).withNano(0);
+
         String currentHourStr = targetHour.format(DateTimeFormatter.ofPattern("HH00"));
 
         // 1. DB 조회: 현재 정각에 해당하는 데이터가 있는지 확인
@@ -63,23 +77,23 @@ public class WeatherController {
 
         // 모든 지역 데이터가 DB에 있으면 즉시 반환
         if (results.size() >= locations.size()) {
-            System.out.println("Serving current hour data from DB...");
+            System.out.println("Serving data from DB for hour: " + targetHour.getHour());
             return results;
         }
 
         // 2. 데이터가 부족하면 API 호출
-        System.out.println("Data missing. Calling API...");
+        System.out.println("Data missing for hour " + targetHour.getHour() + ". Calling API...");
         RestTemplate restTemplate = new RestTemplate();
 
         locations.forEach((name, coords) -> {
             if (results.containsKey(name)) return;
 
-            Map<String, String> weatherData = fetchWeatherRecursive(restTemplate, name, coords, now, currentHourStr, 0);
+            Map<String, String> weatherData = fetchWeatherRecursive(restTemplate, name, coords, targetHour, currentHourStr, 0);
 
             if (weatherData != null && !weatherData.isEmpty()) {
                 // 프론트엔드에 전달할 데이터 준비
                 weatherData.put("baseTime", weatherData.get("fcstTime"));
-                results.put(name, weatherData); // <--- 여기서 한 번만 확실하게 담아줍니다.
+                results.put(name, weatherData);
 
                 // DB 저장은 별도로 진행
                 try {
@@ -87,7 +101,9 @@ public class WeatherController {
                     String fTime = weatherData.get("fcstTime");
                     LocalDateTime fcstDT = LocalDateTime.parse(fDate + fTime, DateTimeFormatter.ofPattern("yyyyMMddHHmm"));
 
-                    if (!weatherRepository.existsByRegionAndFcstDateTime(name, fcstDT)) {
+                    // 🆕 요청한 시간과 동일한지 확인 (targetHour와 fcstDT의 시간이 같을 때만 저장)
+                    if (fcstDT.getHour() == targetHour.getHour() &&
+                            !weatherRepository.existsByRegionAndFcstDateTime(name, fcstDT)) {
                         WeatherEntity entity = new WeatherEntity();
                         entity.setRegion(name);
                         entity.setNx(String.valueOf(coords[0]));
@@ -98,6 +114,7 @@ public class WeatherController {
                         entity.setRain(weatherData.get("rain"));
                         entity.setWind(weatherData.get("wind"));
                         weatherRepository.save(entity);
+                        System.out.println("Saved: " + name + " at " + fcstDT);
                     }
                 } catch (Exception e) {
                     System.err.println("Save error: " + e.getMessage());

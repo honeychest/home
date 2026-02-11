@@ -14,4 +14,10 @@ public interface WeatherRepository extends JpaRepository<WeatherEntity, Long> {
     // 특정 예보 시간에 해당하는 모든 지역 데이터 조회
     @Query("SELECT w FROM WeatherEntity w WHERE w.fcstDateTime = :targetTime")
     List<WeatherEntity> findAllByFcstDateTime(@Param("targetTime") LocalDateTime targetTime);
+
+    // 🆕 DB에 저장된 고유한 시간대 목록 조회 (최근 24시간)
+    @Query("SELECT DISTINCT HOUR(w.fcstDateTime) FROM WeatherEntity w " +
+            "WHERE w.fcstDateTime >= CURRENT_DATE " +
+            "ORDER BY HOUR(w.fcstDateTime)")
+    List<Integer> findDistinctHours();
 }

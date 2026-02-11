@@ -17,8 +17,13 @@ function App() {
     const [range, setRange] = useState({ min: 0, max: 0 });
     const [selectedRegion, setSelectedRegion] = useState(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
-    const [obsTime, setObsTime] = useState("");
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+    // 🆕 현재 시간과 사용 가능한 시간 목록
+    const [selectedHour, setSelectedHour] = useState(new Date().getHours());
+    const [availableHours, setAvailableHours] = useState([]);
+    const [isInitialLoading, setIsInitialLoading] = useState(true); // 초기 로딩만 추적
+    const [isTimePickerOpen, setIsTimePickerOpen] = useState(false); // 시간 선택 팝업
 
     // 1. 화면 크기 감지 및 모바일 대응
     useEffect(() => {
@@ -91,21 +96,36 @@ function App() {
         return () => { handler.destroy(); viewer.destroy(); };
     }, []);
 
-    // 3. 날씨 데이터 페칭 및 시간 설정 로직
+    // 3. 🆕 사용 가능한 시간 목록 조회 (초기 로딩 시)
     useEffect(() => {
-        fetch('/api/weather/all')
+        fetch('/api/weather/available-hours')
+            .then(res => res.json())
+            .then(hours => {
+                setAvailableHours(hours);
+                // 사용 가능한 시간 중 가장 최근 시간을 기본값으로
+                if (hours.length > 0) {
+                    setSelectedHour(Math.max(...hours));
+                }
+            })
+            .catch(err => {
+                console.error('사용 가능한 시간 조회 실패:', err);
+                // 실패 시 현재 시간부터 0시까지 표시
+                const currentHour = new Date().getHours();
+                const fallbackHours = Array.from({ length: currentHour + 1 }, (_, i) => i);
+                setAvailableHours(fallbackHours);
+            });
+    }, []);
+
+    // 4. 날씨 데이터 페칭 함수
+    const fetchWeatherData = (hour) => {
+        const url = `/api/weather/all?hour=${hour}`;
+
+        fetch(url)
             .then(res => res.json())
             .then(data => {
                 const sorted = GEO_ORDER.map(name => ({
                     name, ...data[name], tmp: parseFloat(data[name]?.tmp || 0)
                 }));
-
-                // 💡 시간 추출 및 포맷팅 (예: 1400 -> 14:00)
-                const firstValidData = Object.values(data).find(d => d.baseTime);
-                if (firstValidData && firstValidData.baseTime) {
-                    const t = firstValidData.baseTime;
-                    setObsTime(t.length === 4 ? `${t.substring(0, 2)}:${t.substring(2, 4)}` : t);
-                }
 
                 const temps = sorted.map(d => d.tmp);
                 const minT = Math.min(...temps);
@@ -113,44 +133,238 @@ function App() {
                 setWeatherList(sorted);
                 setRange({ min: minT, max: maxT });
 
-                Cesium.GeoJsonDataSource.load('/data/korea.json').then(ds => {
-                    viewerRef.current.dataSources.add(ds);
-                    ds.entities.values.forEach(entity => {
-                        const name = entity.properties.name?._value || "";
-                        let target = null;
-                        for (const [c, p] of Object.entries(CITY_TO_PROVINCE)) if (name.includes(c)) target = p;
-                        if (!target) target = GEO_ORDER.find(n => name.includes(n));
+                // 🆕 날씨 데이터를 받은 후 GeoJSON 로드 및 색상 적용
+                if (viewerRef.current && viewerRef.current.dataSources.length === 0) {
+                    // 첫 로딩: GeoJSON 로드 후 즉시 색상 적용
+                    Cesium.GeoJsonDataSource.load('/data/korea.json').then(ds => {
+                        viewerRef.current.dataSources.add(ds);
 
-                        const regionData = sorted.find(d => d.name === target);
-                        if (regionData) entity.polygon.material = getRelativeColor(regionData.tmp, minT, maxT);
+                        // GeoJSON 로드 직후 즉시 색상 적용
+                        ds.entities.values.forEach(entity => {
+                            const name = entity.properties.name?._value || "";
+                            let target = null;
+                            for (const [c, p] of Object.entries(CITY_TO_PROVINCE)) {
+                                if (name.includes(c)) {
+                                    target = p;
+                                    break;
+                                }
+                            }
+                            if (!target) target = GEO_ORDER.find(n => name.includes(n));
+
+                            const regionData = sorted.find(d => d.name === target);
+                            if (regionData) {
+                                entity.polygon.material = getRelativeColor(regionData.tmp, minT, maxT);
+                            }
+                        });
+
+                        setIsInitialLoading(false); // 초기 로딩 완료
                     });
-                });
+                } else {
+                    // 이미 로드된 경우: 색상만 업데이트 (스피너 안 뜸)
+                    updateMapColors(sorted, minT, maxT);
+                }
+            })
+            .catch(err => {
+                console.error('날씨 데이터 로드 실패:', err);
+                setIsInitialLoading(false); // 에러 발생 시도 스피너 숨김
             });
-    }, []);
+    };
+
+    // 지도 색상 업데이트 함수
+    const updateMapColors = (sorted, minT, maxT) => {
+        if (!viewerRef.current) return;
+
+        const dataSources = viewerRef.current.dataSources;
+        if (dataSources.length > 0) {
+            const ds = dataSources.get(0);
+            ds.entities.values.forEach(entity => {
+                const name = entity.properties.name?._value || "";
+                let target = null;
+                for (const [c, p] of Object.entries(CITY_TO_PROVINCE)) if (name.includes(c)) target = p;
+                if (!target) target = GEO_ORDER.find(n => name.includes(n));
+
+                const regionData = sorted.find(d => d.name === target);
+                if (regionData) entity.polygon.material = getRelativeColor(regionData.tmp, minT, maxT);
+            });
+        }
+    };
+
+    // 5. 시간 변경 시 데이터 재조회
+    useEffect(() => {
+        if (selectedHour !== null) {
+            fetchWeatherData(selectedHour);
+        }
+    }, [selectedHour]);
+
+    // 🆕 팝업 외부 클릭 시 닫기
+    useEffect(() => {
+        const handleClickOutside = () => {
+            if (isTimePickerOpen) {
+                setIsTimePickerOpen(false);
+            }
+        };
+
+        if (isTimePickerOpen) {
+            document.addEventListener('click', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('click', handleClickOutside);
+        };
+    }, [isTimePickerOpen]);
 
     return (
         <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', backgroundColor: '#000' }}>
             <div ref={cesiumContainer} style={{ width: '100%', height: '100%' }} />
 
+            {/* 🆕 초기 로딩 스피너 */}
+            {isInitialLoading && (
+                <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    textAlign: 'center',
+                    zIndex: 9999
+                }}>
+                    <div style={{
+                        width: '50px',
+                        height: '50px',
+                        border: '5px solid rgba(255, 255, 255, 0.3)',
+                        borderTop: '5px solid #00d4ff',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite',
+                        margin: '0 auto 15px'
+                    }} />
+                    <div style={{
+                        color: 'white',
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                        textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+                    }}>
+                        날씨 데이터 로딩 중...
+                    </div>
+                </div>
+            )}
+
             {/* 좌측 패널: 전국 기온 */}
             <Draggable nodeRef={nodeRef} bounds="parent" handle=".drag-handle">
                 <div ref={nodeRef} style={{
                     position: 'absolute', top: '15px', left: '15px',
-                    width: isCollapsed ? '90px' : (isMobile ? '160px' : '230px'),
+                    width: isCollapsed ? '90px' : (isMobile ? '180px' : '250px'),
                     backgroundColor: 'rgba(0, 0, 0, 0.75)', color: 'white', padding: '12px',
                     borderRadius: '12px', zIndex: 1000, transition: 'width 0.2s'
                 }}>
-                    <div className="drag-handle" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'move' }}>
-                        <span style={{ fontSize: isMobile ? '11px' : '13px', fontWeight: 'bold' }}>
-                            {isCollapsed ? '🌡️' : `전국 기온 (${obsTime || '--:--'})`}
-                        </span>
-                        <button onPointerDown={(e) => { e.stopPropagation(); setIsCollapsed(!isCollapsed); }}
-                                style={{ background: '#444', border: 'none', color: '#fff', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', cursor: 'pointer' }}>
-                            {isCollapsed ? '펼치기' : '접기'}
-                        </button>
+                    {/* 헤더에 시간 선택 통합 */}
+                    <div style={{ marginBottom: isCollapsed ? '0' : '10px' }}>
+                        <div className="drag-handle" style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            cursor: 'move'
+                        }}>
+                            {isCollapsed ? (
+                                <span style={{ fontSize: '11px', fontWeight: 'bold' }}>🌡️</span>
+                            ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
+                                    <span style={{ fontSize: isMobile ? '11px' : '13px', fontWeight: 'bold' }}>
+                                        전국 기온
+                                    </span>
+                                    {/* 🆕 커스텀 시간 선택 버튼 */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsTimePickerOpen(!isTimePickerOpen);
+                                        }}
+                                        style={{
+                                            padding: '2px 6px',
+                                            backgroundColor: '#333',
+                                            color: '#00d4ff',
+                                            border: '1px solid #555',
+                                            borderRadius: '4px',
+                                            fontSize: isMobile ? '10px' : '12px',
+                                            fontWeight: 'bold',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '3px'
+                                        }}
+                                    >
+                                        ({selectedHour.toString().padStart(2, '0')}:00)
+                                        <span style={{ fontSize: '8px' }}>▼</span>
+                                    </button>
+                                </div>
+                            )}
+                            <button
+                                onPointerDown={(e) => { e.stopPropagation(); setIsCollapsed(!isCollapsed); }}
+                                style={{
+                                    background: '#444',
+                                    border: 'none',
+                                    color: '#fff',
+                                    fontSize: '10px',
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                {isCollapsed ? '펼치기' : '접기'}
+                            </button>
+                        </div>
+
+                        {/* 🆕 시간 선택 팝업 */}
+                        {!isCollapsed && isTimePickerOpen && (
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    top: '50px',
+                                    left: '15px',
+                                    backgroundColor: 'rgba(20, 20, 20, 0.98)',
+                                    border: '1px solid #00d4ff',
+                                    borderRadius: '8px',
+                                    padding: '8px',
+                                    zIndex: 10000,
+                                    maxHeight: '200px',
+                                    overflowY: 'auto',
+                                    boxShadow: '0 4px 12px rgba(0, 212, 255, 0.3)'
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(4, 1fr)',
+                                    gap: '6px'
+                                }}>
+                                    {availableHours.map(hour => (
+                                        <button
+                                            key={hour}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedHour(hour);
+                                                setIsTimePickerOpen(false);
+                                            }}
+                                            style={{
+                                                padding: '8px 4px',
+                                                backgroundColor: hour === selectedHour ? '#00d4ff' : '#333',
+                                                color: hour === selectedHour ? '#000' : '#fff',
+                                                border: 'none',
+                                                borderRadius: '4px',
+                                                fontSize: '11px',
+                                                fontWeight: hour === selectedHour ? 'bold' : 'normal',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            {hour.toString().padStart(2, '0')}시
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
+
+                    {/* 날씨 목록 */}
                     {!isCollapsed && (
-                        <div style={{ marginTop: '10px', maxHeight: '45vh', overflowY: 'auto' }}>
+                        <div style={{ maxHeight: '45vh', overflowY: 'auto' }}>
                             {weatherList.map((item, i) => (
                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
                                     <span>{item.name}</span>
@@ -185,6 +399,7 @@ function App() {
 
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
                 .cesium-widget-credits, .cesium-viewer-helpButtonContainer { display: none !important; }
                 .cesium-viewer-fullscreenContainer { bottom: 20px !important; right: 20px !important; }
                 ::-webkit-scrollbar { width: 3px; }
