@@ -9,9 +9,12 @@ import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 public class BinanceWebSocketStream {
 
@@ -28,6 +31,11 @@ public class BinanceWebSocketStream {
         CompletableFuture<WebSocket> connect(URI uri, WebSocket.Listener listener);
     }
 
+    /** 메시지 수신이 없을 때 stale 판정까지의 기본 임계값(45초). */
+    private static final long DEFAULT_STALE_THRESHOLD_NANOS = TimeUnit.SECONDS.toNanos(45);
+    /** stale 검사 기본 주기(10초). */
+    private static final long DEFAULT_STALE_CHECK_INTERVAL_MS = TimeUnit.SECONDS.toMillis(10);
+
     private final String url;
     private final String logLabel;
     private final MessageListener listener;
@@ -35,10 +43,18 @@ public class BinanceWebSocketStream {
     private final long reconnectDelaySeconds;
     private final WebSocketConnector connector;
 
+    private final LongSupplier nanoSource;
+    private final long staleCheckIntervalMs;
+    private final long staleThresholdNanos;
+
     private volatile boolean running = true;
     private final AtomicInteger generation = new AtomicInteger(0);
     private final AtomicBoolean reconnectPending = new AtomicBoolean(false);
     private volatile WebSocket webSocket;
+
+    private final AtomicLong lastMessageAtNanos = new AtomicLong();
+    private final AtomicBoolean watchdogStarted = new AtomicBoolean(false);
+    private volatile ScheduledFuture<?> watchdogTask;
 
     public BinanceWebSocketStream(String url, String logLabel, MessageListener listener,
                                    ScheduledExecutorService scheduler, long reconnectDelaySeconds) {
@@ -48,22 +64,65 @@ public class BinanceWebSocketStream {
     public BinanceWebSocketStream(String url, String logLabel, MessageListener listener,
                                    ScheduledExecutorService scheduler, long reconnectDelaySeconds,
                                    WebSocketConnector connector) {
+        this(url, logLabel, listener, scheduler, reconnectDelaySeconds, connector,
+                System::nanoTime, DEFAULT_STALE_CHECK_INTERVAL_MS, DEFAULT_STALE_THRESHOLD_NANOS);
+    }
+
+    BinanceWebSocketStream(String url, String logLabel, MessageListener listener,
+                           ScheduledExecutorService scheduler, long reconnectDelaySeconds,
+                           WebSocketConnector connector,
+                           LongSupplier nanoSource, long staleCheckIntervalMs, long staleThresholdNanos) {
         this.url = url;
         this.logLabel = logLabel;
         this.listener = listener;
         this.scheduler = scheduler;
         this.reconnectDelaySeconds = reconnectDelaySeconds;
         this.connector = connector;
+        this.nanoSource = nanoSource;
+        this.staleCheckIntervalMs = staleCheckIntervalMs;
+        this.staleThresholdNanos = staleThresholdNanos;
     }
 
     public void connect() {
         final int myGen = generation.incrementAndGet();
         reconnectPending.set(false);
+        startWatchdog();
         scheduler.execute(() -> openStream(myGen));
+    }
+
+    private void startWatchdog() {
+        if (!watchdogStarted.compareAndSet(false, true)) return;
+        lastMessageAtNanos.set(nanoSource.getAsLong());
+        watchdogTask = scheduler.scheduleAtFixedRate(this::checkStale,
+                staleCheckIntervalMs, staleCheckIntervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void checkStale() {
+        if (!running) return;
+        long elapsed = nanoSource.getAsLong() - lastMessageAtNanos.get();
+        if (elapsed < staleThresholdNanos) return;
+
+        log.warn("[{}] stale 감지: {}ms 동안 메시지 없음 — 재연결 시도", logLabel,
+                TimeUnit.NANOSECONDS.toMillis(elapsed));
+        // lastMessage를 현재로 갱신해 동일 stale에 대한 중복 트리거를 막는다.
+        lastMessageAtNanos.set(nanoSource.getAsLong());
+        WebSocket currentWebSocket = webSocket;
+        if (currentWebSocket != null) {
+            try {
+                currentWebSocket.abort();
+            } catch (Exception e) {
+                log.warn("[{}] stale 연결 abort 실패: {}", logLabel, e.getMessage());
+            }
+        }
+        scheduleReconnect();
     }
 
     public void disconnect() {
         running = false;
+        ScheduledFuture<?> task = watchdogTask;
+        if (task != null) {
+            task.cancel(false);
+        }
         WebSocket currentWebSocket = webSocket;
         if (currentWebSocket != null) {
             try {
@@ -82,6 +141,7 @@ public class BinanceWebSocketStream {
                         @Override
                         public void onOpen(WebSocket ws) {
                             webSocket = ws;
+                            lastMessageAtNanos.set(nanoSource.getAsLong());
                             log.info("[{}] 연결 성공 (gen={})", logLabel, myGen);
                             ws.request(1);
                             WebSocket.Listener.super.onOpen(ws);
@@ -91,6 +151,7 @@ public class BinanceWebSocketStream {
 
                         @Override
                         public java.util.concurrent.CompletionStage<?> onText(WebSocket ws, CharSequence data, boolean last) {
+                            lastMessageAtNanos.set(nanoSource.getAsLong());
                             buffer.append(data);
                             if (last) {
                                 String json = buffer.toString();
