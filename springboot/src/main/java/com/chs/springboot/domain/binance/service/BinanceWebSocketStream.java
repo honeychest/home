@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
 public class BinanceWebSocketStream {
@@ -55,6 +56,7 @@ public class BinanceWebSocketStream {
     private final AtomicLong lastMessageAtNanos = new AtomicLong();
     private final AtomicBoolean watchdogStarted = new AtomicBoolean(false);
     private volatile ScheduledFuture<?> watchdogTask;
+    private volatile Consumer<Throwable> errorListener;
 
     public BinanceWebSocketStream(String url, String logLabel, MessageListener listener,
                                    ScheduledExecutorService scheduler, long reconnectDelaySeconds) {
@@ -83,6 +85,22 @@ public class BinanceWebSocketStream {
         this.staleThresholdNanos = staleThresholdNanos;
     }
 
+    /** upstream 오류/stale 발생 시 호출되는 콜백을 등록한다(알림 연동용). */
+    public void onError(Consumer<Throwable> errorListener) {
+        this.errorListener = errorListener;
+    }
+
+    private void notifyError(Throwable error) {
+        Consumer<Throwable> l = errorListener;
+        if (l != null) {
+            try {
+                l.accept(error);
+            } catch (Exception e) {
+                log.warn("[{}] errorListener 처리 실패: {}", logLabel, e.getMessage());
+            }
+        }
+    }
+
     public void connect() {
         final int myGen = generation.incrementAndGet();
         reconnectPending.set(false);
@@ -104,6 +122,7 @@ public class BinanceWebSocketStream {
 
         log.warn("[{}] stale 감지: {}ms 동안 메시지 없음 — 재연결 시도", logLabel,
                 TimeUnit.NANOSECONDS.toMillis(elapsed));
+        notifyError(new IllegalStateException("stale: " + TimeUnit.NANOSECONDS.toMillis(elapsed) + "ms 동안 메시지 없음"));
         // lastMessage를 현재로 갱신해 동일 stale에 대한 중복 트리거를 막는다.
         lastMessageAtNanos.set(nanoSource.getAsLong());
         WebSocket currentWebSocket = webSocket;
@@ -176,13 +195,17 @@ public class BinanceWebSocketStream {
                         @Override
                         public void onError(WebSocket ws, Throwable error) {
                             log.error("[{}] 오류 (gen={}): {}", logLabel, myGen, error.getMessage());
-                            if (myGen == generation.get()) scheduleReconnect();
+                            if (myGen == generation.get()) {
+                                notifyError(error);
+                                scheduleReconnect();
+                            }
                         }
                     })
                     .whenComplete((ws, error) -> {
                         if (error != null) {
                             log.error("[{}] handshake 실패 (gen={}): {}", logLabel, myGen, error.getMessage());
                             if (myGen == generation.get()) {
+                                notifyError(error);
                                 scheduleReconnect();
                             }
                         }

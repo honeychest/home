@@ -9,19 +9,13 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -43,64 +37,62 @@ public class BinanceStreamService {
     private final BinancePriceWebSocketHandler handler;
     private final NotificationService notificationService;
     private final FeedHealthRegistry feedHealthRegistry;
+    private final AggTradeStreamService.StreamFactory streamFactory;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    private volatile java.net.http.WebSocket binanceWs;
-    private volatile boolean running = true;
-    private final AtomicInteger connectionGeneration = new AtomicInteger(0);
-    private final AtomicBoolean reconnectPending = new AtomicBoolean(false);
+    private volatile BinanceWebSocketStream stream;
 
+    @Autowired
     public BinanceStreamService(BinancePriceWebSocketHandler handler,
                                 NotificationService notificationService,
                                 FeedHealthRegistry feedHealthRegistry) {
+        this(handler, notificationService, feedHealthRegistry, BinanceWebSocketStream::new);
+    }
+
+    BinanceStreamService(BinancePriceWebSocketHandler handler,
+                         NotificationService notificationService,
+                         FeedHealthRegistry feedHealthRegistry,
+                         AggTradeStreamService.StreamFactory streamFactory) {
         this.handler = handler;
         this.notificationService = notificationService;
         this.feedHealthRegistry = feedHealthRegistry;
+        this.streamFactory = streamFactory;
     }
 
     @PostConstruct
     public void connect() {
-        connectToBinance();
+        String url = getStreamUrl();
+        log.info("[BinanceStream] upstream connect (symbols={})", SUBSCRIBED_SYMBOLS);
+        stream = streamFactory.create(url, "BinanceStream/ticker", this::onMessage,
+                scheduler, RECONNECT_DELAY_SEC);
+        stream.onError(error ->
+                notificationService.sendAlert("[BinanceStream] error: " + error.getMessage()));
+        stream.connect();
     }
 
-    private void connectToBinance() {
-        if (!running) return;
-
-        final int myGeneration = connectionGeneration.incrementAndGet();
-        reconnectPending.set(false);
-
-        try {
-            String url = getStreamUrl();
-            log.info("[BinanceStream] upstream connect try (generation={}, symbols={})", myGeneration, SUBSCRIBED_SYMBOLS);
-
-            httpClient.newWebSocketBuilder()
-                    .connectTimeout(Duration.ofSeconds(10))
-                    .buildAsync(URI.create(url), new BinanceListener(myGeneration))
-                    .thenAccept(ws -> {
-                        this.binanceWs = ws;
-                        log.info("[BinanceStream] upstream connected: {}", url);
-                    })
-                    .exceptionally(e -> {
-                        log.error("[BinanceStream] connect failed: {}", e.getMessage());
-                        scheduleReconnect();
-                        return null;
-                    });
-        } catch (Exception e) {
-            log.error("[BinanceStream] connect error: {}", e.getMessage());
-            scheduleReconnect();
+    private void onMessage(String json) {
+        feedHealthRegistry.markReceived(FeedHealthConfig.BINANCE_TICKER);
+        if (handler.getSessionCount() > 0) {
+            relayBySessionSymbol(json);
         }
     }
 
-    private void scheduleReconnect() {
-        if (!running) return;
-        if (!reconnectPending.compareAndSet(false, true)) return;
+    private void relayBySessionSymbol(String json) {
+        try {
+            JsonNode root = objectMapper.readTree(json);
 
-        scheduler.schedule(() -> {
-            reconnectPending.set(false);
-            connectToBinance();
-        }, RECONNECT_DELAY_SEC, TimeUnit.SECONDS);
+            JsonNode payloadNode = root.path("data");
+            JsonNode tickerNode = payloadNode.isMissingNode() ? root : payloadNode;
+
+            String symbol = tickerNode.path("s").asText(null);
+            if (symbol == null || symbol.isBlank()) return;
+
+            String payload = payloadNode.isMissingNode() ? json : payloadNode.toString();
+            handler.broadcastPrice(payload, symbol.toUpperCase(Locale.ROOT));
+        } catch (Exception ignored) {
+            // Ignore malformed frames.
+        }
     }
 
     private String getStreamUrl() {
@@ -112,77 +104,9 @@ public class BinanceStreamService {
 
     @PreDestroy
     public void disconnect() {
-        running = false;
+        if (stream != null) {
+            stream.disconnect();
+        }
         scheduler.shutdownNow();
-
-        if (binanceWs != null) {
-            binanceWs.sendClose(java.net.http.WebSocket.NORMAL_CLOSURE, "shutdown");
-        }
-    }
-
-    private class BinanceListener implements java.net.http.WebSocket.Listener {
-
-        private final int generation;
-        private final StringBuilder buffer = new StringBuilder();
-
-        private BinanceListener(int generation) {
-            this.generation = generation;
-        }
-
-        @Override
-        public void onOpen(java.net.http.WebSocket ws) {
-            ws.request(1);
-        }
-
-        @Override
-        public CompletionStage<?> onText(java.net.http.WebSocket ws, CharSequence data, boolean last) {
-            buffer.append(data);
-
-            if (last) {
-                feedHealthRegistry.markReceived(FeedHealthConfig.BINANCE_TICKER);
-                if (handler.getSessionCount() > 0) {
-                    relayBySessionSymbol(buffer.toString());
-                }
-                buffer.setLength(0);
-            }
-
-            ws.request(1);
-            return null;
-        }
-
-        @Override
-        public CompletionStage<?> onClose(java.net.http.WebSocket ws, int statusCode, String reason) {
-            log.warn("[BinanceStream] upstream closed (generation={}, status={}): {}", generation, statusCode, reason);
-            if (generation == connectionGeneration.get()) {
-                scheduleReconnect();
-            }
-            return null;
-        }
-
-        @Override
-        public void onError(java.net.http.WebSocket ws, Throwable error) {
-            log.error("[BinanceStream] upstream error (generation={}): {}", generation, error.getMessage());
-            if (generation == connectionGeneration.get()) {
-                notificationService.sendAlert("[BinanceStream] error: " + error.getMessage());
-                scheduleReconnect();
-            }
-        }
-
-        private void relayBySessionSymbol(String json) {
-            try {
-                JsonNode root = objectMapper.readTree(json);
-
-                JsonNode payloadNode = root.path("data");
-                JsonNode tickerNode = payloadNode.isMissingNode() ? root : payloadNode;
-
-                String symbol = tickerNode.path("s").asText(null);
-                if (symbol == null || symbol.isBlank()) return;
-
-                String payload = payloadNode.isMissingNode() ? json : payloadNode.toString();
-                handler.broadcastPrice(payload, symbol.toUpperCase(Locale.ROOT));
-            } catch (Exception ignored) {
-                // Ignore malformed frames.
-            }
-        }
     }
 }
