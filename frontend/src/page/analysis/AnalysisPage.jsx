@@ -195,6 +195,24 @@ export default function AnalysisPage() {
 
   // ─── Analysis 더블클릭 수동 탐색 ─────────────────────────────────────────
 
+  // ─── 실시간 봉 완성 콜백 (MainChart WS → klineData 동기화) ───────────────
+
+  const handleCandleUpdate = useCallback((candle) => {
+    setKlineData((prev) => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      if (candle.time === last.time) {
+        const next = prev.slice(0, -1);
+        next.push(candle);
+        return next;
+      }
+      if (candle.time > last.time) {
+        return [...prev, candle];
+      }
+      return prev;
+    });
+  }, []);
+
   const handleAnalysisSearch = async (requestBody) => {
     try {
       const body = buildAnalysisSearchRequest(requestBody, startDate, endDate);
@@ -338,6 +356,7 @@ export default function AnalysisPage() {
                   symbol={symbol}
                   onSearch={handleAnalysisSearch}
                   timeframe={timeframe}
+                  onCandleClose={handleCandleUpdate}
                 />
               </div>
 

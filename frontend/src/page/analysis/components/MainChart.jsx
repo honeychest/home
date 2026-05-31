@@ -49,7 +49,7 @@ function calcOverlayPositions(klineData, matchedIndices, paletteLevel, timeScale
   }).filter(Boolean);
 }
 
-export default function MainChart({ klineData, matchedIndices, paletteLevel, loading, error, onRetry, symbol, onSearch, timeframe = '1m' }) {
+export default function MainChart({ klineData, matchedIndices, paletteLevel, loading, error, onRetry, symbol, onSearch, timeframe = '1m', onCandleClose }) {
   const containerRef      = useRef(null);
   const chartRef          = useRef(null);
   const seriesRef         = useRef(null);
@@ -62,6 +62,8 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
   const paletteLevelRef   = useRef(paletteLevel);
   const symbolRef         = useRef(symbol);
   const timeframeRef      = useRef(timeframe);
+  const liveCandleRef     = useRef(null);
+  const onCandleCloseRef  = useRef(onCandleClose);
 
   const selectedTimeSecRef = useRef(null);
 
@@ -77,6 +79,7 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
   useEffect(() => { matchedSet.current      = new Set(matchedIndices); }, [matchedIndices]);
   useEffect(() => { symbolRef.current       = symbol;          }, [symbol]);
   useEffect(() => { timeframeRef.current    = timeframe;       }, [timeframe]);
+  useEffect(() => { onCandleCloseRef.current = onCandleClose;  }, [onCandleClose]);
 
   // 차트 초기화
   useEffect(() => {
@@ -157,6 +160,22 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
       const data = param.seriesData?.get(series);
       if (!data) { setTooltip(null); return; }
 
+      const live = liveCandleRef.current;
+      if (live && live.time === param.time) {
+        const pctChgLive = live.open !== 0 ? ((live.close - live.open) / live.open * 100).toFixed(2) : '0.00';
+        setTooltip({
+          x:          param.point.x,
+          y:          param.point.y,
+          time:       live.time,
+          volume:     live.volume,
+          delta:      live.delta,
+          priceChg:   pctChgLive,
+          isMatched:  false,
+          containerW: containerRef.current?.clientWidth ?? 0,
+        });
+        return;
+      }
+
       const timeMs  = param.time * 1000;
       const klines  = klineRef.current;
       const idx     = klines.findIndex((c) => Math.floor(c.time / 1000) === param.time
@@ -212,6 +231,7 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
           if (isNaN(unixSec)) return;
 
           const delta      = msg.delta ?? 0;
+          const volume     = msg.volume ?? 0;
           const priceUp    = msg.close >= msg.open;
           const deltaUp    = delta >= 0;
           const divergence = priceUp !== deltaUp;
@@ -231,6 +251,29 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
               color: priceUp ? 'rgba(80,160,255,0.4)' : 'rgba(255,160,50,0.4)',
             });
           }
+
+          liveCandleRef.current = {
+            time:   unixSec,
+            open:   msg.open,
+            high:   msg.high,
+            low:    msg.low,
+            close:  msg.close,
+            volume,
+            delta,
+          };
+
+          if (msg.is_closed === true) {
+            onCandleCloseRef.current?.({
+              time:   unixSec * 1000,
+              open:   msg.open,
+              high:   msg.high,
+              low:    msg.low,
+              close:  msg.close,
+              volume,
+              delta,
+            });
+            liveCandleRef.current = null;
+          }
         } catch { /* 파싱 실패 무시 */ }
       };
       ws.onclose = () => {
@@ -243,6 +286,7 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
     return () => {
       destroyed = true;
       clearTimeout(reconnectTimer.current);
+      liveCandleRef.current = null;
     };
   }, [symbol, timeframe]);
 
