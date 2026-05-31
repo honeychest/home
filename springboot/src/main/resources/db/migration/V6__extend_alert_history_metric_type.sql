@@ -1,0 +1,11 @@
+ALTER TABLE alert_history
+MODIFY metric_type ENUM(
+  'API_ERROR',
+  'CPU',
+  'DISK',
+  'RAM',
+  'REDIS_QUEUE',
+  'FEED_BINANCE_TICKER',
+  'FEED_BINANCE_AGG',
+  'FEED_UPBIT'
+) NOT NULL;
