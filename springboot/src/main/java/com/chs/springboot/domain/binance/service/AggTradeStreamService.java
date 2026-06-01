@@ -136,7 +136,7 @@ public class AggTradeStreamService {
     }
 
     @FunctionalInterface
-    interface StreamFactory {
+    public interface StreamFactory {
         BinanceWebSocketStream create(String url,
                                       String logLabel,
                                       BinanceWebSocketStream.MessageListener listener,

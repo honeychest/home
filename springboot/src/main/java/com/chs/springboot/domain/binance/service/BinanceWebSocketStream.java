@@ -57,6 +57,7 @@ public class BinanceWebSocketStream {
     private final AtomicBoolean watchdogStarted = new AtomicBoolean(false);
     private volatile ScheduledFuture<?> watchdogTask;
     private volatile Consumer<Throwable> errorListener;
+    private volatile Consumer<WebSocket> connectedListener;
 
     public BinanceWebSocketStream(String url, String logLabel, MessageListener listener,
                                    ScheduledExecutorService scheduler, long reconnectDelaySeconds) {
@@ -88,6 +89,11 @@ public class BinanceWebSocketStream {
     /** upstream 오류/stale 발생 시 호출되는 콜백을 등록한다(알림 연동용). */
     public void onError(Consumer<Throwable> errorListener) {
         this.errorListener = errorListener;
+    }
+
+    /** 연결 직후(onOpen) 1회 호출되는 콜백을 등록한다(subscribe 전송 등). */
+    public void onConnected(Consumer<WebSocket> connectedListener) {
+        this.connectedListener = connectedListener;
     }
 
     private void notifyError(Throwable error) {
@@ -162,11 +168,20 @@ public class BinanceWebSocketStream {
                             webSocket = ws;
                             lastMessageAtNanos.set(nanoSource.getAsLong());
                             log.info("[{}] 연결 성공 (gen={})", logLabel, myGen);
+                            Consumer<WebSocket> onConnected = connectedListener;
+                            if (onConnected != null) {
+                                try {
+                                    onConnected.accept(ws);
+                                } catch (Exception e) {
+                                    log.warn("[{}] connectedListener 처리 실패: {}", logLabel, e.getMessage());
+                                }
+                            }
                             ws.request(1);
                             WebSocket.Listener.super.onOpen(ws);
                         }
 
                         private final StringBuilder buffer = new StringBuilder();
+                        private final java.io.ByteArrayOutputStream binaryBuffer = new java.io.ByteArrayOutputStream();
 
                         @Override
                         public java.util.concurrent.CompletionStage<?> onText(WebSocket ws, CharSequence data, boolean last) {
@@ -179,6 +194,25 @@ public class BinanceWebSocketStream {
                                     listener.onMessage(json);
                                 } catch (Exception e) {
                                     log.warn("[{}] 메시지 처리 실패: {}", logLabel, e.getMessage());
+                                }
+                            }
+                            ws.request(1);
+                            return null;
+                        }
+
+                        @Override
+                        public java.util.concurrent.CompletionStage<?> onBinary(WebSocket ws, java.nio.ByteBuffer data, boolean last) {
+                            lastMessageAtNanos.set(nanoSource.getAsLong());
+                            byte[] chunk = new byte[data.remaining()];
+                            data.get(chunk);
+                            binaryBuffer.write(chunk, 0, chunk.length);
+                            if (last) {
+                                String json = binaryBuffer.toString(java.nio.charset.StandardCharsets.UTF_8);
+                                binaryBuffer.reset();
+                                try {
+                                    listener.onMessage(json);
+                                } catch (Exception e) {
+                                    log.warn("[{}] 바이너리 메시지 처리 실패: {}", logLabel, e.getMessage());
                                 }
                             }
                             ws.request(1);
