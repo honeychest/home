@@ -13,12 +13,7 @@ geminirules.md
 obsidian/
 # 로컬 전용 테스트 파일 (저장소에 없어도 두는 ignore 는 정상)
 springboot/src/test/java/com/chs/springboot/unitTest.java
-# .idea/* — 디렉토리 안의 파일들을 무시, !로 특정 파일 예외 허용 .idea/ 로 하면 예외적용이 불가
-.idea/*
-!.idea/vcs.xml
-!.idea/modules.xml
-!.idea/compiler.xml
-!.idea/misc.xml
+.idea/
 .cursor/
 .cursorignore*
 .history/
