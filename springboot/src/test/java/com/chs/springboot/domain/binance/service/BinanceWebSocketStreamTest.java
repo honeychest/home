@@ -124,6 +124,82 @@ class BinanceWebSocketStreamTest {
         assertThat(connectCount.get()).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("onOpen에 도달 못하는 stale가 임계(5회) 누적되면 connector(HttpClient)를 재생성한다")
+    void consecutiveStale_recreatesConnector() throws Exception {
+        AtomicInteger factoryCallCount = new AtomicInteger(0);
+        // 항상 onOpen을 호출하지 않는 connector(영구 pending) → stale이 리셋 없이 누적된다.
+        java.util.function.Supplier<BinanceWebSocketStream.WebSocketConnector> factory = () -> {
+            factoryCallCount.incrementAndGet();
+            return (uri, listener) -> {
+                connectCount.incrementAndGet();
+                return new CompletableFuture<>(); // 영원히 미완료(hung handshake 모사)
+            };
+        };
+
+        BinanceWebSocketStream stream = new BinanceWebSocketStream(
+                "wss://test.example.com/ws", "TEST", json -> {},
+                scheduler, 0, factory,
+                System::nanoTime, 20, TimeUnit.MILLISECONDS.toNanos(50));
+
+        stream.connect();
+        Thread.sleep(2000);
+
+        // 생성 시 1회 + 연속 stale 5회 누적 후 최소 1회 재생성 = 2회 이상.
+        assertThat(factoryCallCount.get()).isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("connector 재생성 후 정상 connector면 재연결되어 복구되고 추가 재생성은 멈춘다")
+    void afterRecreate_recoversAndStopsRecreating() throws Exception {
+        AtomicInteger factoryCallCount = new AtomicInteger(0);
+        // 첫 connector는 hung, 재생성된 두 번째부터는 정상(onOpen 호출).
+        java.util.function.Supplier<BinanceWebSocketStream.WebSocketConnector> factory = () -> {
+            int n = factoryCallCount.incrementAndGet();
+            if (n == 1) {
+                return (uri, listener) -> {
+                    connectCount.incrementAndGet();
+                    return new CompletableFuture<>(); // hung
+                };
+            }
+            return (uri, listener) -> {
+                capturedListener.set(listener);
+                connectCount.incrementAndGet();
+                listener.onOpen(mockWs);
+                return CompletableFuture.completedFuture(mockWs);
+            };
+        };
+
+        BinanceWebSocketStream stream = new BinanceWebSocketStream(
+                "wss://test.example.com/ws", "TEST", json -> {},
+                scheduler, 0, factory,
+                System::nanoTime, 20, TimeUnit.MILLISECONDS.toNanos(50));
+
+        stream.connect();
+        Thread.sleep(2500);
+
+        // 재생성된 정상 connector의 onOpen에 도달(복구)했고,
+        assertThat(capturedListener.get()).isNotNull();
+        // 복구 후 onOpen이 stale 카운터를 리셋하므로 더 이상 재생성되지 않는다.
+        assertThat(factoryCallCount.get()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("abort()가 hang 해도 watchdog 스레드는 막히지 않고 재연결을 계속한다")
+    void abortHang_doesNotBlockWatchdog() throws Exception {
+        // abort()가 5초간 블로킹(hung socket 모사)되도록 설정.
+        doAnswer(inv -> { Thread.sleep(5000); return null; }).when(mockWs).abort();
+
+        BinanceWebSocketStream stream = createStreamWithWatchdog(
+                0, System::nanoTime, 20, TimeUnit.MILLISECONDS.toNanos(50));
+
+        stream.connect();
+        Thread.sleep(1200);
+
+        // abort가 abortExecutor에서 hang 중이어도 watchdog은 살아 있어 여러 번 재연결한다.
+        assertThat(connectCount.get()).isGreaterThanOrEqualTo(3);
+    }
+
     private BinanceWebSocketStream createStreamWithWatchdog(long reconnectDelaySec,
                                                             java.util.function.LongSupplier nanoSource,
                                                             long staleCheckIntervalMs,
