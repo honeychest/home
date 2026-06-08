@@ -138,6 +138,35 @@ async def _lmstudio(prompt: str, timeout: float, *, use_config_timeout: bool = T
         raise
 
 
+async def lmstudio_health(timeout: float = 8.0) -> tuple[bool, str]:
+    """LM Studio 연결 + 채팅 모델 로드 여부를 점검한다.
+
+    반환: (정상 여부, 상세 메시지)
+    - 연결 실패: (False, "연결 실패: …")
+    - 모델 미로드: (False, "모델 없음: 'gemma…' / 로드된 모델 […]")
+    - 정상: (True, "정상: gemma…")
+    """
+    from openai import AsyncOpenAI
+
+    want = settings.LMSTUDIO_MODEL
+    client = AsyncOpenAI(base_url=settings.LMSTUDIO_BASE_URL, api_key=settings.LMSTUDIO_API_KEY)
+    try:
+        models = await asyncio.wait_for(client.models.list(), timeout=timeout)
+        ids = [m.id for m in models.data]
+    except asyncio.TimeoutError:
+        return False, f"연결 실패: /v1/models 타임아웃 ({timeout}s 초과) — {settings.LMSTUDIO_BASE_URL}"
+    except Exception as e:
+        return False, f"연결 실패: {e} — {settings.LMSTUDIO_BASE_URL}"
+
+    if not want:
+        # 고정 모델이 비어 있으면 자동감지 동작이라 '첫 모델 존재'만 확인
+        return (bool(ids), f"정상(자동감지): {ids[0]}" if ids else "모델 없음: 로드된 모델이 없습니다")
+
+    if want in ids:
+        return True, f"정상: {want}"
+    return False, f"모델 없음: '{want}' 미로드 / 현재 로드된 모델 {ids or '없음'}"
+
+
 async def _detect_lmstudio_model(client) -> str | None:
     try:
         models = await client.models.list()
