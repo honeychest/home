@@ -62,6 +62,22 @@ async def send_schedule_message(bot: Bot, chat_id: int, hour: int, *, timeout: f
     logger.info(f"스케줄 메시지 발송 — {hour:02d}:00, msg_ids: {sent_ids}")
 
 
+async def run_lmstudio_healthcheck(bot: Bot, chat_id: int) -> None:
+    """LM Studio 연결/모델 점검 — 실패 시에만 텔레그램 알림."""
+    from services.model_runner import lmstudio_health
+
+    ok, detail = await lmstudio_health()
+    if ok:
+        logger.info(f"[health] LM Studio {detail}")
+        return
+
+    logger.warning(f"[health] LM Studio 점검 실패 — {detail}")
+    try:
+        await bot.send_message(chat_id=chat_id, text=f"⚠ LM Studio 점검 필요\n사유: {detail}")
+    except Exception as e:
+        logger.warning(f"[health] 알림 발송 실패: {e}")
+
+
 async def send_schedule_reminder(bot: Bot, chat_id: int, reminder) -> None:
     text = schedule_reminder_service.format_reminder(reminder)
     await bot.send_message(chat_id=chat_id, text=text)
@@ -121,6 +137,24 @@ def setup_scheduler(bot: Bot, chat_id: int) -> None:
         replace_existing=True,
     )
     logger.info("루틴 알림 갱신 등록 — 시작 시 1회, 매 5분")
+
+    # LM Studio 헬스체크 — 시작 시 1회 + 매일 10:00 / 22:00 KST (실패 시에만 알림)
+    scheduler.add_job(
+        run_lmstudio_healthcheck,
+        trigger=DateTrigger(run_date=datetime.now(KST) + timedelta(seconds=1)),
+        args=[bot, chat_id],
+        id="lmstudio_health_startup",
+        replace_existing=True,
+    )
+    for h in (10, 22):
+        scheduler.add_job(
+            run_lmstudio_healthcheck,
+            trigger=CronTrigger(hour=h, minute=0, timezone="Asia/Seoul"),
+            args=[bot, chat_id],
+            id=f"lmstudio_health_{h}",
+            replace_existing=True,
+        )
+    logger.info("LM Studio 헬스체크 등록 — 시작 시 1회, 매일 10:00 / 22:00 KST")
 
     scheduler.start()
     logger.info("스케줄러 시작 완료")
