@@ -137,7 +137,44 @@ const S = {
         color: '#aaa',
         fontStyle: 'italic',
     },
+    // 봇 답변 하단의 근거 출처(작게, 기본 접힘)
+    sources: {
+        marginTop: '4px',
+        fontSize: '11px',
+        color: '#9aa0a6',
+    },
+    sourceToggle: {
+        background: 'transparent',
+        border: 'none',
+        padding: 0,
+        color: '#9aa0a6',
+        fontSize: '11px',
+        cursor: 'pointer',
+    },
+    sourceList: {
+        marginTop: '2px',
+        wordBreak: 'break-all',
+    },
 };
+
+// 봇 답변의 근거 출처 — 기본 접힘, 클릭하면 펼침
+function SourceList({ sources }) {
+    const [expanded, setExpanded] = useState(false);
+    return (
+        <div style={S.sources}>
+            <button style={S.sourceToggle} onClick={() => setExpanded((v) => !v)}>
+                {expanded ? '▾' : '▸'} 근거 {sources.length}개
+            </button>
+            {expanded && (
+                <div style={S.sourceList}>
+                    {sources.map((s, i) => (
+                        <div key={i}>{s}</div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 function FloatingChatbot() {
     const [open, setOpen] = useState(false);
@@ -158,12 +195,18 @@ function FloatingChatbot() {
         const q = question.trim();
         if (!q || loading) return;
 
+        // 직전까지의 대화를 맥락으로 함께 전송(서버는 저장 안 함). 최근 12개만, 봇 역할은 assistant 로.
+        const history = messages.slice(-12).map((m) => ({
+            role: m.role === 'user' ? 'user' : 'assistant',
+            content: m.text,
+        }));
+
         setMessages((prev) => [...prev, { role: 'user', text: q }]);
         setQuestion('');
         setLoading(true);
 
         try {
-            const res = await apiClient.post('/api/chat', { question: q });
+            const res = await apiClient.post('/api/chat', { question: q, history });
             const data = res.data || {};
             setMessages((prev) => [
                 ...prev,
@@ -223,6 +266,9 @@ function FloatingChatbot() {
                                 <div style={m.role === 'user' ? S.bubbleUser : S.bubbleBot}>
                                     {m.text}
                                 </div>
+                                {m.role === 'bot' && m.sources && m.sources.length > 0 && (
+                                    <SourceList sources={m.sources} />
+                                )}
                             </div>
                         ))}
                         {loading && (
