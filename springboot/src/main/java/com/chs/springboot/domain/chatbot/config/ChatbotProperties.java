@@ -48,15 +48,29 @@ public class ChatbotProperties {
         this.reindex = reindex;
     }
 
+    // 청킹 전략. TOKEN = 기존 TokenTextSplitter(맹목 토큰 분할),
+    // SYMBOL_AWARE = GitNexus 심볼 경계로 메서드/클래스 단위 분할(폴백 내장).
+    public enum ChunkStrategy {
+        TOKEN,
+        SYMBOL_AWARE
+    }
+
     public static class Reindex {
         private List<String> includeExtensions = new ArrayList<>(List.of(
                 ".java", ".html", ".md", ".tsx", ".jsx", ".ts", ".js"));
-        private int chunkSize = 256;
-        private int minChunkSizeChars = 200;
+        // application.properties 와 동기화된 기본값(1단계 튜닝 반영).
+        private int chunkSize = 512;
+        private int minChunkSizeChars = 350;
         private int minChunkLengthToEmbed = 5;
         private int maxNumChunks = 10000;
         private boolean keepSeparator = true;
-        private int batchSize = 50;
+        private int batchSize = 8;
+        // 2단계: 청킹 전략 토글. 기본 TOKEN(안전), SYMBOL_AWARE 는 4번 구현 후 전환.
+        private ChunkStrategy chunkStrategy = ChunkStrategy.TOKEN;
+        // 인접 청크 간 오버랩 토큰 수(경계 손실 방지). 0 이면 오버랩 없음.
+        private int overlapTokens = 64;
+        // 심볼 경계를 조회할 GitNexus 저장소명.
+        private String gitnexusRepo = "lab";
 
         public List<String> getIncludeExtensions() {
             return includeExtensions;
@@ -112,6 +126,30 @@ public class ChatbotProperties {
 
         public void setBatchSize(int batchSize) {
             this.batchSize = batchSize;
+        }
+
+        public ChunkStrategy getChunkStrategy() {
+            return chunkStrategy;
+        }
+
+        public void setChunkStrategy(ChunkStrategy chunkStrategy) {
+            this.chunkStrategy = chunkStrategy;
+        }
+
+        public int getOverlapTokens() {
+            return overlapTokens;
+        }
+
+        public void setOverlapTokens(int overlapTokens) {
+            this.overlapTokens = overlapTokens;
+        }
+
+        public String getGitnexusRepo() {
+            return gitnexusRepo;
+        }
+
+        public void setGitnexusRepo(String gitnexusRepo) {
+            this.gitnexusRepo = gitnexusRepo;
         }
     }
 }
