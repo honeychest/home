@@ -3,9 +3,14 @@
 // 재색인은 부작용 있는 "실행" → 기존 프로덕션 API(/api/admin/chatbot/**) 를 그대로 호출한다.
 import api from '@/api/apiClient.js';
 
-// 재색인 시작(실행) — 성공 시 202 + { jobId }
+// 전체 재색인 시작(실행) — 소스+문서 전부. 성공 시 202 + { jobId }
 export function startChatbotReindex() {
     return api.post('/api/admin/chatbot/reindex');
+}
+
+// 문서만 증분 재색인(실행) — docs/generated 의 .md 만, 소스 벡터는 보존. 성공 시 202 + { jobId }
+export function startChatbotDocsReindex() {
+    return api.post('/api/admin/chatbot/reindex/docs');
 }
 
 // 재색인 작업 상태 조회(관찰) — { status, processedChunks, totalChunks, documentCount, error }

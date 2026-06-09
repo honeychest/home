@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import {
     startChatbotReindex,
+    startChatbotDocsReindex,
     fetchChatbotReindexStatus,
     askChatbot,
 } from '@/api/adminTest/chatbot.js';
@@ -69,13 +70,14 @@ export default function ChatbotTestPage() {
             });
     };
 
-    const onReindex = () => {
+    // 색인 종류별 공통 실행기. startFn 만 갈아끼우면 전체/문서 재색인을 동일 로직으로 처리.
+    const runReindex = (startFn) => {
         if (reindexing) return;
         setReindexing(true);
         setReindexError(false);
         setReindexMsg('색인 요청 중...');
 
-        startChatbotReindex()
+        startFn()
             .then((res) => {
                 const jobId = res.data?.jobId;
                 setReindexMsg(`색인 진행 중... (jobId: ${jobId})`);
@@ -94,6 +96,9 @@ export default function ChatbotTestPage() {
                 setReindexing(false);
             });
     };
+
+    const onReindexFull = () => runReindex(startChatbotReindex);
+    const onReindexDocs = () => runReindex(startChatbotDocsReindex);
 
     const onAsk = () => {
         const q = question.trim();
@@ -137,10 +142,16 @@ export default function ChatbotTestPage() {
             {/* 색인 관리 */}
             <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>색인 관리</h2>
-                <button className={styles.primaryButton} onClick={onReindex} disabled={reindexing}>
-                    <RefreshCw size={16} className={reindexing ? styles.spin : ''} />
-                    {reindexing ? '색인 중' : '재색인'}
-                </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button className={styles.primaryButton} onClick={onReindexFull} disabled={reindexing}>
+                        <RefreshCw size={16} className={reindexing ? styles.spin : ''} />
+                        {reindexing ? '색인 중' : '전체 재색인'}
+                    </button>
+                    <button className={styles.primaryButton} onClick={onReindexDocs} disabled={reindexing}>
+                        <RefreshCw size={16} className={reindexing ? styles.spin : ''} />
+                        {reindexing ? '색인 중' : '문서만 재색인'}
+                    </button>
+                </div>
                 <div className={`${styles.status} ${reindexError ? styles.error : ''}`}>
                     {reindexMsg}
                 </div>
