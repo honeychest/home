@@ -1,0 +1,132 @@
+/* [AGENT] admin/test Chatbot 탭 스타일 — RawWriterTestPage 패턴을 따른 최소 구성 */
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 4px 0 40px;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.title {
+    font-size: 22px;
+    margin: 0;
+    color: #102a43;
+}
+
+.subtitle {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: #5b7083;
+}
+
+.section {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.sectionTitle {
+    font-size: 15px;
+    margin: 0 0 14px;
+    color: #334e68;
+}
+
+.primaryButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    font-size: 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #2c7a7b;
+    color: #fff;
+}
+
+.primaryButton:hover:not(:disabled) {
+    background: #236566;
+}
+
+.primaryButton:disabled {
+    background: #a0aec0;
+    cursor: not-allowed;
+}
+
+.status {
+    margin-top: 12px;
+    font-size: 14px;
+    color: #4a5568;
+    min-height: 20px;
+}
+
+.error {
+    color: #c0392b;
+}
+
+.loading {
+    color: #888;
+    font-style: italic;
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.textarea {
+    width: 100%;
+    height: 90px;
+    padding: 10px;
+    font-size: 14px;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    resize: vertical;
+    box-sizing: border-box;
+    margin-bottom: 12px;
+    font-family: inherit;
+}
+
+.answerBox {
+    margin-top: 16px;
+}
+
+.answerText {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 14px;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.sources {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #5b7083;
+}
+
+.sources ul {
+    margin: 4px 0 0;
+    padding-left: 18px;
+}
+
+.sources li {
+    font-family: monospace;
+    font-size: 12px;
+    word-break: break-all;
+}

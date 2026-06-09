@@ -64,6 +64,13 @@ dependencies {
     // NOTE: spring-boot-starter-amqp에 spring-rabbit이 포함되어 있어 별도 의존성 불필요
     implementation 'org.springframework.kafka:spring-kafka'
 
+    // Spring AI (코드베이스 RAG 챗봇) — BOM 1.0.8 (Spring Boot 3.4.x 지원 확인)
+    implementation platform('org.springframework.ai:spring-ai-bom:1.0.8')
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai'          // LM Studio(OpenAI 호환) 채팅+임베딩
+    implementation 'org.springframework.ai:spring-ai-starter-vector-store-pgvector' // PGVector 벡터 저장소
+    implementation 'org.springframework.ai:spring-ai-advisors-vector-store'         // QuestionAnswerAdvisor (RAG)
+    runtimeOnly 'org.postgresql:postgresql'                                          // PG 전용 DataSource 드라이버
+
     // JWT 적용
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6' // 코드에서 직접 쓰는 인터페이스
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6' // 실제 구현체

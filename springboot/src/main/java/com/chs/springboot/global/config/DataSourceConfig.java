@@ -27,6 +27,10 @@ public class DataSourceConfig {
         return DataSourceBuilder.create().type(HikariDataSource.class).build();
     }
 
+    // @Primary: JdbcTemplate 빈이 둘(batchJdbcTemplate, pgVectorJdbcTemplate)이 되면서
+    // @Qualifier 없이 JdbcTemplate 을 주입받던 기존 서비스들의 모호성을 제거(기존 동작 보존).
+    // PG 전용 pgVectorJdbcTemplate 은 @Qualifier 로만 접근한다.
+    @Primary
     @Bean("batchJdbcTemplate")
     public JdbcTemplate batchJdbcTemplate(@Qualifier("batchDataSource") DataSource batchDataSource) {
         return new JdbcTemplate(batchDataSource);

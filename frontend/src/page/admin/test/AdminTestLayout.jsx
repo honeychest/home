@@ -11,6 +11,7 @@ import styles from './AdminTestLayout.module.css';
 const TEST_TABS = [
     { label: 'Auth', path: 'auth' },
     { label: 'Raw Writer', path: 'raw-writer' },
+    { label: 'Chatbot', path: 'chatbot' },
     { label: 'Trade', path: 'trade' },
     { label: 'Monitor', path: 'monitor' },
     { label: 'User', path: 'user' },

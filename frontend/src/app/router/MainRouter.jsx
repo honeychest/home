@@ -19,6 +19,7 @@ import AdminTestLayout from '../../page/admin/test/AdminTestLayout.jsx';
 import AuthTestPage    from '../../page/admin/test/AuthTestPage.jsx';
 import AdminTestDomainPlaceholder from '../../page/admin/test/AdminTestDomainPlaceholder.jsx';
 import RawWriterTestPage from '../../page/admin/test/RawWriterTestPage.jsx';
+import ChatbotTestPage from '../../page/admin/test/ChatbotTestPage.jsx';
 import RandomPage    from '../../page/random/RandomPage.jsx';
 import RandomLayoutEditorPage from '../../page/random/RandomLayoutEditorPage.jsx';
 import ForbiddenPage from '../../page/forbidden/ForbiddenPage.jsx';
@@ -83,6 +84,7 @@ function MainRouter() {
                     <Route index element={<Navigate to="auth" replace />} />
                     <Route path="auth" element={<AuthTestPage />} />
                     <Route path="raw-writer" element={<RawWriterTestPage />} />
+                    <Route path="chatbot" element={<ChatbotTestPage />} />
                     <Route path="trade" element={<AdminTestDomainPlaceholder domainLabel="Trade" />} />
                     <Route path="monitor" element={<AdminTestDomainPlaceholder domainLabel="Monitor" />} />
                     <Route path="user" element={<AdminTestDomainPlaceholder domainLabel="User" />} />

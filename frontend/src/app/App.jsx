@@ -4,11 +4,13 @@
 
 import MainRouter from './router/MainRouter.jsx';
 import { AdminAuthProvider } from '@/shared/auth/AdminAuthContext.jsx';
+import FloatingChatbot from '@/components/chatbot/FloatingChatbot.jsx';
 
 function App() {
     return (
         <AdminAuthProvider>
             <MainRouter />
+            <FloatingChatbot />
         </AdminAuthProvider>
     );
 }
