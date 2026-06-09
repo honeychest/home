@@ -36,6 +36,19 @@ public class ChatbotAdminController {
         }
     }
 
+    @PostMapping("/reindex/docs")
+    public ResponseEntity<Map<String, Object>> startDocsReindex() {
+        try {
+            ReindexJob job = indexingService.startDocsReindex();
+            return ResponseEntity.accepted().body(Map.of(
+                    "jobId", (Object) job.getJobId(),
+                    "status", job.getStatus()
+            ));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", (Object) e.getMessage()));
+        }
+    }
+
     @GetMapping("/reindex/{id}")
     public ResponseEntity<ReindexStatusResponse> getReindexStatus(@PathVariable String id) {
         ReindexJob job = indexingService.getJob(id);

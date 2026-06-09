@@ -31,6 +31,17 @@ public class CodebaseIndexingService {
         return job;
     }
 
+    public ReindexJob startDocsReindex() {
+        if (!running.compareAndSet(false, true)) {
+            throw new IllegalStateException("reindex already running");
+        }
+        ReindexJob job = new ReindexJob(UUID.randomUUID().toString());
+        jobs.put(job.getJobId(), job);
+        // 전체 재색인과 동일한 락을 공유해 동시 실행을 막는다. doc 레이어만 증분 색인.
+        runner.runDocs(job, () -> running.set(false));
+        return job;
+    }
+
     public ReindexJob getJob(String jobId) {
         return jobs.get(jobId);
     }

@@ -35,6 +35,12 @@ public class VectorIndexWriter {
         log.info("[색인] 기존 벡터 삭제 완료");
     }
 
+    /** doc 레이어(생성 문서)만 삭제. 소스코드 벡터는 보존(증분 색인용). */
+    public void clearDocs() {
+        int deleted = pgVectorJdbcTemplate.update("DELETE FROM vector_store WHERE metadata->>'layer' = 'doc'");
+        log.info("[색인] doc 레이어 벡터 삭제 완료: {}건", deleted);
+    }
+
     public void write(List<Document> chunks, IntConsumer progress) {
         int batchSize = properties.getReindex().getBatchSize();
         int totalBatches = (chunks.size() + batchSize - 1) / batchSize;

@@ -45,6 +45,29 @@ public class CodebaseDocumentSource {
         return documents;
     }
 
+    /** docs/generated 루트만 수집(증분 doc 색인용). 소스 루트는 건드리지 않는다. */
+    public List<Document> collectDocs() throws Exception {
+        Path base = properties.getSourceBase() != null ? Paths.get(properties.getSourceBase()) : null;
+        List<Document> documents = new ArrayList<>();
+
+        for (String rootStr : properties.getIndexRoots()) {
+            Path root = Paths.get(rootStr);
+            if (!root.toString().replace('\\', '/').endsWith("docs/generated")) {
+                continue; // doc 루트만 대상
+            }
+            if (!Files.isDirectory(root)) {
+                log.warn("[doc 색인] 루트가 디렉토리가 아님, 건너뜀: {}", root);
+                continue;
+            }
+            try (var stream = Files.walk(root)) {
+                stream.filter(Files::isRegularFile)
+                      .filter(this::isIncluded)
+                      .forEach(p -> readDocument(base, root, p, documents));
+            }
+        }
+        return documents;
+    }
+
     private boolean isIncluded(Path path) {
         String name = path.getFileName().toString();
         return properties.getReindex().getIncludeExtensions().stream().anyMatch(name::endsWith);
@@ -59,7 +82,9 @@ public class CodebaseDocumentSource {
             // base 하위면 base 기준(예: "frontend/src/..."), 아니면 해당 루트 기준으로 상대화.
             Path relativeFrom = (base != null && path.startsWith(base)) ? base : root;
             String relativePath = relativeFrom.relativize(path).toString();
-            documents.add(new Document(content, Map.of("source", relativePath)));
+            // 경로 기준 레이어 태그: docs/generated/ 하위는 자연어 문서(doc), 그 외는 소스코드(code)
+            String layer = relativePath.replace('\\', '/').startsWith("docs/generated/") ? "doc" : "code";
+            documents.add(new Document(content, Map.of("source", relativePath, "layer", layer)));
         } catch (Exception e) {
             log.warn("[색인] 파일 읽기 실패, 건너뜀: {} | 원인: {}", path, e.getMessage());
         }

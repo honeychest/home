@@ -62,4 +62,31 @@ public class AsyncReindexRunner {
             onComplete.run();
         }
     }
+
+    /** doc 레이어만 증분 색인: 소스 벡터는 그대로 두고 docs/generated 문서만 지웠다 다시 넣는다. */
+    @Async
+    public void runDocs(ReindexJob job, Runnable onComplete) {
+        try {
+            log.info("[doc 색인 시작] jobId={}", job.getJobId());
+
+            indexWriter.clearDocs();
+            List<Document> documents = documentSource.collectDocs();
+            log.info("[doc 색인] 수집된 문서 수: {}", documents.size());
+
+            List<Document> chunks = documentChunker.chunk(documents);
+            log.info("[doc 색인] 청킹 완료, 총 청크 수: {}", chunks.size());
+
+            job.setTotalChunks(chunks.size());
+            indexWriter.write(chunks, job::setProcessedChunks);
+
+            job.markCompleted(chunks.size());
+            log.info("[doc 색인 완료] jobId={}, 청크 수={}", job.getJobId(), chunks.size());
+
+        } catch (Exception e) {
+            job.markFailed(e.getMessage());
+            log.error("[doc 색인 실패] jobId={}, 오류={}", job.getJobId(), e.getMessage(), e);
+        } finally {
+            onComplete.run();
+        }
+    }
 }

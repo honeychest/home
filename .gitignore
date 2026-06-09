@@ -34,6 +34,9 @@ __pycache__/
 .graphify_*.txt
 .graphify_python
 
+# 문서 자동생성 청크 요약 캐시 (중간 산출물 — 결과물 generated/ 는 추적 유지)
+docs/.cache/
+
 # Serena MCP 도구 (로컬 전용)
 .serena/
 /package.json
