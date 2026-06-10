@@ -33,12 +33,19 @@ async def save_grammar_error(error_type: str, expression: str, wrong_sentence: s
 
 
 async def get_grammar_due() -> list:
-    """오늘 리뷰할 grammar 항목 반환."""
+    """오늘 리뷰할 grammar 항목 반환.
+
+    [예정 기능] 문법 복습 루프 미배선 — 현재 호출처 없음(문법은 등록만 운영).
+    review_deck 위 복습 골격으로 보존. 방침: CONTEXT.md §5.
+    """
     return await _grammar_deck().due_pages()
 
 
 def parse_grammar_page(page: dict) -> dict | None:
-    """Notion grammar 페이지에서 속성 추출."""
+    """Notion grammar 페이지에서 속성 추출.
+
+    [예정 기능] 문법 복습 루프 미배선 — 현재 호출처 없음. 방침: CONTEXT.md §5.
+    """
     props = page["properties"]
     title_list = props["오류유형"]["title"]
     if not title_list:
@@ -57,6 +64,9 @@ def parse_grammar_page(page: dict) -> dict | None:
 
 
 async def update_grammar_stage(page_id: str, correct: bool) -> None:
-    """퀴즈 결과에 따라 단계와 다음리뷰일 업데이트."""
+    """퀴즈 결과에 따라 단계와 다음리뷰일 업데이트.
+
+    [예정 기능] 문법 복습 루프 미배선 — 현재 호출처 없음. 방침: CONTEXT.md §5.
+    """
     next_stage = await _grammar_deck().grade(page_id, correct)
     logger.info(f"문법 단계 업데이트 - page_id: {page_id}, stage→{next_stage}, correct: {correct}")

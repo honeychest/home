@@ -19,7 +19,8 @@
   학습    복습덱(Review Deck): 단어·문법의 '간격반복'을 담는 단일 개념. 단어/문법은
           설정만 다른 두 Adapter다(간격표·졸업규칙·도메인필드만 차이). 등록·due 조회·
           채점(단계 전진+리뷰일 재계산)이 핵심 인터페이스.
-          ※ 현재는 notion_service·grammar_service에 두 벌로 분산 → 복습덱으로 통합 진행 중.
+          ※ SRS 핵심은 review_deck 단일 구현. 단어는 word_repository로 조회·채점 입구
+            통합 완료. 문법은 '등록'만 배선되고 복습 루프는 보류(§5).
           관련: word_repository · quiz_flow · quiz_schedule · schedule_plan · conversation_router
   생산성  todo_service · schedule_reminder_service · inbox_action_token ·
           ai_notion_control
@@ -43,6 +44,10 @@
   - 간격반복 설계: '1-3-7 기법'에서 출발. 7일 뒤 망각·장기 유지 확인 위해 30일,
     60~120일(랜덤)까지 확장 후 졸업. (단어 1/3/7/30/60~120, 문법 1/3/7)
     인터넷 기법 기반이라 본인 적합도는 미검증 — 간격은 실험적.
+  - 문법 복습 보류: 문법오류는 등록(save_grammar_error)만 운영하고 due 조회·출제·채점
+    루프는 미배선. '복습'의 상호작용(예: 틀린문장 교정)이 미정이라 기능을 켜지 않음.
+    get_grammar_due/parse_grammar_page/update_grammar_stage는 review_deck 위 예정 골격
+    (죽은 코드 아님, 켤 때 재사용). 단어 복습이 검증되면 같은 review_deck으로 확장.
 
 ## 6. 지향
   단순 할일 나열을 넘어 '라이프사이클 플래너'로 발전 — 일과표 + 알림 + 회고를
