@@ -1,15 +1,28 @@
 import logging
-from datetime import timedelta
 from notion_client import AsyncClient
 from chs import dlog
 from config import settings
 from constants import WORD_STAGE_DAYS as STAGE_DAYS, MAX_ACTIVE_STAGE, GRADUATED_STAGE
 from timeutil import now_kst
+from services import review_deck as rd
 from services.ai_parsers import parse_link_tags, strip_link_tag_lines
 from services.word_repository import parse_word_page as _parse_word_page
 
 logger = logging.getLogger(__name__)
 client = AsyncClient(auth=settings.NOTION_API_KEY)
+
+# 단어 복습덱 설정 — 간격반복 로직은 review_deck 한 곳, 여기선 단어용 설정만 둔다.
+_WORD_CONFIG = rd.DeckConfig(
+    data_source_id=settings.NOTION_WORD_DATABASE_ID,
+    advance=rd.graduating_advance(STAGE_DAYS, MAX_ACTIVE_STAGE, GRADUATED_STAGE,
+                                  random_at=MAX_ACTIVE_STAGE, random_range=(60, 120)),
+    register_interval=STAGE_DAYS[1],
+    graduated_at=GRADUATED_STAGE,
+)
+
+
+def _word_deck() -> rd.ReviewDeck:
+    return rd.ReviewDeck(_WORD_CONFIG, rd.NotionAdapter(client))
 
 
 def parse_word_page(page: dict) -> dict | None:
@@ -102,19 +115,10 @@ async def exists_word(word: str) -> str | None:
 
 async def add_word(word: str, meaning: str) -> str:
     """영단어를 Notion DB에 저장하고 page_id 반환."""
-    today = now_kst()
-    next_review = (today + timedelta(days=STAGE_DAYS[1])).isoformat()
-    response = await client.pages.create(
-        parent={"type": "data_source_id", "data_source_id": settings.NOTION_WORD_DATABASE_ID},
-        properties={
-            "단어": {"title": [{"text": {"content": word}}]},
-            "의미": {"rich_text": [{"text": {"content": meaning}}]},
-            "단계": {"number": 1},
-            "등록일": {"date": {"start": today.isoformat()}},
-            "다음리뷰일": {"date": {"start": next_review}},
-        }
-    )
-    page_id = response["id"]
+    page_id = await _word_deck().register({
+        "단어": {"title": [{"text": {"content": word}}]},
+        "의미": {"rich_text": [{"text": {"content": meaning}}]},
+    })
     logger.info(f"영단어 저장 완료 - word: {word}, page_id: {page_id}")
     return page_id
 
@@ -139,15 +143,7 @@ async def search_words_containing(keyword: str) -> list:
 
 async def get_words_due() -> list:
     """오늘 리뷰할 단어 목록 반환. 졸업(6단계) 단어 제외."""
-    today = now_kst().date().isoformat()
-    response = await client.data_sources.query(
-        data_source_id=settings.NOTION_WORD_DATABASE_ID,
-        filter={"and": [
-            {"property": "다음리뷰일", "date": {"on_or_before": today}},
-            {"property": "단계", "number": {"less_than": GRADUATED_STAGE}},
-        ]},
-    )
-    return response.get("results", [])
+    return await _word_deck().due_pages()
 
 
 async def add_inbox(text: str, kind: str, date: str | None) -> str:
@@ -247,27 +243,5 @@ async def update_inbox_date(page_id: str, new_date_iso: str) -> None:
 
 async def update_word_stage(page_id: str, correct: bool) -> None:
     """퀴즈 결과에 따라 단계와 다음리뷰일 업데이트."""
-    import random
-
-    page = await client.pages.retrieve(page_id=page_id)
-    current_stage = page["properties"]["단계"]["number"]
-
-    if correct and current_stage >= MAX_ACTIVE_STAGE:
-        next_stage = GRADUATED_STAGE
-        next_review = (now_kst() + timedelta(days=9999)).isoformat()
-    elif correct:
-        next_stage = current_stage + 1
-        days = random.randint(60, 120) if next_stage == MAX_ACTIVE_STAGE else STAGE_DAYS[next_stage]
-        next_review = (now_kst() + timedelta(days=days)).isoformat()
-    else:
-        next_stage = 1
-        next_review = (now_kst() + timedelta(days=STAGE_DAYS[1])).isoformat()
-
-    await client.pages.update(
-        page_id=page_id,
-        properties={
-            "단계": {"number": next_stage},
-            "다음리뷰일": {"date": {"start": next_review}},
-        }
-    )
-    logger.info(f"단어 단계 업데이트 - page_id: {page_id}, stage: {current_stage}→{next_stage}, correct: {correct}")
+    next_stage = await _word_deck().grade(page_id, correct)
+    logger.info(f"단어 단계 업데이트 - page_id: {page_id}, stage→{next_stage}, correct: {correct}")
