@@ -48,14 +48,17 @@ export default function AnalysisPage() {
     return p.get('view') === 'desktop' ? 'desktop' : 'auto'; // 'auto' | 'desktop'
   });
 
-  const mountedRef  = useRef(false);
-  const symbolRef   = useRef(symbol);
-  const startRef    = useRef(startDate);
-  const endRef      = useRef(endDate);
+  const mountedRef   = useRef(false);
+  const symbolRef    = useRef(symbol);
+  const startRef     = useRef(startDate);
+  const endRef       = useRef(endDate);
+  const timeframeRef = useRef(timeframe);
+  const hiddenAtRef  = useRef(null);
 
-  useEffect(() => { symbolRef.current = symbol;    }, [symbol]);
-  useEffect(() => { startRef.current  = startDate; }, [startDate]);
-  useEffect(() => { endRef.current    = endDate;   }, [endDate]);
+  useEffect(() => { symbolRef.current    = symbol;    }, [symbol]);
+  useEffect(() => { startRef.current     = startDate; }, [startDate]);
+  useEffect(() => { endRef.current       = endDate;   }, [endDate]);
+  useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
 
   // ─── 반응형: 모바일에서는 페이지 비활성화 ──────────────────────────────────────
 
@@ -194,6 +197,35 @@ export default function AnalysisPage() {
   };
 
   // ─── Analysis 더블클릭 수동 탐색 ─────────────────────────────────────────
+
+  // ─── 탭 복귀 재동기화 ─────────────────────────────────────────────────────
+  // 60초 이상 백그라운드였다가 돌아오면 오늘치 봉을 다시 받아 끝부분만 갱신
+  // (백그라운드 동안 WS 메시지를 놓쳐 동결·누락된 봉 복구)
+
+  useEffect(() => {
+    const onVisibility = async () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+      const hiddenMs = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0;
+      hiddenAtRef.current = null;
+      if (hiddenMs < 60_000) return;
+      if (endRef.current !== todayStr()) return; // 과거 구간만 보는 중이면 불필요
+      try {
+        const today = todayStr();
+        const fresh = await fetchKlines(symbolRef.current, today, today, timeframeRef.current);
+        if (fresh.length === 0) return;
+        setKlineData((prevData) => {
+          if (prevData.length === 0) return prevData;
+          const cut = fresh[0].time;
+          return [...prevData.filter((c) => c.time < cut), ...fresh];
+        });
+      } catch { /* 재동기화 실패는 조용히 무시 — 다음 복귀 때 재시도 */ }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   // ─── 실시간 봉 완성 콜백 (MainChart WS → klineData 동기화) ───────────────
 

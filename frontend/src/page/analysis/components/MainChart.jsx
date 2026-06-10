@@ -7,6 +7,28 @@ import SignalSearchPopup from './SignalSearchPopup.jsx';
 
 const DEBOUNCE_MS = 200;
 
+// 캔들 1개 → lightweight-charts 바 (가격·delta 방향 불일치 시 강조색)
+function buildBar({ time, open, high, low, close, delta }) {
+  const priceUp    = close >= open;
+  const deltaUp    = (delta ?? 0) >= 0;
+  const divergence = priceUp !== deltaUp;
+
+  if (!divergence) return { time, open, high, low, close };
+
+  const col = priceUp
+    ? 'rgba(255,50,150,0.95)'   // 가격↑ delta- : 자홍색
+    : 'rgba(50,220,120,0.95)';  // 가격↓ delta+ : 연두색
+  return { time, open, high, low, close, color: col, borderColor: col, wickColor: col };
+}
+
+function buildVolumeBar({ time, open, close, volume }) {
+  return {
+    time,
+    value: volume,
+    color: close >= open ? 'rgba(80,160,255,0.4)' : 'rgba(255,160,50,0.4)',
+  };
+}
+
 function buildMarkers(klineData, matchedIndices, paletteLevel) {
   const pal = PALETTE[paletteLevel] ?? PALETTE.MID;
   return matchedIndices
@@ -64,6 +86,9 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
   const timeframeRef      = useRef(timeframe);
   const liveCandleRef     = useRef(null);
   const onCandleCloseRef  = useRef(onCandleClose);
+  const lastBarTimeRef    = useRef(0);    // 차트에 그려진 마지막 봉 시간(초) — 과거 시간 update 예외 방지
+  const prevKlineRef      = useRef([]);   // 직전 klineData — 증분 변경(봉 확정 append) 감지용
+  const firstBarTimeRef   = useRef(null); // 차트 범위 시작 봉 시간 — 범위가 바뀔 때만 fitContent
 
   const selectedTimeSecRef = useRef(null);
 
@@ -225,56 +250,41 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
 
       ws.onmessage = (e) => {
         if (destroyed || !seriesRef.current) return;
-        try {
-          const msg     = JSON.parse(e.data);
-          const unixSec = Math.floor(new Date(msg.time).getTime() / 1000);
-          if (isNaN(unixSec)) return;
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; /* 파싱 실패 무시 */ }
+        const unixSec = Math.floor(new Date(msg.time).getTime() / 1000);
+        if (isNaN(unixSec)) return;
 
-          const delta      = msg.delta ?? 0;
-          const volume     = msg.volume ?? 0;
-          const priceUp    = msg.close >= msg.open;
-          const deltaUp    = delta >= 0;
-          const divergence = priceUp !== deltaUp;
-          const candleData = { time: unixSec, open: msg.open, high: msg.high, low: msg.low, close: msg.close };
-          if (divergence) {
-            const col = priceUp ? 'rgba(255,50,150,0.95)' : 'rgba(50,220,120,0.95)';
-            candleData.color       = col;
-            candleData.borderColor = col;
-            candleData.wickColor   = col;
-          }
-          seriesRef.current.update(candleData);
+        const delta  = msg.delta ?? 0;
+        const volume = msg.volume ?? 0;
 
-          if (volumeSeriesRef.current && msg.volume != null) {
-            volumeSeriesRef.current.update({
-              time:  unixSec,
-              value: msg.volume,
-              color: priceUp ? 'rgba(80,160,255,0.4)' : 'rgba(255,160,50,0.4)',
-            });
-          }
-
-          liveCandleRef.current = {
-            time:   unixSec,
+        // 봉 확정: 차트 반영 성공 여부와 분리해서 항상 klineData에 동기화.
+        // (확정 메시지는 다음 분 진행중 봉보다 늦게 도착하므로 여기서 차트를 직접 update하면 예외)
+        // 차트 반영은 klineData 변경 → 증분 update 경로에서 처리된다.
+        if (msg.is_closed === true) {
+          onCandleCloseRef.current?.({
+            time:   unixSec * 1000,
             open:   msg.open,
             high:   msg.high,
             low:    msg.low,
             close:  msg.close,
             volume,
             delta,
-          };
+          });
+          liveCandleRef.current = null;
+          return;
+        }
 
-          if (msg.is_closed === true) {
-            onCandleCloseRef.current?.({
-              time:   unixSec * 1000,
-              open:   msg.open,
-              high:   msg.high,
-              low:    msg.low,
-              close:  msg.close,
-              volume,
-              delta,
-            });
-            liveCandleRef.current = null;
+        liveCandleRef.current = { time: unixSec, open: msg.open, high: msg.high, low: msg.low, close: msg.close, volume, delta };
+
+        if (unixSec < lastBarTimeRef.current) return; // 과거 시간 메시지 → 차트 예외 방지
+        try {
+          seriesRef.current.update(buildBar({ time: unixSec, open: msg.open, high: msg.high, low: msg.low, close: msg.close, delta }));
+          if (volumeSeriesRef.current && msg.volume != null) {
+            volumeSeriesRef.current.update(buildVolumeBar({ time: unixSec, open: msg.open, close: msg.close, volume }));
           }
-        } catch { /* 파싱 실패 무시 */ }
+          lastBarTimeRef.current = unixSec;
+        } catch { /* 차트 반영 실패 무시 */ }
       };
       ws.onclose = () => {
         if (!destroyed) reconnectTimer.current = setTimeout(connect, 5000);
@@ -340,39 +350,68 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
     );
   };
 
-  // klineData 변경 → 차트 전체 재세팅
+  // klineData 변경 → 증분(봉 확정 append/교체)이면 마지막 봉만 update, 아니면 전체 재세팅
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current || klineData.length === 0) return;
+    const prev = prevKlineRef.current;
+    prevKlineRef.current = klineData;
+
+    // 증분 판정: 마지막 1개 교체 또는 1개 추가만 일어난 경우 (handleCandleUpdate 경로)
+    const incremental =
+      prev.length > 0 &&
+      klineData.length >= prev.length &&
+      klineData.length - prev.length <= 1 &&
+      klineData[0] === prev[0] &&
+      (prev.length < 2 || klineData[prev.length - 2] === prev[prev.length - 2]);
+
+    // 증분 봉이 전부 마지막 봉 이후일 때만 update 가능 (과거 봉은 setData로만 교정 가능)
+    const canUpdate = incremental &&
+      klineData.slice(prev.length - 1).every((c) => Math.floor(c.time / 1000) >= lastBarTimeRef.current);
+
+    if (canUpdate) {
+      for (let i = prev.length - 1; i < klineData.length; i++) {
+        const c = klineData[i];
+        const t = Math.floor(c.time / 1000);
+        try {
+          seriesRef.current.update(buildBar({ time: t, open: c.open, high: c.high, low: c.low, close: c.close, delta: c.delta ?? 0 }));
+          volumeSeriesRef.current?.update(buildVolumeBar({ time: t, open: c.open, close: c.close, volume: c.volume }));
+          lastBarTimeRef.current = t;
+        } catch { /* 차트 반영 실패 무시 */ }
+      }
+      applyMatched();
+      return; // 줌·스크롤 유지 (fitContent 호출 안 함)
+    }
+
+    // 전체 재세팅: 과거 봉 교정(확정값 반영) 포함. fitContent는 차트 범위가 바뀔 때만.
     const sorted = klineData
       .map((c) => ({ time: Math.floor(c.time / 1000), open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, delta: c.delta ?? 0 }))
       .sort((a, b) => a.time - b.time)
       .filter((item, i, arr) => i === 0 || item.time !== arr[i - 1].time);
 
-    seriesRef.current.setData(sorted.map(({ time, open, high, low, close, delta }) => {
-      const priceUp    = close >= open;
-      const deltaUp    = delta >= 0;
-      const divergence = priceUp !== deltaUp;
+    const shouldFit = firstBarTimeRef.current !== sorted[0].time;
+    firstBarTimeRef.current = sorted[0].time;
 
-      if (!divergence) return { time, open, high, low, close };
-
-      const col = priceUp
-        ? 'rgba(255,50,150,0.95)'   // 가격↑ delta- : 자홍색
-        : 'rgba(50,220,120,0.95)';  // 가격↓ delta+ : 연두색
-      return { time, open, high, low, close, color: col, borderColor: col, wickColor: col };
-    }));
+    seriesRef.current.setData(sorted.map(buildBar));
     seriesRef.current.priceScale().applyOptions({
       scaleMargins: { top: 0.02, bottom: 0.22 },
     });
 
     if (volumeSeriesRef.current) {
-      volumeSeriesRef.current.setData(sorted.map(({ time, open, close, volume }) => ({
-        time,
-        value: volume,
-        color: close >= open ? 'rgba(80,160,255,0.4)' : 'rgba(255,160,50,0.4)',
-      })));
+      volumeSeriesRef.current.setData(sorted.map(buildVolumeBar));
+    }
+    lastBarTimeRef.current = sorted[sorted.length - 1].time;
+
+    // setData로 지워진 진행 중 실시간 봉 다시 얹기
+    const live = liveCandleRef.current;
+    if (live && live.time >= lastBarTimeRef.current) {
+      try {
+        seriesRef.current.update(buildBar(live));
+        volumeSeriesRef.current?.update(buildVolumeBar(live));
+        lastBarTimeRef.current = live.time;
+      } catch { /* 차트 반영 실패 무시 */ }
     }
 
-    chartRef.current.timeScale().fitContent();
+    if (shouldFit) chartRef.current.timeScale().fitContent();
     applyMatched();
   }, [klineData]);
 

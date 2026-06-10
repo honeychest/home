@@ -1,11 +1,12 @@
-// [AGENT] T4-ANALYSIS: 바이낸스 Kline(OHLCV) + 백엔드 delta 병합 조회
+// [AGENT] T4-ANALYSIS: 바이낸스 선물(FUTURES) Kline(OHLCV) + 백엔드 delta 병합 조회
+// 실시간 WS(백엔드 선물 체결 집계)와 가격 기준을 맞추기 위해 현물(api/v3)이 아닌 선물(fapi/v1)을 사용
 // 429 응답 시: Retry-After 파싱 후 1회 자동 재시도
 // 1m: 하루(1440분)를 2회 요청으로 분할 처리 (limit=720)
 // 5m: 하루(288봉)를 1회 요청으로 처리 (limit=288 < 1000)
 import apiClient from '@/api/apiClient.js';
 import externalClient from '@/api/externalClient.js';
 
-const BINANCE_KLINE_URL  = 'https://api.binance.com/api/v3/klines';
+const BINANCE_KLINE_URL  = 'https://fapi.binance.com/fapi/v1/klines';
 const LIMIT_1M = 720; // 1일 1440분 → 2회 분할
 const LIMIT_5M = 288; // 1일 288봉 → 1회
 
