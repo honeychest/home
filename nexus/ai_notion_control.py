@@ -1,7 +1,7 @@
 import argparse
 import asyncio
-from datetime import datetime, timezone, timedelta
 
+from timeutil import now_kst
 from services import ai_notion_control as admin
 
 
@@ -76,8 +76,7 @@ async def _run(args) -> None:
         return
 
     if args.command == "seed-recovery-schedule":
-        kst = timezone(timedelta(hours=9))
-        base_date = args.base_date or datetime.now(kst).date().isoformat()
+        base_date = args.base_date or now_kst().date().isoformat()
         results = await admin.seed_recovery_schedule(data_source_id, base_date=base_date)
         for action, page_id, name in results:
             print(f"{action} {page_id} | {name}")

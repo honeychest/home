@@ -1,8 +1,9 @@
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 from notion_client import AsyncClient
 from config import settings
 from constants import GRAMMAR_STAGE_DAYS as STAGE_DAYS
+from timeutil import now_kst
 
 logger = logging.getLogger(__name__)
 client = AsyncClient(auth=settings.NOTION_API_KEY)
@@ -10,7 +11,7 @@ client = AsyncClient(auth=settings.NOTION_API_KEY)
 
 async def save_grammar_error(error_type: str, expression: str, wrong_sentence: str, error_detail: str) -> str:
     """문법 오류를 Notion grammar DB에 저장하고 page_id 반환."""
-    today = datetime.now(timezone.utc)
+    today = now_kst()
     next_review = (today + timedelta(days=STAGE_DAYS[1])).isoformat()
     response = await client.pages.create(
         parent={"type": "data_source_id", "data_source_id": settings.NOTION_GRAMMAR_DATABASE_ID},
@@ -31,7 +32,7 @@ async def save_grammar_error(error_type: str, expression: str, wrong_sentence: s
 
 async def get_grammar_due() -> list:
     """오늘 리뷰할 grammar 항목 반환."""
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = now_kst().date().isoformat()
     response = await client.data_sources.query(
         data_source_id=settings.NOTION_GRAMMAR_DATABASE_ID,
         filter={"property": "다음리뷰일", "date": {"on_or_before": today}},
@@ -65,7 +66,7 @@ async def update_grammar_stage(page_id: str, correct: bool) -> None:
 
     next_stage = min(current_stage + 1, 3) if correct else 1
     days = STAGE_DAYS[next_stage]
-    next_review = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    next_review = (now_kst() + timedelta(days=days)).isoformat()
 
     await client.pages.update(
         page_id=page_id,

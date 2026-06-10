@@ -1,9 +1,10 @@
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 from notion_client import AsyncClient
 from chs import dlog
 from config import settings
 from constants import WORD_STAGE_DAYS as STAGE_DAYS, MAX_ACTIVE_STAGE, GRADUATED_STAGE
+from timeutil import now_kst
 from services.ai_parsers import parse_link_tags, strip_link_tag_lines
 from services.word_repository import parse_word_page as _parse_word_page
 
@@ -55,7 +56,7 @@ async def save(url: str, title: str, summary: str, platform: str= "telegram", ta
             "select": {"name": platform}
         },
         "저장일시": {
-            "date": {"start": datetime.now(timezone.utc).isoformat()}
+            "date": {"start": now_kst().isoformat()}
         },
     }
     if tags:
@@ -101,7 +102,7 @@ async def exists_word(word: str) -> str | None:
 
 async def add_word(word: str, meaning: str) -> str:
     """영단어를 Notion DB에 저장하고 page_id 반환."""
-    today = datetime.now(timezone.utc)
+    today = now_kst()
     next_review = (today + timedelta(days=STAGE_DAYS[1])).isoformat()
     response = await client.pages.create(
         parent={"type": "data_source_id", "data_source_id": settings.NOTION_WORD_DATABASE_ID},
@@ -138,7 +139,7 @@ async def search_words_containing(keyword: str) -> list:
 
 async def get_words_due() -> list:
     """오늘 리뷰할 단어 목록 반환. 졸업(6단계) 단어 제외."""
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = now_kst().date().isoformat()
     response = await client.data_sources.query(
         data_source_id=settings.NOTION_WORD_DATABASE_ID,
         filter={"and": [
@@ -190,7 +191,7 @@ async def get_todos(
     """
     try:
         if done_on is not None or (date is None and overdue_before is None):
-            target = done_on or datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=9))).date().isoformat()
+            target = done_on or now_kst().date().isoformat()
             f = {"and": [
                 {"property": "상태", "select": {"equals": "완료"}},
                 {"property": "날짜", "date": {"equals": target}},
@@ -253,14 +254,14 @@ async def update_word_stage(page_id: str, correct: bool) -> None:
 
     if correct and current_stage >= MAX_ACTIVE_STAGE:
         next_stage = GRADUATED_STAGE
-        next_review = (datetime.now(timezone.utc) + timedelta(days=9999)).isoformat()
+        next_review = (now_kst() + timedelta(days=9999)).isoformat()
     elif correct:
         next_stage = current_stage + 1
         days = random.randint(60, 120) if next_stage == MAX_ACTIVE_STAGE else STAGE_DAYS[next_stage]
-        next_review = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+        next_review = (now_kst() + timedelta(days=days)).isoformat()
     else:
         next_stage = 1
-        next_review = (datetime.now(timezone.utc) + timedelta(days=STAGE_DAYS[1])).isoformat()
+        next_review = (now_kst() + timedelta(days=STAGE_DAYS[1])).isoformat()
 
     await client.pages.update(
         page_id=page_id,

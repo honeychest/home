@@ -3,15 +3,14 @@
 핸들러는 이 모듈만 import하면 되고, redis / 키 상수 / TTL 계산은 내부에서 처리한다.
 """
 import json
-from datetime import datetime, timedelta
 
 from redis_client import redis as _redis
+from timeutil import seconds_until_kst_midnight
 
 
 def _ttl() -> int:
-    now = datetime.now()
-    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return int((midnight - now).total_seconds())
+    """KST 자정까지 남은 초. 자동퀴즈 카운트·세션이 KST 하루 단위로 만료되게 한다."""
+    return seconds_until_kst_midnight()
 
 
 # ── 베이스 ─────────────────────────────────────────────────────────────────────

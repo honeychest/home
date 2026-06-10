@@ -1,13 +1,13 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 from config import settings
 from services import notion_service
+from timeutil import KST
 
 logger = logging.getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
 RECURRING_REPEATS = {"매일", "Daily", "daily", "평일", "주중", "주말"}
 INACTIVE_STATUSES = {"완료", "비활성", "건너뜀", "취소"}
 

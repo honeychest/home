@@ -1,9 +1,10 @@
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from timeutil import today_kst
 from services import notion_service, quiz_schedule
 from services.inbox_action_token import create_inbox_action_token
 from services.schedule_plan import ScheduleInputs, build_schedule_plan
@@ -19,8 +20,7 @@ logger = logging.getLogger(__name__)
 
 async def build_schedule_content(chat_id: int, hour: int) -> list:
     """스케줄 메시지 본문·키보드 조립. list[tuple[str, markup|None]] 반환."""
-    kst = timezone(timedelta(hours=9))
-    today = datetime.now(kst).date()
+    today = today_kst()
     tomorrow = today + timedelta(days=1)
     today_str = today.isoformat()
     tomorrow_str = tomorrow.isoformat()

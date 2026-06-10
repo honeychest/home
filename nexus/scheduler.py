@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -8,13 +8,13 @@ from apscheduler.triggers.date import DateTrigger
 from telegram import Bot
 
 from chs import dlog
+from timeutil import KST
 from session import QuizSession, ScheduleTracker
 from services import todo_service, notion_service, schedule_reminder_service
 
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
-KST = timezone(timedelta(hours=9))
 
 SCHEDULE_HOURS = [9, 15, 22]
 
