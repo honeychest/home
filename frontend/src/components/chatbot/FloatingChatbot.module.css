@@ -1,0 +1,277 @@
+/* [AGENT] FloatingChatbot 전용 스타일 (독립 — 앱 토큰에 의존하지 않음)
+   refactoring-ui 적용: 밝은 톤, 절제된 간격 스케일, 살짝 채도를 준 회색,
+   계층적 그림자, 얇은 커스텀 스크롤바 */
+
+/* 우측 하단 고정 컨테이너 */
+.root {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 2147483000;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* 둥근 토글 버튼 */
+.fab {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    background: #4a6fa5;
+    color: #fff;
+    font-size: 24px;
+    /* 계층적 그림자: 가까운 진한 그림자 + 멀고 부드러운 그림자 */
+    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.18), 0 6px 16px rgba(17, 24, 39, 0.20);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.fab:hover {
+    background: #3f6093;
+    transform: translateY(-1px);
+}
+
+.fab:focus-visible {
+    outline: none;
+    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.18), 0 6px 16px rgba(17, 24, 39, 0.20),
+        0 0 0 3px rgba(74, 111, 165, 0.45);
+}
+
+/* 채팅 패널 */
+.panel {
+    width: 360px;
+    max-width: calc(100vw - 48px);
+    height: 520px;
+    max-height: calc(100vh - 120px);
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 4px 6px rgba(17, 24, 39, 0.08), 0 20px 40px rgba(17, 24, 39, 0.18);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-bottom: 12px;
+    border: 1px solid #e5e7eb;
+}
+
+.header {
+    background: #4a6fa5;
+    color: #fff;
+    padding: 12px 16px;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.closeBtn {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+    opacity: 0.85;
+}
+
+.closeBtn:hover {
+    opacity: 1;
+}
+
+.closeBtn:focus-visible {
+    outline: none;
+    opacity: 1;
+    border-radius: 4px;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+}
+
+/* 메시지 영역 — 밝은 배경 + 얇은 커스텀 스크롤바 */
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    background: #f8fafc;
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+/* WebKit(Chrome/Edge/Safari) 스크롤바 — 밝고 얇게, 호버 시만 강조 */
+.messages::-webkit-scrollbar {
+    width: 8px;
+}
+
+.messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.messages::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 8px;
+    /* 트랙과의 여백을 줘 더 얇아 보이게 */
+    border: 2px solid #f8fafc;
+}
+
+.messages::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* 메시지 한 줄(행) */
+.msgRow {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+
+.msgRowUser {
+    align-items: flex-end;
+}
+
+.msgRowBot {
+    align-items: flex-start;
+}
+
+/* 말풍선 공통 */
+.bubble {
+    padding: 8px 12px;
+    max-width: 85%;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.bubbleUser {
+    align-self: flex-end;
+    background: #4a6fa5;
+    color: #fff;
+    border-radius: 12px 12px 2px 12px;
+}
+
+.bubbleBot {
+    align-self: flex-start;
+    background: #ffffff;
+    color: #1f2937;
+    border-radius: 12px 12px 12px 2px;
+    border: 1px solid #e5e7eb;
+}
+
+/* 로딩 안내 문구 */
+.hint {
+    color: #94a3b8;
+    font-style: italic;
+}
+
+/* 입력 영역 — 메시지 영역과 같은 밝은 배경으로 톤 통일, 입력칸만 흰색으로 띄움 */
+.inputArea {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid #e5e7eb;
+    background: #f8fafc;
+}
+
+.textarea {
+    flex: 1;
+    resize: none;
+    height: 40px;
+    max-height: 100px;
+    padding: 9px 12px;
+    font-size: 14px;
+    border: 1px solid #d1d5db;
+    /* 말풍선(12px)·패널(14px)과 곡률 통일 */
+    border-radius: 10px;
+    box-sizing: border-box;
+    font-family: inherit;
+    color: #1f2937;
+    background: #ffffff;
+    /* Firefox 스크롤바 */
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+/* 입력칸 WebKit 스크롤바 — 메시지 영역과 동일한 얇은 밝은 스크롤바 */
+.textarea::-webkit-scrollbar {
+    width: 8px;
+}
+
+.textarea::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.textarea::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 8px;
+    border: 2px solid #ffffff;
+}
+
+.textarea::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.textarea:focus {
+    outline: none;
+    border-color: #4a6fa5;
+    box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.15);
+}
+
+.sendBtn {
+    border: none;
+    /* 입력칸과 곡률 통일 */
+    border-radius: 10px;
+    padding: 0 16px;
+    height: 40px;
+    background: #4a6fa5;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
+}
+
+.sendBtn:hover:not(:disabled) {
+    background: #3f6093;
+}
+
+.sendBtn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.40);
+}
+
+.sendBtnDisabled {
+    background: #e2e8f0;
+    /* 흰 글자 대비 부족 → 진한 회색으로 가독성 확보(WCAG 4.5:1 이상) */
+    color: #64748b;
+    cursor: not-allowed;
+}
+
+/* 봇 답변 하단의 근거 출처 (작게, 기본 접힘) */
+.sources {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.sourceToggle {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: #94a3b8;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.sourceToggle:hover {
+    color: #64748b;
+}
+
+.sourceList {
+    margin-top: 2px;
+    word-break: break-all;
+}
