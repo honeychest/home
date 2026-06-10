@@ -91,6 +91,7 @@ public class CandleStreamService {
                         COALESCE(SUM(delta), 0)                                                          AS delta
                     FROM agg_trade_1s
                     WHERE symbol = ? AND market_type = 'FUTURES' AND candle_time_ms >= ? AND candle_time_ms < ?
+                      AND trade_count > 0
                     """;
                 List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, symbol, current5mStart, nowMs);
                 if (rows.isEmpty() || rows.get(0).get("open_price") == null) continue;
@@ -133,6 +134,7 @@ public class CandleStreamService {
                         COALESCE(SUM(delta), 0)                                                          AS delta
                     FROM agg_trade_1s
                     WHERE symbol = ? AND market_type = 'FUTURES' AND candle_time_ms >= ? AND candle_time_ms < ?
+                      AND trade_count > 0
                     """;
                 List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, symbol, current1mStart, nowMs);
                 if (rows.isEmpty() || rows.get(0).get("open_price") == null) continue;

@@ -480,15 +480,24 @@ public class AggTradeRollupService {
 
     // ─── 1m: agg_trade_1s 집계 ───────────────────────────────────────────
 
+    // OHLC는 빈 캔들(trade_count=0, 이월 가격) 제외하고 실거래 1초봉만 사용.
+    // 수집 지연 중 빈 캔들에 박힌 stale 가격이 시가/고가/저가/종가를 오염시키는 것 방지.
+    // 분 전체에 실거래 1초봉이 하나도 없으면 기존 방식(빈 캔들 포함)으로 폴백 — 1분봉 누락 방지.
     private List<Map<String, Object>> aggregateFrom1sCandles(long startMs, long endMs) {
         String sql = """
             SELECT
                 symbol,
                 market_type,
-                SUBSTRING_INDEX(MIN(CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price)),'|',-1)  AS open_price,
-                MAX(high_price)                                                                   AS high_price,
-                MIN(low_price)                                                                    AS low_price,
-                SUBSTRING_INDEX(MAX(CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price)),'|',-1) AS close_price,
+                COALESCE(
+                    SUBSTRING_INDEX(MIN(CASE WHEN trade_count > 0 THEN CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price) END),'|',-1),
+                    SUBSTRING_INDEX(MIN(CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price)),'|',-1)
+                )                                                                                 AS open_price,
+                COALESCE(MAX(CASE WHEN trade_count > 0 THEN high_price END), MAX(high_price))     AS high_price,
+                COALESCE(MIN(CASE WHEN trade_count > 0 THEN low_price END),  MIN(low_price))      AS low_price,
+                COALESCE(
+                    SUBSTRING_INDEX(MAX(CASE WHEN trade_count > 0 THEN CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price) END),'|',-1),
+                    SUBSTRING_INDEX(MAX(CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price)),'|',-1)
+                )                                                                                 AS close_price,
                 SUM(buy_volume)                                                                   AS buy_volume,
                 SUM(sell_volume)                                                                  AS sell_volume,
                 SUM(total_volume)                                                                 AS total_volume,
