@@ -1,5 +1,5 @@
-// [AGENT] 역할: 1분봉·5분봉 WebSocket 세션 관리 및 브로드캐스트 | 연관파일: CandleStreamService.java(broadcastCandle 호출자), WebSocketConfig.java
-// 엔드포인트: /ws/candle/1m?symbol=, /ws/candle/5m?symbol= | 심볼+인터벌별 세션 구분, ConcurrentWebSocketSessionDecorator 동시 전송 직렬화
+// [AGENT] 역할: 1분봉·5분봉·15분봉 WebSocket 세션 관리 및 브로드캐스트 | 연관파일: CandleStreamService.java(broadcastCandle 호출자), WebSocketConfig.java
+// 엔드포인트: /ws/candle/1m?symbol=, /ws/candle/5m?symbol=, /ws/candle/15m?symbol= | 심볼+인터벌별 세션 구분, ConcurrentWebSocketSessionDecorator 동시 전송 직렬화
 package com.chs.springboot.domain.binance.websocket;
 
 import lombok.extern.slf4j.Slf4j;
@@ -84,6 +84,7 @@ public class CandleWebSocketHandler extends TextWebSocketHandler {
     private String parseInterval(WebSocketSession session) {
         String path = session.getUri() != null ? session.getUri().getPath() : null;
         if (path != null && path.endsWith("/1m")) return "1m";
+        if (path != null && path.endsWith("/15m")) return "15m";
         return "5m";
     }
 

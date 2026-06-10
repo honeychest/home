@@ -2,13 +2,16 @@
 // 실시간 WS(백엔드 선물 체결 집계)와 가격 기준을 맞추기 위해 현물(api/v3)이 아닌 선물(fapi/v1)을 사용
 // 429 응답 시: Retry-After 파싱 후 1회 자동 재시도
 // 1m: 하루(1440분)를 2회 요청으로 분할 처리 (limit=720)
-// 5m: 하루(288봉)를 1회 요청으로 처리 (limit=288 < 1000)
+// 5m/15m: 하루치 봉을 1회 요청으로 처리 (limit < 1000)
 import apiClient from '@/api/apiClient.js';
 import externalClient from '@/api/externalClient.js';
 
 const BINANCE_KLINE_URL  = 'https://fapi.binance.com/fapi/v1/klines';
 const LIMIT_1M = 720; // 1일 1440분 → 2회 분할
-const LIMIT_5M = 288; // 1일 288봉 → 1회
+const LIMIT_BY_INTERVAL = {
+  '5m':  288, // 1일 288봉 → 1회
+  '15m': 96,  // 1일 96봉 → 1회
+};
 
 function dateToMs(dateStr) {
   return new Date(dateStr + 'T00:00:00Z').getTime();
@@ -61,9 +64,8 @@ async function fetchOneDayKlines(symbolUsdt, dateStr, interval) {
   const startMs = dateToMs(dateStr);
   const endMs   = startMs + 86_400_000;
 
-  if (interval === '5m') {
-    // 1일 288봉 → 한 번에 fetch
-    return fetchKlineChunk(symbolUsdt, '5m', startMs, endMs, LIMIT_5M);
+  if (interval !== '1m') {
+    return fetchKlineChunk(symbolUsdt, interval, startMs, endMs, LIMIT_BY_INTERVAL[interval] ?? LIMIT_BY_INTERVAL['5m']);
   }
 
   // 1m: 하루 1440봉 → 12시간씩 2회 분할
@@ -92,7 +94,7 @@ async function fetchDelta(symbol, startMs, endMs, interval) {
  * @param {'BTC'|'ENA'} symbol
  * @param {string} startDateStr 'YYYY-MM-DD'
  * @param {string} endDateStr   'YYYY-MM-DD'
- * @param {'1m'|'5m'} interval
+ * @param {'1m'|'5m'|'15m'} interval
  * @returns {Promise<kline[]>} { time(ms), open, high, low, close, volume, delta }
  */
 export async function fetchKlines(symbol, startDateStr, endDateStr, interval = '1m') {

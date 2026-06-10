@@ -41,3 +41,8 @@ export function mapSearchTimesToIndices(times, klineData) {
     .map((time) => indexByTime.get(time))
     .filter((index) => index !== undefined);
 }
+
+export function deltaHighlightThreshold(value) {
+  const threshold = Number(value);
+  return Number.isFinite(threshold) && threshold > 0 ? threshold : 10;
+}

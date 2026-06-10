@@ -1,6 +1,6 @@
-// [AGENT] 역할: 1분봉·5분봉 완성 이벤트 수신 → WS 브로드캐스트 + 진행 중 봉 주기 브로드캐스트
+// [AGENT] 역할: 1분봉·5분봉 완성 이벤트 수신 → WS 브로드캐스트 + 15분봉 집계 브로드캐스트 + 진행 중 봉 주기 브로드캐스트
 // 연관파일: CandleWebSocketHandler.java, AggTradeRollupService.java(이벤트 발행), Candle1mCompletedEvent.java, CandleCompletedEvent.java
-// 주요메서드: onCandleCompleted(5m), onCandle1mCompleted(1m), broadcastInProgress5m(15s), broadcastInProgress1m(5s)
+// 주요메서드: onCandleCompleted(5m/15m), onCandle1mCompleted(1m), broadcastInProgress5m(15s), broadcastInProgress15m, broadcastInProgress1m(5s)
 package com.chs.springboot.domain.binance.service;
 
 import com.chs.springboot.domain.binance.model.AggTrade1m;
@@ -46,8 +46,27 @@ public class CandleStreamService {
             msg.put("delta",     c.getDelta().doubleValue());
             msg.put("is_closed", true);
             candleWebSocketHandler.broadcastCandle(c.getSymbol(), "5m", objectMapper.writeValueAsString(msg));
+            broadcastClosed15mIfReady(c);
         } catch (Exception e) {
             log.error("[CandleStream] 5분봉 브로드캐스트 실패: {}", e.getMessage());
+        }
+    }
+
+    private void broadcastClosed15mIfReady(AggTrade5m completed5m) {
+        long candleTimeMs = completed5m.getCandleTimeMs();
+        if (candleTimeMs % 900_000L != 600_000L) return;
+        if (!candleWebSocketHandler.getActiveSymbols("15m").contains(completed5m.getSymbol())) return;
+
+        long startMs = (candleTimeMs / 900_000L) * 900_000L;
+        long endMs   = startMs + 900_000L;
+        try {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(aggregate5mSql(), completed5m.getSymbol(), startMs, endMs);
+            if (rows.isEmpty() || rows.get(0).get("open_price") == null) return;
+
+            Map<String, Object> msg = toCandleMessage(startMs, rows.get(0), true);
+            candleWebSocketHandler.broadcastCandle(completed5m.getSymbol(), "15m", objectMapper.writeValueAsString(msg));
+        } catch (Exception e) {
+            log.error("[CandleStream] 15분봉 완성 브로드캐스트 실패 symbol={}: {}", completed5m.getSymbol(), e.getMessage());
         }
     }
 
@@ -114,6 +133,40 @@ public class CandleStreamService {
     }
 
     @Scheduled(fixedDelay = 1000)
+    public void broadcastInProgress15m() {
+        Set<String> symbols = candleWebSocketHandler.getActiveSymbols("15m");
+        if (symbols.isEmpty()) return;
+
+        long nowMs          = System.currentTimeMillis();
+        long current15mStart = (nowMs / 900_000L) * 900_000L;
+
+        for (String symbol : symbols) {
+            if (symbol.isBlank()) continue;
+            try {
+                String sql = """
+                    SELECT
+                        SUBSTRING_INDEX(MIN(CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price)),'|',-1)  AS open_price,
+                        MAX(high_price)                                                                   AS high_price,
+                        MIN(low_price)                                                                    AS low_price,
+                        SUBSTRING_INDEX(MAX(CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price)),'|',-1) AS close_price,
+                        COALESCE(SUM(buy_quantity) + SUM(sell_quantity), 0)                              AS total_volume,
+                        COALESCE(SUM(delta), 0)                                                          AS delta
+                    FROM agg_trade_1s
+                    WHERE symbol = ? AND market_type = 'FUTURES' AND candle_time_ms >= ? AND candle_time_ms < ?
+                      AND trade_count > 0
+                    """;
+                List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, symbol, current15mStart, nowMs);
+                if (rows.isEmpty() || rows.get(0).get("open_price") == null) continue;
+
+                Map<String, Object> msg = toCandleMessage(current15mStart, rows.get(0), false);
+                candleWebSocketHandler.broadcastCandle(symbol, "15m", objectMapper.writeValueAsString(msg));
+            } catch (Exception e) {
+                log.error("[CandleStream] 15분봉 진행중봉 브로드캐스트 실패 symbol={}: {}", symbol, e.getMessage());
+            }
+        }
+    }
+
+    @Scheduled(fixedDelay = 1000)
     public void broadcastInProgress1m() {
         Set<String> symbols = candleWebSocketHandler.getActiveSymbols("1m");
         if (symbols.isEmpty()) return;
@@ -160,5 +213,32 @@ public class CandleStreamService {
         if (v == null) return BigDecimal.ZERO;
         if (v instanceof BigDecimal bd) return bd;
         return new BigDecimal(v.toString());
+    }
+
+    private String aggregate5mSql() {
+        return """
+            SELECT
+                SUBSTRING_INDEX(MIN(CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price)),'|',-1)  AS open_price,
+                MAX(high_price)                                                                   AS high_price,
+                MIN(low_price)                                                                    AS low_price,
+                SUBSTRING_INDEX(MAX(CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price)),'|',-1) AS close_price,
+                COALESCE(SUM(buy_quantity) + SUM(sell_quantity), 0)                              AS total_volume,
+                COALESCE(SUM(delta), 0)                                                          AS delta
+            FROM agg_trade_5m
+            WHERE symbol = ? AND market_type = 'FUTURES' AND candle_time_ms >= ? AND candle_time_ms < ?
+            """;
+    }
+
+    private Map<String, Object> toCandleMessage(long timeMs, Map<String, Object> row, boolean closed) {
+        Map<String, Object> msg = new HashMap<>();
+        msg.put("time",      Instant.ofEpochMilli(timeMs).toString());
+        msg.put("open",      toBd(row.get("open_price")).doubleValue());
+        msg.put("high",      toBd(row.get("high_price")).doubleValue());
+        msg.put("low",       toBd(row.get("low_price")).doubleValue());
+        msg.put("close",     toBd(row.get("close_price")).doubleValue());
+        msg.put("volume",    toBd(row.get("total_volume")).doubleValue());
+        msg.put("delta",     toBd(row.get("delta")).doubleValue());
+        msg.put("is_closed", closed);
+        return msg;
     }
 }

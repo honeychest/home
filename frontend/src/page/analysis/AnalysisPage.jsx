@@ -17,12 +17,15 @@ import { evaluate }          from './engine/detectionEngine.js';
 import { fetchKlines }       from './hooks/useBinanceKlines.js';
 import {
   buildAnalysisSearchRequest,
+  deltaHighlightThreshold,
   emptyConditionTree,
   fiveDaysAgoStr,
   mapSearchTimesToIndices,
   previousUtcDateStr,
   todayStr,
 } from './model/analysisPageModel.js';
+
+const DELTA_THRESHOLD_STORAGE_KEY = 'analysis.deltaLabelThreshold';
 
 export default function AnalysisPage() {
   const [symbol,            setSymbol]            = useState('BTC');
@@ -42,6 +45,9 @@ export default function AnalysisPage() {
   const [toast,             setToast]             = useState(null);
   const [hasExtendedData,   setHasExtendedData]   = useState(false);
   const [timeframe,         setTimeframe]         = useState('1m');
+  const [deltaThreshold,    setDeltaThreshold]    = useState(() => (
+    window.localStorage.getItem(DELTA_THRESHOLD_STORAGE_KEY) ?? '50'
+  ));
   const [isMobile,          setIsMobile]          = useState(() => window.innerWidth < 768);
   const [viewMode,          setViewMode]          = useState(() => {
     const p = new URLSearchParams(window.location.search);
@@ -59,6 +65,15 @@ export default function AnalysisPage() {
   useEffect(() => { startRef.current     = startDate; }, [startDate]);
   useEffect(() => { endRef.current       = endDate;   }, [endDate]);
   useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
+
+  useEffect(() => {
+    const normalized = deltaHighlightThreshold(deltaThreshold);
+    if (String(deltaThreshold).trim() === '' || normalized !== Number(deltaThreshold)) {
+      window.localStorage.removeItem(DELTA_THRESHOLD_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(DELTA_THRESHOLD_STORAGE_KEY, String(deltaThreshold));
+  }, [deltaThreshold]);
 
   // ─── 반응형: 모바일에서는 페이지 비활성화 ──────────────────────────────────────
 
@@ -107,19 +122,6 @@ export default function AnalysisPage() {
         .then((r) => {
           const list = Array.isArray(r.data) ? r.data : [];
           setTemplates(list);
-          if (list.length > 0) {
-            const first = list[0];
-            setSelectedId(first.id);
-            try {
-              const tree = typeof first.conditions === 'string'
-                ? JSON.parse(first.conditions)
-                : first.conditions;
-              setConditionTree(tree);
-              setPage(0);
-            } catch {
-              // 템플릿 파싱 실패 시 조용히 무시
-            }
-          }
         })
         .catch(() => {}),
     ]);
@@ -304,6 +306,14 @@ export default function AnalysisPage() {
   // ─── 템플릿 불러오기 ─────────────────────────────────────────────────────
 
   const handleSelectTemplate = (template) => {
+    if (!template) {
+      setSelectedId(null);
+      setConditionTree(emptyConditionTree());
+      setMatchedIndices([]);
+      setDetectionError(null);
+      setPage(0);
+      return;
+    }
     setSelectedId(template.id);
     try {
       const tree = typeof template.conditions === 'string'
@@ -369,6 +379,8 @@ export default function AnalysisPage() {
           onEndDateChange={setEndDate}
           onLoad={handleLoad}
           loading={loading}
+          deltaThreshold={deltaThreshold}
+          onDeltaThresholdChange={setDeltaThreshold}
         />
 
         {/* 본문 */}
@@ -389,6 +401,7 @@ export default function AnalysisPage() {
                   onSearch={handleAnalysisSearch}
                   timeframe={timeframe}
                   onCandleClose={handleCandleUpdate}
+                  deltaThreshold={deltaThreshold}
                 />
               </div>
 

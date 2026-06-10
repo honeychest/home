@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildAnalysisSearchWindow,
   buildAnalysisSearchRequest,
+  deltaHighlightThreshold,
   emptyConditionTree,
   mapSearchTimesToIndices,
   previousUtcDateStr,
@@ -44,4 +45,12 @@ test('previousUtcDateStr returns date before current UTC day', () => {
 
 test('emptyConditionTree creates default analysis condition state', () => {
   assert.deepEqual(emptyConditionTree(), { groups: [], groupOperator: 'OR', palette: 'MID' });
+});
+
+test('deltaHighlightThreshold uses a single user threshold for every timeframe', () => {
+  assert.equal(deltaHighlightThreshold('30'), 30);
+  assert.equal(deltaHighlightThreshold(75), 75);
+  assert.equal(deltaHighlightThreshold(''), 10);
+  assert.equal(deltaHighlightThreshold('bad'), 10);
+  assert.equal(deltaHighlightThreshold(0), 10);
 });

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, CandlestickSeries, HistogramSeries, createSeriesMarkers, LineStyle } from 'lightweight-charts';
 import { PALETTE } from '../palette.js';
+import { deltaHighlightThreshold } from '../model/analysisPageModel.js';
 import SignalSearchPopup from './SignalSearchPopup.jsx';
 
 const DEBOUNCE_MS = 200;
@@ -29,9 +30,45 @@ function buildVolumeBar({ time, open, close, volume }) {
   };
 }
 
-function buildMarkers(klineData, matchedIndices, paletteLevel) {
+function formatDeltaLabel(delta) {
+  const abs = Math.abs(delta);
+  return Math.round(abs).toLocaleString();
+}
+
+function buildDeltaMarkers(klineData, deltaThreshold) {
+  const threshold = deltaHighlightThreshold(deltaThreshold);
+
+  return klineData
+    .map((c) => {
+      const delta = Number(c.delta ?? 0);
+      if (!Number.isFinite(delta)) return null;
+
+      const priceUp    = c.close >= c.open;
+      const deltaUp    = delta >= 0;
+      const divergence = priceUp !== deltaUp;
+      const absDelta   = Math.abs(delta);
+      if (!divergence || absDelta < threshold) return null;
+
+      const ratio = absDelta / threshold;
+      const isStrong = ratio >= 10;
+      const isMid    = ratio >= 3;
+      const color    = deltaUp ? 'rgba(50,220,120,0.98)' : 'rgba(255,50,150,0.98)';
+
+      return {
+        time:     Math.floor(c.time / 1000),
+        position: deltaUp ? 'belowBar' : 'aboveBar',
+        color,
+        shape:    deltaUp ? 'arrowUp' : 'arrowDown',
+        size:     isStrong ? 2.4 : isMid ? 1.8 : 1.3,
+        text:     formatDeltaLabel(delta),
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildMarkers(klineData, matchedIndices, paletteLevel, deltaThreshold) {
   const pal = PALETTE[paletteLevel] ?? PALETTE.MID;
-  return matchedIndices
+  const conditionMarkers = matchedIndices
     .map((idx) => {
       const c = klineData[idx];
       if (!c) return null;
@@ -43,7 +80,9 @@ function buildMarkers(klineData, matchedIndices, paletteLevel) {
         size:     1,
       };
     })
-    .filter(Boolean)
+    .filter(Boolean);
+
+  return [...conditionMarkers, ...buildDeltaMarkers(klineData, deltaThreshold)]
     .sort((a, b) => a.time - b.time);
 }
 
@@ -71,7 +110,7 @@ function calcOverlayPositions(klineData, matchedIndices, paletteLevel, timeScale
   }).filter(Boolean);
 }
 
-export default function MainChart({ klineData, matchedIndices, paletteLevel, loading, error, onRetry, symbol, onSearch, timeframe = '1m', onCandleClose }) {
+export default function MainChart({ klineData, matchedIndices, paletteLevel, loading, error, onRetry, symbol, onSearch, timeframe = '1m', onCandleClose, deltaThreshold = 10 }) {
   const containerRef      = useRef(null);
   const chartRef          = useRef(null);
   const seriesRef         = useRef(null);
@@ -84,6 +123,7 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
   const paletteLevelRef   = useRef(paletteLevel);
   const symbolRef         = useRef(symbol);
   const timeframeRef      = useRef(timeframe);
+  const deltaThresholdRef = useRef(deltaThreshold);
   const liveCandleRef     = useRef(null);
   const onCandleCloseRef  = useRef(onCandleClose);
   const lastBarTimeRef    = useRef(0);    // 차트에 그려진 마지막 봉 시간(초) — 과거 시간 update 예외 방지
@@ -104,6 +144,7 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
   useEffect(() => { matchedSet.current      = new Set(matchedIndices); }, [matchedIndices]);
   useEffect(() => { symbolRef.current       = symbol;          }, [symbol]);
   useEffect(() => { timeframeRef.current    = timeframe;       }, [timeframe]);
+  useEffect(() => { deltaThresholdRef.current = deltaThreshold; }, [deltaThreshold]);
   useEffect(() => { onCandleCloseRef.current = onCandleClose;  }, [onCandleClose]);
 
   // 차트 초기화
@@ -339,7 +380,9 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
 
   const applyMatched = () => {
     if (!markersWrapperRef.current || !chartRef.current) return;
-    markersWrapperRef.current.setMarkers(buildMarkers(klineRef.current, matchedRef.current, paletteLevelRef.current));
+    markersWrapperRef.current.setMarkers(
+      buildMarkers(klineRef.current, matchedRef.current, paletteLevelRef.current, deltaThresholdRef.current)
+    );
     setOverlayPositions(
       calcOverlayPositions(
         klineRef.current,
@@ -415,11 +458,11 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
     applyMatched();
   }, [klineData]);
 
-  // matchedIndices / paletteLevel 변경 → 하이라이트만 갱신
+  // matchedIndices / paletteLevel / deltaThreshold 변경 → 하이라이트·delta 라벨만 갱신
   useEffect(() => {
     if (!seriesRef.current) return;
     applyMatched();
-  }, [matchedIndices, paletteLevel]);
+  }, [matchedIndices, paletteLevel, deltaThreshold]);
 
   const tooltipEl = tooltip && (() => {
     const containerW = tooltip.containerW ?? 0;

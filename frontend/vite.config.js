@@ -47,6 +47,11 @@ export default defineConfig({
         target: 'ws://localhost:8080',
         ws: true,
         changeOrigin: true
+      },
+      '/ws/candle/15m': {
+        target: 'ws://localhost:8080',
+        ws: true,
+        changeOrigin: true
       }
     }
   },
@@ -81,6 +86,11 @@ export default defineConfig({
         changeOrigin: true
       },
       '/ws/candle/1m': {
+        target: 'ws://localhost:8080',
+        ws: true,
+        changeOrigin: true
+      },
+      '/ws/candle/15m': {
         target: 'ws://localhost:8080',
         ws: true,
         changeOrigin: true

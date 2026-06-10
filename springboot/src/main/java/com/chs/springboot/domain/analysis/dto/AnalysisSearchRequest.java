@@ -17,7 +17,7 @@ public class AnalysisSearchRequest {
     private String symbol;
 
     @NotBlank(message = "timeframe is required")
-    @Pattern(regexp = "1m|5m", message = "timeframe must be 1m or 5m")
+    @Pattern(regexp = "1m|5m|15m", message = "timeframe must be 1m, 5m or 15m")
     private String timeframe;
 
     @NotNull(message = "fromMs is required")

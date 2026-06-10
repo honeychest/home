@@ -60,6 +60,10 @@ export default function TemplateBar({
         className="analysis-select analysis-tb__select"
         value={selectedId ?? ''}
         onChange={(e) => {
+          if (e.target.value === '') {
+            onSelect(null);
+            return;
+          }
           const t = templates.find((t) => String(t.id) === e.target.value);
           if (t) onSelect(t);
         }}

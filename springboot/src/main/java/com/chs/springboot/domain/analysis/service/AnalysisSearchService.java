@@ -59,6 +59,9 @@ public class AnalysisSearchService {
         if ("1m".equals(timeframe)) {
             return aggTrade1mRepository.findAllSimilarCandles(
                     symbol, fromMs, toMs, priceChangeRate, rateTolerance, volMin, volMax, useRateFilter, useVolFilter);
+        } else if ("15m".equals(timeframe)) {
+            return aggTrade5mRepository.findAllSimilarCandles15m(
+                    symbol, fromMs, toMs, priceChangeRate, rateTolerance, volMin, volMax, useRateFilter, useVolFilter);
         } else {
             return aggTrade5mRepository.findAllSimilarCandles(
                     symbol, fromMs, toMs, priceChangeRate, rateTolerance, volMin, volMax, useRateFilter, useVolFilter);
