@@ -15,12 +15,14 @@ public interface AlertHistoryRepository extends JpaRepository<AlertHistory, Long
     @Query("""
             select a
             from AlertHistory a
-            where (:from is null or a.sentAt >= :from)
+            where a.sourceEnv = :sourceEnv
+              and (:from is null or a.sentAt >= :from)
               and (:to is null or a.sentAt <= :to)
               and (:type is null or a.metricType = :type)
             order by a.sentAt desc
             """)
     Page<AlertHistory> findByFilters(
+            @Param("sourceEnv") String sourceEnv,
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,
             @Param("type") AlertHistory.MetricType type,

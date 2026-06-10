@@ -14,7 +14,8 @@ import java.time.LocalDateTime;
         name = "alert_history",
         indexes = {
                 @Index(name = "idx_alert_sent_at", columnList = "sent_at"),
-                @Index(name = "idx_alert_metric_type", columnList = "metric_type, sent_at")
+                @Index(name = "idx_alert_metric_type", columnList = "metric_type, sent_at"),
+                @Index(name = "idx_alert_source_env_sent_at", columnList = "source_env, sent_at")
         }
 )
 public class AlertHistory {
@@ -52,6 +53,9 @@ public class AlertHistory {
     @Column(name = "sent_at", nullable = false)
     private LocalDateTime sentAt;
 
+    @Column(name = "source_env", nullable = false, length = 20)
+    private String sourceEnv;
+
     @Column(name = "ack_at")
     private LocalDateTime ackAt;
 
@@ -66,6 +70,9 @@ public class AlertHistory {
     void onPersist() {
         if (sentAt == null) {
             sentAt = LocalDateTime.now();
+        }
+        if (sourceEnv == null || sourceEnv.isBlank()) {
+            sourceEnv = "local";
         }
     }
 }

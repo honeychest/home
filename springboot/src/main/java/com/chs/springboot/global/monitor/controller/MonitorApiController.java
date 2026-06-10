@@ -12,6 +12,7 @@ import com.chs.springboot.global.telegram.TelegramProvider;
 import com.chs.springboot.global.feature.FeatureFlagService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -42,6 +43,9 @@ public class MonitorApiController {
     private final VisitorLogService visitorLogService;
     private final FeatureFlagService featureFlagService;
     private final ObjectMapper objectMapper;
+
+    @Value("${monitor.alert-history.source-env:${spring.profiles.active:local}}")
+    private String sourceEnv;
 
     /** 방문 기록 (공개 엔드포인트 — Layout 마운트 시 프론트에서 호출) */
     @PostMapping("/visitor/log")
@@ -153,7 +157,7 @@ public class MonitorApiController {
         LocalDateTime fromDt = from != null ? from.atStartOfDay() : null;
         LocalDateTime toDt = to != null ? to.atTime(LocalTime.MAX) : null;
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 200));
-        Page<AlertHistory> result = alertHistoryRepository.findByFilters(fromDt, toDt, type, pageable);
+        Page<AlertHistory> result = alertHistoryRepository.findByFilters(normalizedSourceEnv(), fromDt, toDt, type, pageable);
         return ResponseEntity.ok(result);
     }
 
@@ -215,6 +219,20 @@ public class MonitorApiController {
                 • 수락 %s 2시간  → 2시간
                 • 수락 %s 24시간 → 24시간
                 """.formatted(ip, requestId, requestId, requestId, requestId, requestId).trim();
+    }
+
+    private String normalizedSourceEnv() {
+        if (sourceEnv == null || sourceEnv.isBlank()) {
+            return "local";
+        }
+        String normalized = sourceEnv.toLowerCase().trim();
+        if (normalized.contains("prod")) {
+            return "prod";
+        }
+        if (normalized.contains("local")) {
+            return "local";
+        }
+        return normalized.split(",")[0].trim();
     }
 }
 

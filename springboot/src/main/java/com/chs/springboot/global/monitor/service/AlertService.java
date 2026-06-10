@@ -9,6 +9,7 @@ import com.chs.springboot.global.monitor.repository.AlertHistoryRepository;
 import com.chs.springboot.global.telegram.TelegramProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,9 @@ public class AlertService {
     private final StringRedisTemplate redisTemplate;
     private final TelegramProvider telegramProvider;
     private final AlertHistoryRepository alertHistoryRepository;
+
+    @Value("${monitor.alert-history.source-env:${spring.profiles.active:local}}")
+    private String sourceEnv;
 
     private final ConcurrentHashMap<String, AtomicInteger> durationCounters = new ConcurrentHashMap<>();
 
@@ -128,6 +132,7 @@ public class AlertService {
             history.setDurationSec(feed.secondsSinceLastMessage() == null ? 0 : Math.toIntExact(feed.secondsSinceLastMessage()));
             history.setSeverity(status == FeedStatus.DOWN ? AlertHistory.Severity.CRITICAL : AlertHistory.Severity.WARN);
             history.setSentAt(LocalDateTime.now());
+            history.setSourceEnv(normalizedSourceEnv());
             history.setMemo("[%s] %s / lastMessageAt=%s / receivedCount=%d"
                     .formatted(feedId, status.name(), feed.lastMessageAtEpochMs(), feed.receivedCount()));
             alertHistoryRepository.save(history);
@@ -186,10 +191,25 @@ public class AlertService {
             h.setDurationSec(durationSec);
             h.setSeverity(AlertHistory.Severity.CRITICAL);
             h.setSentAt(LocalDateTime.now());
+            h.setSourceEnv(normalizedSourceEnv());
             alertHistoryRepository.save(h);
         } catch (Exception e) {
             log.warn("AlertService send/store failed: {}", e.getMessage());
         }
+    }
+
+    private String normalizedSourceEnv() {
+        if (sourceEnv == null || sourceEnv.isBlank()) {
+            return "local";
+        }
+        String normalized = sourceEnv.toLowerCase().trim();
+        if (normalized.contains("prod")) {
+            return "prod";
+        }
+        if (normalized.contains("local")) {
+            return "local";
+        }
+        return normalized.split(",")[0].trim();
     }
 }
 

@@ -54,6 +54,7 @@ class AlertServiceTest {
         assertThat(saved.getValue()).isEqualTo(12d);
         assertThat(saved.getThreshold()).isEqualTo(10d);
         assertThat(saved.getDurationSec()).isEqualTo(12);
+        assertThat(saved.getSourceEnv()).isEqualTo("local");
         assertThat(saved.getMemo()).contains("binance-ticker").contains("STALE");
 
         verify(valueOperations).set("monitor:alert:cooldown:FEED:binance-ticker:STALE", "1", 3600, TimeUnit.SECONDS);
