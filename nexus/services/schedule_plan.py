@@ -24,10 +24,14 @@ def build_schedule_plan(inputs: ScheduleInputs) -> list[ScheduleMessage]:
     return _build_daytime_plan(inputs)
 
 
-def _build_closing_plan(inputs: ScheduleInputs) -> list[ScheduleMessage]:
-    if not inputs.pending and not inputs.done and not inputs.tomorrow and inputs.quiz_count == 0:
-        return []
+def _quiz_message(quiz_count: int) -> ScheduleMessage:
+    """퀴즈 라인 — 9/15/22시 동일. 0이어도 한 줄 보낸다(넛지)."""
+    if quiz_count > 0:
+        return ScheduleMessage(text=f"🔤 퀴즈 {quiz_count}개 남음", action={"kind": "quiz_start"})
+    return ScheduleMessage("🔤 퀴즈 ✔ 완료")
 
+
+def _build_closing_plan(inputs: ScheduleInputs) -> list[ScheduleMessage]:
     messages: list[ScheduleMessage] = []
     header_parts = ["📋 오늘 마무리"]
     for item in inputs.done:
@@ -51,22 +55,12 @@ def _build_closing_plan(inputs: ScheduleInputs) -> list[ScheduleMessage]:
             },
         ))
 
-    if inputs.quiz_count > 0:
-        messages.append(ScheduleMessage(
-            text=f"🔤 퀴즈 {inputs.quiz_count}개 남음",
-            action={"kind": "quiz_start"},
-        ))
-    else:
-        messages.append(ScheduleMessage("🔤 퀴즈 ✔ 완료"))
+    messages.append(_quiz_message(inputs.quiz_count))
 
     return messages
 
 
 def _build_daytime_plan(inputs: ScheduleInputs) -> list[ScheduleMessage]:
-    has_todos = bool(inputs.pending or inputs.done or inputs.tomorrow)
-    if not has_todos and inputs.quiz_count == 0 and inputs.hour != 15:
-        return []
-
     messages: list[ScheduleMessage] = []
     for item in inputs.pending:
         messages.append(ScheduleMessage(
@@ -81,18 +75,15 @@ def _build_daytime_plan(inputs: ScheduleInputs) -> list[ScheduleMessage]:
     for item in inputs.done:
         messages.append(ScheduleMessage(f"✔ ~~{item['text']}~~"))
 
-    if not inputs.pending and not inputs.done and inputs.tomorrow:
-        text_parts = ["📅 내일 예정"]
-        for item in inputs.tomorrow:
-            text_parts.append(f"• {item['text']}")
-        messages.append(ScheduleMessage("\n".join(text_parts)))
+    if not inputs.pending and not inputs.done:
+        if inputs.tomorrow:
+            text_parts = ["📅 내일 예정"]
+            for item in inputs.tomorrow:
+                text_parts.append(f"• {item['text']}")
+            messages.append(ScheduleMessage("\n".join(text_parts)))
+        else:
+            messages.append(ScheduleMessage("📋 오늘 할일 없음"))
 
-    if inputs.quiz_count > 0:
-        messages.append(ScheduleMessage(
-            text=f"🔤 퀴즈 {inputs.quiz_count}개 남음",
-            action={"kind": "quiz_start"},
-        ))
-    elif inputs.hour == 15:
-        messages.append(ScheduleMessage("오늘 복습할 단어가 없어요"))
+    messages.append(_quiz_message(inputs.quiz_count))
 
     return messages

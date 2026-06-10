@@ -4,8 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from redis_client import redis, _k, KEY_QUIZ_COUNT
-from services import notion_service
+from services import notion_service, quiz_schedule
 from services.inbox_action_token import create_inbox_action_token
 from services.schedule_plan import ScheduleInputs, build_schedule_plan
 
@@ -14,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 # [AGENT]
 # 09/15/22시 스케줄 본문을 만든다.
-# 15시는 자동퀴즈 카운트가 0이어도 "오늘 복습할 단어가 없어요" 메시지를 보낸다.
+# 세 시간대 모두 동일 규칙: 할일/퀴즈가 없어도 항상 한 줄 이상 보낸다(넛지).
+# 퀴즈 0 처리는 quiz_schedule(카운트)·schedule_plan._quiz_message(표시)로 일원화됨.
 
 
 async def build_schedule_content(chat_id: int, hour: int) -> list:
@@ -33,12 +33,7 @@ async def build_schedule_content(chat_id: int, hour: int) -> list:
     )
 
     pending_with_keys = await _attach_inbox_action_keys([*today_pending, *overdue_pending])
-    count_str = await redis.get(_k(KEY_QUIZ_COUNT, chat_id))
-    quiz_count = int(count_str) if count_str else 0
-    if quiz_count > 0:
-        due_words = await notion_service.get_words_due()
-        if not due_words:
-            quiz_count = 0
+    quiz_count = await quiz_schedule.resolve_quiz_count(chat_id)
 
     plan = build_schedule_plan(ScheduleInputs(
         hour=hour,

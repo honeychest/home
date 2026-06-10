@@ -40,7 +40,7 @@ class TestSchedulePlanClosing(unittest.TestCase):
 
 
 class TestSchedulePlanDaytime(unittest.TestCase):
-    def test_09_plan_skips_when_no_todos_or_quiz_exist(self):
+    def test_09_empty_day_still_nudges_with_status_message(self):
         from services.schedule_plan import ScheduleInputs, build_schedule_plan
 
         plan = build_schedule_plan(
@@ -54,27 +54,32 @@ class TestSchedulePlanDaytime(unittest.TestCase):
             )
         )
 
-        self.assertEqual(plan, [])
+        self.assertEqual(len(plan), 2)
+        self.assertEqual(plan[0].text, "📋 오늘 할일 없음")
+        self.assertEqual(plan[1].text, "🔤 퀴즈 ✔ 완료")
+        self.assertIsNone(plan[1].action)
 
-    def test_15_plan_reports_no_due_words_even_without_todos(self):
+    def test_15_and_09_share_identical_empty_day_output(self):
         from services.schedule_plan import ScheduleInputs, build_schedule_plan
 
-        plan = build_schedule_plan(
-            ScheduleInputs(
-                hour=15,
-                today=date(2026, 5, 9),
-                pending=[],
-                done=[],
-                tomorrow=[],
-                quiz_count=0,
+        def empty(hour):
+            return build_schedule_plan(
+                ScheduleInputs(
+                    hour=hour,
+                    today=date(2026, 5, 9),
+                    pending=[],
+                    done=[],
+                    tomorrow=[],
+                    quiz_count=0,
+                )
             )
+
+        self.assertEqual(
+            [(m.text, m.action) for m in empty(15)],
+            [(m.text, m.action) for m in empty(9)],
         )
 
-        self.assertEqual(len(plan), 1)
-        self.assertEqual(plan[0].text, "오늘 복습할 단어가 없어요")
-        self.assertIsNone(plan[0].action)
-
-    def test_daytime_plan_uses_single_tomorrow_message_when_today_is_empty(self):
+    def test_daytime_plan_appends_quiz_after_tomorrow_when_today_is_empty(self):
         from services.schedule_plan import ScheduleInputs, build_schedule_plan
 
         plan = build_schedule_plan(
@@ -88,8 +93,9 @@ class TestSchedulePlanDaytime(unittest.TestCase):
             )
         )
 
-        self.assertEqual(len(plan), 1)
+        self.assertEqual(len(plan), 2)
         self.assertEqual(plan[0].text, "📅 내일 예정\n• 운동\n• 병원")
+        self.assertEqual(plan[1].text, "🔤 퀴즈 ✔ 완료")
 
 
 if __name__ == "__main__":

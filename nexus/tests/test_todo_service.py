@@ -45,7 +45,7 @@ class TestBuildScheduleContentPending(unittest.TestCase):
         todos = [{"page_id": "p1", "text": "운동하기"}]
 
         with patch("services.todo_service.notion_service") as mock_notion, \
-             patch("services.todo_service.redis") as mock_redis:
+             patch("services.quiz_schedule.redis") as mock_redis:
             mock_notion.get_todos = _mock_notion(today_pending=todos)
             mock_redis.get = AsyncMock(return_value=None)
             mock_redis.set = AsyncMock()
@@ -59,7 +59,7 @@ class TestBuildScheduleContentPending(unittest.TestCase):
         overdue = [{"page_id": "p2", "text": "보고서 제출"}]
 
         with patch("services.todo_service.notion_service") as mock_notion, \
-             patch("services.todo_service.redis") as mock_redis:
+             patch("services.quiz_schedule.redis") as mock_redis:
             mock_notion.get_todos = _mock_notion(overdue=overdue)
             mock_redis.get = AsyncMock(return_value=None)
             mock_redis.set = AsyncMock()
@@ -73,7 +73,7 @@ class TestBuildScheduleContentPending(unittest.TestCase):
         done = [{"page_id": "p3", "text": "독서"}]
 
         with patch("services.todo_service.notion_service") as mock_notion, \
-             patch("services.todo_service.redis") as mock_redis:
+             patch("services.quiz_schedule.redis") as mock_redis:
             mock_notion.get_todos = _mock_notion(done=done)
             mock_redis.get = AsyncMock(return_value=None)
             mock_redis.set = AsyncMock()
@@ -97,7 +97,7 @@ class TestBuildScheduleContentParallel(unittest.TestCase):
             return []
 
         with patch("services.todo_service.notion_service") as mock_notion, \
-             patch("services.todo_service.redis") as mock_redis:
+             patch("services.quiz_schedule.redis") as mock_redis:
             mock_notion.get_todos = _get_todos
             mock_redis.get = AsyncMock(return_value=None)
             mock_redis.set = AsyncMock()
