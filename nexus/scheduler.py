@@ -49,10 +49,6 @@ async def send_schedule_message(bot: Bot, chat_id: int, hour: int, *, timeout: f
         logger.warning(f"스케줄 메시지 타임아웃 — {hour:02d}:00 ({timeout}s 초과)")
         return
 
-    if not messages:
-        logger.info(f"스케줄 메시지 스킵 — {hour:02d}:00 (할일/퀴즈 없음)")
-        return
-
     sent_ids = []
     for text, markup in messages:
         msg = await bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)

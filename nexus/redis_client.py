@@ -1,5 +1,3 @@
-from datetime import datetime, timedelta
-
 import redis.asyncio as aioredis
 
 from chs import dlog
@@ -33,9 +31,3 @@ KEY_INBOX_CB        = "nexus:inbox:cb:{short_key}"       # TTL 86400s
 
 def _k(key: str, chat_id: int) -> str:
     return key.format(chat_id=chat_id)
-
-
-def _seconds_until_midnight() -> int:
-    now = datetime.now()
-    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return int((midnight - now).total_seconds())
