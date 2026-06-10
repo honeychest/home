@@ -51,7 +51,12 @@ class FakeQuizSession:
         self.prefetch_cleared = True
 
 
-class FakeWordSource:
+class FakeWordDeck:
+    """단어 복습덱 단일 포트 — 조회 + 채점을 한 객체로 제공."""
+
+    def __init__(self):
+        self.calls = []
+
     async def get_due_words(self):
         return [{
             "page_id": "good",
@@ -67,6 +72,9 @@ class FakeWordSource:
             "meaning_ko": "사과",
             "stage": 1,
         }]
+
+    async def update_word_stage(self, page_id, correct):
+        self.calls.append((page_id, correct))
 
 
 class FakeQuizGenerator:
@@ -94,14 +102,6 @@ class FakeGrammarPending:
         self.saved = data
 
 
-class FakeStageUpdater:
-    def __init__(self):
-        self.calls = []
-
-    async def update_word_stage(self, page_id, correct):
-        self.calls.append((page_id, correct))
-
-
 class EmptyWordSource:
     async def get_due_words(self):
         return []
@@ -125,7 +125,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         session = FakeQuizSession()
         flow = QuizFlow(
             session=session,
-            word_source=FakeWordSource(),
+            word_deck=FakeWordDeck(),
             quiz_generator=FakeQuizGenerator(),
         )
 
@@ -145,7 +145,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         session = FakeQuizSession()
         flow = QuizFlow(
             session=session,
-            word_source=EmptyWordSource(),
+            word_deck=EmptyWordSource(),
             quiz_generator=FakeQuizGenerator(),
         )
 
@@ -161,7 +161,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         session = FakeQuizSession()
         flow = QuizFlow(
             session=session,
-            word_source=FakeWordSource(),
+            word_deck=FakeWordDeck(),
             quiz_generator=FakeQuizGenerator(),
         )
 
@@ -181,7 +181,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         session = FakeQuizSession()
         flow = QuizFlow(
             session=session,
-            word_source=UnparseableWordSource(),
+            word_deck=UnparseableWordSource(),
             quiz_generator=FakeQuizGenerator(),
         )
 
@@ -197,7 +197,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         session = FakeQuizSession()
         flow = QuizFlow(
             session=session,
-            word_source=FakeWordSource(),
+            word_deck=FakeWordDeck(),
             quiz_generator=FakeQuizGenerator(),
         )
 
@@ -219,12 +219,11 @@ class TestQuizFlowAutoStart(unittest.TestCase):
             "question": "A round fruit.",
             "mode": "auto",
         }
-        updater = FakeStageUpdater()
+        deck = FakeWordDeck()
         flow = QuizFlow(
             session=session,
-            word_source=FakeWordSource(),
+            word_deck=deck,
             quiz_generator=FakeQuizGenerator(),
-            stage_updater=updater,
         )
 
         result = _run(flow.grade_answer(" apple "))
@@ -233,7 +232,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         self.assertEqual(result.reply, "✅ 정답!")
         self.assertTrue(result.should_continue)
         self.assertEqual(result.next_exclude_page_id, "word-page")
-        self.assertEqual(updater.calls, [("word-page", True)])
+        self.assertEqual(deck.calls, [("word-page", True)])
 
     def test_stage_one_typo_answer_retries_once_without_stage_update(self):
         from services.quiz_flow import QuizAnswerFeedback, QuizFlow
@@ -247,12 +246,11 @@ class TestQuizFlowAutoStart(unittest.TestCase):
             "question": "A round fruit.",
             "mode": "auto",
         }
-        updater = FakeStageUpdater()
+        deck = FakeWordDeck()
         flow = QuizFlow(
             session=session,
-            word_source=FakeWordSource(),
+            word_deck=deck,
             quiz_generator=FakeQuizGenerator(),
-            stage_updater=updater,
         )
 
         result = _run(flow.grade_answer("appl"))
@@ -261,7 +259,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         self.assertEqual(result.reply, "오타인 것 같아요! 다시 한번! 🔄")
         self.assertFalse(result.should_continue)
         self.assertEqual(session.saved_session["retry_count"], 1)
-        self.assertEqual(updater.calls, [])
+        self.assertEqual(deck.calls, [])
 
     def test_fail_current_quiz_resets_word_stage_and_continues(self):
         from services.quiz_flow import QuizAnswerFeedback, QuizFlow
@@ -275,12 +273,11 @@ class TestQuizFlowAutoStart(unittest.TestCase):
             "question": "A round fruit.",
             "mode": "auto",
         }
-        updater = FakeStageUpdater()
+        deck = FakeWordDeck()
         flow = QuizFlow(
             session=session,
-            word_source=FakeWordSource(),
+            word_deck=deck,
             quiz_generator=FakeQuizGenerator(),
-            stage_updater=updater,
         )
 
         result = _run(flow.fail_current_quiz())
@@ -288,7 +285,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         self.assertIsInstance(result, QuizAnswerFeedback)
         self.assertEqual(result.reply, "❌ 실패. 정답은 'apple'예요. 1단계로 돌아갑니다.")
         self.assertEqual(result.next_exclude_page_id, "word-page")
-        self.assertEqual(updater.calls, [("word-page", False)])
+        self.assertEqual(deck.calls, [("word-page", False)])
 
     def test_writing_answer_with_meaning_but_missing_word_retries_without_stage_update(self):
         from services.quiz_flow import QuizAnswerFeedback, QuizFlow
@@ -302,10 +299,10 @@ class TestQuizFlowAutoStart(unittest.TestCase):
             "question": "사과를 먹었다.",
             "mode": "auto",
         }
-        updater = FakeStageUpdater()
+        deck = FakeWordDeck()
         flow = QuizFlow(
             session=session,
-            word_source=FakeWordSource(),
+            word_deck=deck,
             quiz_generator=FakeQuizGenerator(grade_result={
                 "used_correctly": False,
                 "context_ok": True,
@@ -313,7 +310,6 @@ class TestQuizFlowAutoStart(unittest.TestCase):
                 "collocation_errors": [],
                 "alternatives": [],
             }),
-            stage_updater=updater,
         )
 
         result = _run(flow.grade_answer("I ate the fruit."))
@@ -321,7 +317,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         self.assertIsInstance(result, QuizAnswerFeedback)
         self.assertEqual(result.reply, "⚠️ 의미는 맞지만 'apple'를 직접 사용해야 해요. 다시 도전!")
         self.assertFalse(result.should_continue)
-        self.assertEqual(updater.calls, [])
+        self.assertEqual(deck.calls, [])
 
     def test_writing_answer_with_grammar_errors_saves_pending_feedback(self):
         from services.quiz_flow import QuizAnswerFeedback, QuizFlow
@@ -335,11 +331,11 @@ class TestQuizFlowAutoStart(unittest.TestCase):
             "question": "사과를 먹었다.",
             "mode": "auto",
         }
-        updater = FakeStageUpdater()
+        deck = FakeWordDeck()
         grammar_pending = FakeGrammarPending()
         flow = QuizFlow(
             session=session,
-            word_source=FakeWordSource(),
+            word_deck=deck,
             quiz_generator=FakeQuizGenerator(grade_result={
                 "used_correctly": True,
                 "context_ok": True,
@@ -347,7 +343,6 @@ class TestQuizFlowAutoStart(unittest.TestCase):
                 "collocation_errors": ["eat an apple"],
                 "alternatives": ["I had an apple."],
             }),
-            stage_updater=updater,
             grammar_pending=grammar_pending,
         )
 
@@ -360,7 +355,7 @@ class TestQuizFlowAutoStart(unittest.TestCase):
         self.assertEqual(result.grammar_errors, [{"type": "시제", "detail": "eat → ate"}])
         self.assertEqual(result.collocation_errors, ["eat an apple"])
         self.assertEqual(grammar_pending.saved["expression"], "apple")
-        self.assertEqual(updater.calls, [("word-page", True)])
+        self.assertEqual(deck.calls, [("word-page", True)])
 
 
 class FakeRedis:

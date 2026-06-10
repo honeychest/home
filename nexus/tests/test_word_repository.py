@@ -11,6 +11,9 @@ def _run(coro):
 
 
 class FakeNotionWords:
+    def __init__(self):
+        self.graded = []
+
     async def get_words_due(self):
         return [
             {"id": "empty", "properties": {"단어": {"title": []}, "의미": {"rich_text": []}, "단계": {"number": 1}}},
@@ -29,6 +32,10 @@ class FakeNotionWords:
 
     async def search_words_containing(self, keyword):
         return await self.get_words_due()
+
+    async def grade_word(self, page_id, correct):
+        self.graded.append((page_id, correct))
+        return 2
 
 
 class TestWordRepository(unittest.TestCase):
@@ -55,6 +62,14 @@ class TestWordRepository(unittest.TestCase):
             "meaning_ko": "사과",
             "stage": 2,
         }])
+
+    def test_update_word_stage_delegates_to_grade_word(self):
+        from services.word_repository import WordRepository
+
+        notion = FakeNotionWords()
+        _run(WordRepository(notion).update_word_stage("word-1", True))
+
+        self.assertEqual(notion.graded, [("word-1", True)])
 
 
 if __name__ == "__main__":

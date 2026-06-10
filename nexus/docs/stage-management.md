@@ -60,7 +60,8 @@ Nexus 단어 퀴즈의 작문 단계는 `stage >= 3`부터 적용된다.
 | --- | --- |
 | 작문 채점 분기 | `nexus/services/quiz_flow.py::_grade_writing_answer` |
 | 일반 답안과 작문 답안 분기 | `nexus/services/quiz_flow.py::grade_answer` |
-| 단어 단계 및 다음 리뷰일 갱신 | `nexus/services/notion_service.py::update_word_stage` |
+| 단어 단계 및 다음 리뷰일 갱신(호출 입구) | `nexus/services/word_repository.py::WordRepository.update_word_stage` |
+| 채점 프리미티브(복습덱 grade 위임) | `nexus/services/notion_service.py::grade_word` |
 | 단계 간격 상수 | `nexus/constants.py` |
 | 자동 복습 대상 조회 | `nexus/services/notion_service.py::get_words_due` |
 

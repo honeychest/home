@@ -41,19 +41,17 @@ class QuizFlow:
     def __init__(
         self,
         session: Any,
-        word_source: Any,
+        word_deck: Any,
         quiz_generator: Any,
-        stage_updater: Any | None = None,
         grammar_pending: Any | None = None,
     ):
         self._session = session
-        self._word_source = word_source
+        self._word_deck = word_deck
         self._quiz_generator = quiz_generator
-        self._stage_updater = stage_updater
         self._grammar_pending = grammar_pending
 
     async def start_auto_quiz(self) -> QuizTurn | NoQuizAvailable | QuizComplete:
-        words = await self._word_source.get_due_words()
+        words = await self._word_deck.get_due_words()
         if not words:
             if hasattr(self._session, "set_count"):
                 await self._session.set_count(0)
@@ -101,7 +99,7 @@ class QuizFlow:
         await self._session.clear_prefetch()
         await self._session.reset_count()
 
-        words = await self._word_source.get_all_words()
+        words = await self._word_deck.get_all_words()
         if not words:
             return NoQuizAvailable("단어장이 비어있어요! 단어를 추가해봐요 😊")
 
@@ -140,10 +138,10 @@ class QuizFlow:
         exclude_page_id: str | None = None,
     ) -> QuizTurn | NoQuizAvailable | QuizComplete:
         if mode == "quiz":
-            words = await self._word_source.get_all_words()
+            words = await self._word_deck.get_all_words()
             empty_message = "단어장이 비어있어요!"
         else:
-            words = await self._word_source.get_due_words()
+            words = await self._word_deck.get_due_words()
             empty_message = "오늘 복습할 단어가 없어요!"
 
         if exclude_page_id:
@@ -233,8 +231,8 @@ class QuizFlow:
                 )
             reply = f"❌ 오답. 정답은 '{word}'예요. 1단계로 돌아갑니다."
 
-        if self._stage_updater and not (mode == "quiz" and correct):
-            await self._stage_updater.update_word_stage(page_id, correct)
+        if not (mode == "quiz" and correct):
+            await self._word_deck.update_word_stage(page_id, correct)
 
         return QuizAnswerFeedback(
             reply=reply,
@@ -269,8 +267,7 @@ class QuizFlow:
                     reply=f"⚠️ 의미는 맞지만 '{word}'를 직접 사용해야 해요. 다시 도전!",
                     should_continue=False,
                 )
-            if self._stage_updater:
-                await self._stage_updater.update_word_stage(page_id, False)
+            await self._word_deck.update_word_stage(page_id, False)
             reply = f"❌ 오답. '{word}'를 사용한 문장을 만들어보세요."
             if example_sentence:
                 reply += f"\n💡 모범답안: {example_sentence}"
@@ -304,8 +301,8 @@ class QuizFlow:
                         "collocation_errors": collocation_errors,
                     })
 
-            if self._stage_updater and mode != "quiz":
-                await self._stage_updater.update_word_stage(page_id, True)
+            if mode != "quiz":
+                await self._word_deck.update_word_stage(page_id, True)
 
             return QuizAnswerFeedback(
                 reply=reply,
@@ -351,8 +348,7 @@ class QuizFlow:
             return NoQuizAvailable("진행 중인 퀴즈가 없어요.")
 
         page_id = session["page_id"]
-        if self._stage_updater:
-            await self._stage_updater.update_word_stage(page_id, False)
+        await self._word_deck.update_word_stage(page_id, False)
 
         return QuizAnswerFeedback(
             reply=f"❌ 실패. 정답은 '{session['word']}'예요. 1단계로 돌아갑니다.",
@@ -367,9 +363,8 @@ def create_quiz_flow(chat_id: int) -> QuizFlow:
 
     return QuizFlow(
         session=QuizSession(chat_id),
-        word_source=WordRepository(notion_service),
+        word_deck=WordRepository(notion_service),
         quiz_generator=ai_service,
-        stage_updater=notion_service,
         grammar_pending=GrammarPending(chat_id),
     )
 

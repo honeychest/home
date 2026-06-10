@@ -241,7 +241,9 @@ async def update_inbox_date(page_id: str, new_date_iso: str) -> None:
         raise
 
 
-async def update_word_stage(page_id: str, correct: bool) -> None:
-    """퀴즈 결과에 따라 단계와 다음리뷰일 업데이트."""
-    next_stage = await _word_deck().grade(page_id, correct)
-    logger.info(f"단어 단계 업데이트 - page_id: {page_id}, stage→{next_stage}, correct: {correct}")
+async def grade_word(page_id: str, correct: bool) -> int:
+    """단어 채점 프리미티브 — 복습덱 grade로 단계·다음리뷰일 갱신, 다음 단계 반환.
+
+    호출 입구(로깅 포함)는 WordRepository.update_word_stage 한 곳으로 모은다.
+    """
+    return await _word_deck().grade(page_id, correct)

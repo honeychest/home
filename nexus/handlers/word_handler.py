@@ -165,7 +165,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         pending = await _load()
         if not pending:
             return
-        await notion_service.update_word_stage(pending["existing_page_id"], correct=False)
+        await WordRepository(notion_service).update_word_stage(pending["existing_page_id"], correct=False)
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text(f"🔄 '{pending['word']}' 1단계로 초기화됐어요!")
 
