@@ -9,8 +9,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services import todo_service
 
 
+# 이 모듈은 InboxCallback을 통해 모듈 전역 redis 클라이언트를 사용한다.
+# asyncio.run은 매 호출마다 루프를 닫아 전역 연결이 끊기므로, 닫지 않는 전용 루프를
+# 한 번 만들어 재사용한다(전역 루프 상태와도 무관해 discover 순서에 안전).
+_loop = asyncio.new_event_loop()
+
+
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return _loop.run_until_complete(coro)
 
 
 CHAT_ID = 12345

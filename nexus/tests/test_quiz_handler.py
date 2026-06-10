@@ -8,37 +8,56 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 class TestSendNextQuizRecursionGuard(unittest.TestCase):
-    """parse_word_page가 계속 None 반환해도 무한 재귀하지 않는다."""
+    """due 단어가 전부 파싱 불가(빈 단어/의미)면 무한 출제 없이 '없음' 메시지로 끝낸다."""
 
     def test_all_pages_unparseable_sends_no_more_message(self):
+        loading = MagicMock()
+        loading.delete = AsyncMock()
         update = MagicMock()
         update.effective_message = MagicMock()
-        update.effective_message.reply_text = AsyncMock()
+        update.effective_message.reply_text = AsyncMock(return_value=loading)
 
-        words = [{"id": f"p{i}"} for i in range(5)]
+        # notion이 단어/의미가 빈 페이지만 반환 → WordRepository가 전부 걸러 [] 반환
+        class _UnparseableNotion:
+            async def get_words_due(self):
+                return [
+                    {"id": f"p{i}", "properties": {
+                        "단어": {"title": []}, "의미": {"rich_text": []}, "단계": {"number": 1},
+                    }}
+                    for i in range(5)
+                ]
+
+            async def get_all_words(self):
+                return await self.get_words_due()
+
+        from services.quiz_flow import QuizFlow
+        from services.word_repository import WordRepository
+
+        flow_session = MagicMock()
+        flow_session.set_count = AsyncMock()
+        flow_session.clear_state = AsyncMock()
 
         with patch("handlers.quiz_handler.QuizSession") as MockQS, \
-             patch("handlers.quiz_handler.notion_service") as mock_ns:
+             patch("handlers.quiz_handler.create_quiz_flow") as mock_cqf:
             qs = MagicMock()
             qs.get_session = AsyncMock(return_value={"mode": "auto"})
             qs.pop_prefetch = AsyncMock(return_value=None)
-            qs.consume_count = AsyncMock(return_value=(3, 5))
-            qs.set_count = AsyncMock()
-            qs.clear_state = AsyncMock()
-            qs.clear_active = AsyncMock()
             MockQS.return_value = qs
 
-            mock_ns.get_words_due = AsyncMock(return_value=words)
-            mock_ns.parse_word_page = MagicMock(return_value=None)
+            mock_cqf.return_value = QuizFlow(
+                session=flow_session,
+                word_deck=WordRepository(_UnparseableNotion()),
+                quiz_generator=MagicMock(),
+            )
 
             from handlers import quiz_handler
             _run(quiz_handler._send_next_quiz(update, chat_id=1))
 
-        # 재귀하지 않고 종료 — 무한 reply_text 호출 없음
+        # 무한 출제 없이 종료 — reply_text는 '출제 중' + '없음' 2회 이하
         self.assertLessEqual(update.effective_message.reply_text.call_count, 2)
 
 
