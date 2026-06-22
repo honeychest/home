@@ -11,6 +11,8 @@ public class ChatRequest {
     // 사용자가 질문할 때 보고 있던 화면 식별자(예: "signal", "analysis"). 프론트가 라우트에서 파생해 보낸다.
     // "이 페이지 뭐야?" 류 질문을 올바른 페이지로 해석/검색하기 위한 힌트. 없어도 동작(하위호환).
     private String pageId;
+    // 브라우저 채팅창 단위 대화 식별자. 서버 로그에서 여러 질문/답변을 하나의 대화 흐름으로 묶는 데 사용한다.
+    private String sessionId;
 
     public ChatRequest() {
     }
@@ -29,6 +31,14 @@ public class ChatRequest {
 
     public void setPageId(String pageId) {
         this.pageId = pageId;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 
     public List<Turn> getHistory() {

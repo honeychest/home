@@ -6,6 +6,20 @@ import { useEffect, useRef, useState } from 'react';
 import apiClient from '@/api/apiClient';
 import styles from './FloatingChatbot.module.css';
 
+const CHATBOT_SESSION_KEY = 'chs-chatbot-session-id';
+
+function getChatbotSessionId() {
+    try {
+        const existing = window.localStorage.getItem(CHATBOT_SESSION_KEY);
+        if (existing) return existing;
+        const created = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+        window.localStorage.setItem(CHATBOT_SESSION_KEY, created);
+        return created;
+    } catch {
+        return `${Date.now()}-${Math.random()}`;
+    }
+}
+
 // 현재 URL 경로 → 백엔드 pageId 로 변환. 챗봇이 Router 바깥에 마운트돼 있어 useLocation 대신
 // 전송 시점의 window.location.pathname 을 읽는다. 모르는 경로는 null(서버가 무시 → 기존 동작).
 function derivePageId(pathname) {
@@ -78,7 +92,8 @@ function FloatingChatbot() {
         try {
             // 사용자가 지금 보고 있는 페이지를 함께 전송 → "이 페이지 뭐야?" 류 질문 해석/검색에 사용
             const pageId = derivePageId(window.location.pathname);
-            const res = await apiClient.post('/api/chat', { question: q, history, pageId });
+            const sessionId = getChatbotSessionId();
+            const res = await apiClient.post('/api/chat', { question: q, history, pageId, sessionId });
             const data = res.data || {};
             setMessages((prev) => [
                 ...prev,

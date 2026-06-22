@@ -70,7 +70,18 @@ public class CodebaseDocumentSource {
 
     private boolean isIncluded(Path path) {
         String name = path.getFileName().toString();
-        return properties.getReindex().getIncludeExtensions().stream().anyMatch(name::endsWith);
+        if (properties.getReindex().getIncludeExtensions().stream().noneMatch(name::endsWith)) {
+            return false;
+        }
+        // 에러 안내 화면/템플릿 등 제외 경로는 색인하지 않는다('/' 로 정규화 후 부분문자열 검사).
+        String normalized = path.toString().replace('\\', '/');
+        for (String pattern : properties.getReindex().getExcludePathPatterns()) {
+            if (pattern != null && !pattern.isBlank() && normalized.contains(pattern)) {
+                log.info("[색인] 제외 경로 패턴 매칭, 건너뜀: {} (패턴={})", normalized, pattern);
+                return false;
+            }
+        }
+        return true;
     }
 
     private void readDocument(Path base, Path root, Path path, List<Document> documents) {

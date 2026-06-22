@@ -8,6 +8,7 @@ AGENTS.md
 chs-rules.md
 geminirules.md
 /.claude/
+/.agents/
 /chs/
 obsidian/
 # 로컬 전용 테스트 파일 (저장소에 없어도 두는 ignore 는 정상)

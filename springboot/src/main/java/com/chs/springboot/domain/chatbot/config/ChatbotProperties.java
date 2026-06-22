@@ -14,6 +14,10 @@ public class ChatbotProperties {
     // source 메타데이터를 이 경로 기준으로 상대화(예: "frontend/src/..."). 미설정 시 각 루트 기준.
     private String sourceBase;
     private int topK = 6;
+    // 검색 시 topK*overFetchMultiplier 만큼 과조회한 뒤 pageId 가중으로 재정렬해 상위 topK 만 반환.
+    private int overFetchMultiplier = 4;
+    // 현재 pageId 경로 프리픽스에 매칭되는 청크에 더해줄 가산점(score 0~1 위에 더함). 소프트 가중용.
+    private double pageBoost = 0.15;
     private Reindex reindex = new Reindex();
 
     public List<String> getIndexRoots() {
@@ -40,6 +44,22 @@ public class ChatbotProperties {
         this.topK = topK;
     }
 
+    public int getOverFetchMultiplier() {
+        return overFetchMultiplier;
+    }
+
+    public void setOverFetchMultiplier(int overFetchMultiplier) {
+        this.overFetchMultiplier = overFetchMultiplier;
+    }
+
+    public double getPageBoost() {
+        return pageBoost;
+    }
+
+    public void setPageBoost(double pageBoost) {
+        this.pageBoost = pageBoost;
+    }
+
     public Reindex getReindex() {
         return reindex;
     }
@@ -58,6 +78,12 @@ public class ChatbotProperties {
     public static class Reindex {
         private List<String> includeExtensions = new ArrayList<>(List.of(
                 ".java", ".html", ".md", ".tsx", ".jsx", ".ts", ".js"));
+        // 색인에서 제외할 경로 부분문자열(정규화된 '/' 경로 기준). '에러 안내 화면/템플릿'만 한정.
+        // (예외핸들러/ErrorController 등 에러 처리 비즈니스 로직은 제외 대상 아님.)
+        private List<String> excludePathPatterns = new ArrayList<>(List.of(
+                "frontend/src/page/error/",
+                "frontend/src/page/forbidden/",
+                "springboot/src/main/resources/templates/error-"));
         // application.properties 와 동기화된 기본값(1단계 튜닝 반영).
         private int chunkSize = 512;
         private int minChunkSizeChars = 350;
@@ -78,6 +104,14 @@ public class ChatbotProperties {
 
         public void setIncludeExtensions(List<String> includeExtensions) {
             this.includeExtensions = includeExtensions;
+        }
+
+        public List<String> getExcludePathPatterns() {
+            return excludePathPatterns;
+        }
+
+        public void setExcludePathPatterns(List<String> excludePathPatterns) {
+            this.excludePathPatterns = excludePathPatterns;
         }
 
         public int getChunkSize() {

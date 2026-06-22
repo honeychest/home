@@ -1,5 +1,5 @@
 // [AGENT] 역할: admin/test Chatbot 탭 — 챗봇 로그 분석 화면 + 가벼운 재색인 실행
-// 연관: api/adminTest/chatbot.js, 백엔드 /api/admin/chatbot/**(재색인), 추후 로그 조회 API
+// 연관: api/adminTest/chatbot.js, 백엔드 /api/admin/chatbot/**(재색인), /api/admin/chatbot/logs/**(로그 조회)
 // 인증: 백엔드 ADMIN_ACCESS 가 최종 방어선. 여기서는 UX(상태/오류 안내)만 처리.
 import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
@@ -7,60 +7,85 @@ import {
     startChatbotReindex,
     startChatbotDocsReindex,
     fetchChatbotReindexStatus,
+    fetchChatbotLogSummary,
+    fetchChatbotLogTurns,
+    fetchChatbotLogTurnDetail,
 } from '@/api/adminTest/chatbot.js';
 import styles from './ChatbotTestPage.module.css';
 
 const POLL_MS = 1000;
 
-// 화면 선구성용 샘플 데이터. 실제 로그 API가 생기면 이 배열만 서버 응답으로 교체한다.
-const SAMPLE_LOGS = [
-    {
-        id: 'log-001',
-        page: 'Signal',
-        time: '오늘 14:22',
-        latency: '12.4초',
-        status: '실패 의심',
-        issue: '검색 실패',
-        question: '이 페이지에서 오픈포지션이 뭘 의미해?',
-        answer: '오픈포지션은 아직 청산되지 않은 계약 규모입니다. 이 화면에서는 단기 매매 신호 판단에 함께 사용됩니다.',
-        sources: ['docs/generated/fe-page-signal.md', 'frontend/src/page/signal/SignalPage.jsx'],
-        diagnosis: '근거는 Signal 문서에 치우쳐 있고, 실제 화면의 차트 위치와 해석 예시가 부족합니다.',
-        suggestion: 'Signal 페이지 문서에 OI 카드 위치와 해석 예시를 추가',
-    },
-    {
-        id: 'log-002',
-        page: 'Admin',
-        time: '오늘 13:48',
-        latency: '7.8초',
-        status: '정상',
-        issue: '문제 없음',
-        question: '문서만 재색인은 언제 쓰면 돼?',
-        answer: '소스 벡터는 유지하고 docs/generated 문서만 다시 넣을 때 사용합니다.',
-        sources: ['ChatbotAdminController.java', 'CodebaseIndexingService.java'],
-        diagnosis: '질문 의도와 검색 근거가 잘 맞고, 답변도 짧게 정리되어 있습니다.',
-        suggestion: '현재 답변 품질 유지',
-    },
-    {
-        id: 'log-003',
-        page: 'Trade',
-        time: '어제 22:11',
-        latency: '31.2초',
-        status: '느림',
-        issue: '속도 문제',
-        question: '체결 틱 조회 흐름 설명해줘',
-        answer: '체결 데이터 조회 패널과 테이블을 통해 최근 체결 흐름을 확인할 수 있습니다.',
-        sources: ['frontend/src/page/trade/TradePage.jsx'],
-        diagnosis: '응답 시간이 길고 프론트 근거만 검색되어 백엔드 조회 흐름 설명이 약합니다.',
-        suggestion: 'Trade 관련 백엔드 API와 프론트 컴포넌트 근거가 함께 검색되도록 랭킹 보강',
-    },
-];
+const ISSUE_LABELS = {
+    NONE: '문제 없음',
+    RETRIEVAL_MISS: '검색 실패',
+    ANSWER_QUALITY: '답변 품질',
+    CONTEXT_MISS: '맥락 실패',
+    PAGE_CONTEXT_MISS: '페이지 맥락',
+    LATENCY: '속도 문제',
+    ERROR: '오류',
+};
 
-const SUMMARY_CARDS = [
-    { label: '전체 로그', value: '128건', tone: 'neutral' },
-    { label: '실패 의심', value: '18건', tone: 'warning' },
-    { label: '평균 응답', value: '8.2초', tone: 'neutral' },
-    { label: '느린 응답', value: '9건', tone: 'danger' },
-];
+const STATUS_LABELS = {
+    SUCCESS: '정상',
+    ERROR: '오류',
+};
+
+function toLocalDateTimeParam(date) {
+    const pad = (value) => String(value).padStart(2, '0');
+    return [
+        date.getFullYear(),
+        '-',
+        pad(date.getMonth() + 1),
+        '-',
+        pad(date.getDate()),
+        'T',
+        pad(date.getHours()),
+        ':',
+        pad(date.getMinutes()),
+        ':',
+        pad(date.getSeconds()),
+    ].join('');
+}
+
+function periodToParams(period) {
+    const now = new Date();
+    if (period === 'today') {
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        return { from: toLocalDateTimeParam(start), to: toLocalDateTimeParam(now) };
+    }
+    if (period === '30d') {
+        const start = new Date(now);
+        start.setDate(start.getDate() - 30);
+        return { from: toLocalDateTimeParam(start), to: toLocalDateTimeParam(now) };
+    }
+    const start = new Date(now);
+    start.setDate(start.getDate() - 7);
+    return { from: toLocalDateTimeParam(start), to: toLocalDateTimeParam(now) };
+}
+
+function formatTime(value) {
+    if (!value) return '-';
+    return new Date(value).toLocaleString('ko-KR', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function formatLatency(ms) {
+    if (ms == null) return '-';
+    return `${(ms / 1000).toFixed(1)}초`;
+}
+
+function issueLabel(issueType) {
+    return ISSUE_LABELS[issueType] || issueType || '-';
+}
+
+function statusLabel(status) {
+    return STATUS_LABELS[status] || status || '-';
+}
 
 export default function ChatbotTestPage() {
     // 재색인 상태
@@ -69,12 +94,85 @@ export default function ChatbotTestPage() {
     const [reindexError, setReindexError] = useState(false);
     const pollRef = useRef(null);
 
-    const [selectedLogId, setSelectedLogId] = useState(SAMPLE_LOGS[0].id);
-    const selectedLog = SAMPLE_LOGS.find((log) => log.id === selectedLogId) || SAMPLE_LOGS[0];
+    // 로그 조회 상태
+    const [filters, setFilters] = useState({
+        period: '7d',
+        pageId: 'all',
+        issueType: 'all',
+        keyword: '',
+    });
+    const [summary, setSummary] = useState({
+        totalLogs: 0,
+        suspectedLogs: 0,
+        averageLatencySeconds: 0,
+        slowLogs: 0,
+    });
+    const [logs, setLogs] = useState([]);
+    const [selectedLogId, setSelectedLogId] = useState(null);
+    const [selectedLog, setSelectedLog] = useState(null);
+    const [logLoading, setLogLoading] = useState(false);
+    const [logError, setLogError] = useState('');
 
     // 언마운트 시 폴링 정리
     useEffect(() => () => {
         if (pollRef.current) clearInterval(pollRef.current);
+    }, []);
+
+    const buildLogParams = () => {
+        const params = {
+            ...periodToParams(filters.period),
+            page: 0,
+            size: 30,
+        };
+        if (filters.pageId !== 'all') params.pageId = filters.pageId;
+        if (filters.issueType !== 'all') params.issueType = filters.issueType;
+        if (filters.keyword.trim()) params.keyword = filters.keyword.trim();
+        return params;
+    };
+
+    const loadLogDetail = (id) => {
+        if (!id) {
+            setSelectedLog(null);
+            return;
+        }
+        fetchChatbotLogTurnDetail(id)
+            .then((res) => setSelectedLog(res.data || null))
+            .catch((err) => setLogError(`상세 조회 오류: ${err.message}`));
+    };
+
+    const loadLogs = () => {
+        setLogLoading(true);
+        setLogError('');
+        const params = buildLogParams();
+        const summaryParams = { ...params };
+        delete summaryParams.page;
+        delete summaryParams.size;
+
+        Promise.all([
+            fetchChatbotLogSummary(summaryParams),
+            fetchChatbotLogTurns(params),
+        ])
+            .then(([summaryRes, turnsRes]) => {
+                const page = turnsRes.data || {};
+                const content = Array.isArray(page.content) ? page.content : [];
+                setSummary(summaryRes.data || summary);
+                setLogs(content);
+                const nextId = content[0]?.id || null;
+                setSelectedLogId(nextId);
+                loadLogDetail(nextId);
+            })
+            .catch((err) => {
+                setLogError(`로그 조회 오류: ${err.message}`);
+                setLogs([]);
+                setSelectedLog(null);
+                setSelectedLogId(null);
+            })
+            .finally(() => setLogLoading(false));
+    };
+
+    useEffect(() => {
+        loadLogs();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const stopPolling = () => {
@@ -147,6 +245,20 @@ export default function ChatbotTestPage() {
     const onReindexFull = () => runReindex(startChatbotReindex);
     const onReindexDocs = () => runReindex(startChatbotDocsReindex);
 
+    const onSelectLog = (id) => {
+        setSelectedLogId(id);
+        loadLogDetail(id);
+    };
+
+    const summaryCards = [
+        { label: '전체 로그', value: `${summary.totalLogs ?? 0}건`, tone: 'neutral' },
+        { label: '실패 의심', value: `${summary.suspectedLogs ?? 0}건`, tone: 'warning' },
+        { label: '평균 응답', value: `${summary.averageLatencySeconds ?? 0}초`, tone: 'neutral' },
+        { label: '느린 응답', value: `${summary.slowLogs ?? 0}건`, tone: 'danger' },
+    ];
+
+    const latestAnalysis = selectedLog?.analyses?.[0];
+
     return (
         <div className={styles.page}>
             <header className={styles.header}>
@@ -175,21 +287,19 @@ export default function ChatbotTestPage() {
                 </div>
             </div>
 
-            {/* 로그 분석 화면 선구성 */}
             <section className={`${styles.section} ${styles.logSection}`}>
                 <div className={styles.sectionHeader}>
                     <div>
                         <h2 className={styles.sectionTitle}>로그 분석</h2>
                         <p className={styles.sectionDesc}>
                             질문과 답변, 검색 근거, 문제 판단을 함께 보면서 어떤 부분을 보강할지 판단하는 화면입니다.
-                            현재는 화면 구성용 샘플이며, 이후 로그 API와 연결합니다.
                         </p>
                     </div>
-                    <span className={styles.readyBadge}>화면 설계 단계</span>
+                    <span className={styles.readyBadge}>실제 로그 연결</span>
                 </div>
 
                 <div className={styles.summaryGrid}>
-                    {SUMMARY_CARDS.map((card) => (
+                    {summaryCards.map((card) => (
                         <div key={card.label} className={`${styles.summaryCard} ${styles[card.tone] || ''}`}>
                             <span className={styles.summaryLabel}>{card.label}</span>
                             <strong className={styles.summaryValue}>{card.value}</strong>
@@ -200,7 +310,10 @@ export default function ChatbotTestPage() {
                 <div className={styles.filterBar}>
                     <label>
                         기간
-                        <select defaultValue="7d">
+                        <select
+                            value={filters.period}
+                            onChange={(e) => setFilters((prev) => ({ ...prev, period: e.target.value }))}
+                        >
                             <option value="today">오늘</option>
                             <option value="7d">최근 7일</option>
                             <option value="30d">최근 30일</option>
@@ -208,90 +321,135 @@ export default function ChatbotTestPage() {
                     </label>
                     <label>
                         페이지
-                        <select defaultValue="all">
+                        <select
+                            value={filters.pageId}
+                            onChange={(e) => setFilters((prev) => ({ ...prev, pageId: e.target.value }))}
+                        >
                             <option value="all">전체</option>
                             <option value="signal">Signal</option>
                             <option value="trade">Trade</option>
                             <option value="admin">Admin</option>
+                            <option value="analysis">Analysis</option>
+                            <option value="binance">Binance</option>
                         </select>
                     </label>
                     <label>
                         문제 유형
-                        <select defaultValue="all">
+                        <select
+                            value={filters.issueType}
+                            onChange={(e) => setFilters((prev) => ({ ...prev, issueType: e.target.value }))}
+                        >
                             <option value="all">전체</option>
-                            <option value="retrieval">검색 실패</option>
-                            <option value="answer">답변 실패</option>
-                            <option value="context">맥락 실패</option>
-                            <option value="latency">속도 문제</option>
+                            <option value="RETRIEVAL_MISS">검색 실패</option>
+                            <option value="ANSWER_QUALITY">답변 실패</option>
+                            <option value="CONTEXT_MISS">맥락 실패</option>
+                            <option value="PAGE_CONTEXT_MISS">페이지 맥락</option>
+                            <option value="LATENCY">속도 문제</option>
+                            <option value="ERROR">오류</option>
                         </select>
                     </label>
                     <label className={styles.keywordField}>
                         키워드
-                        <input placeholder="질문, 답변, 파일명 검색" />
+                        <input
+                            placeholder="질문, 답변, 검색어 검색"
+                            value={filters.keyword}
+                            onChange={(e) => setFilters((prev) => ({ ...prev, keyword: e.target.value }))}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') loadLogs();
+                            }}
+                        />
                     </label>
-                    <button className={styles.secondaryButton} type="button">
-                        검색
+                    <button className={styles.secondaryButton} type="button" onClick={loadLogs}>
+                        {logLoading ? '조회 중' : '검색'}
                     </button>
                 </div>
 
+                {logError && <div className={`${styles.status} ${styles.error}`}>{logError}</div>}
+
                 <div className={styles.logWorkspace}>
                     <div className={styles.logList} aria-label="챗봇 로그 목록">
-                        {SAMPLE_LOGS.map((log) => (
+                        {logs.length === 0 && (
+                            <div className={styles.emptyState}>
+                                {logLoading ? '로그를 불러오는 중입니다.' : '조건에 맞는 로그가 없습니다.'}
+                            </div>
+                        )}
+                        {logs.map((log) => (
                             <button
                                 key={log.id}
                                 type="button"
                                 className={`${styles.logItem} ${
                                     selectedLogId === log.id ? styles.logItemActive : ''
                                 }`}
-                                onClick={() => setSelectedLogId(log.id)}
+                                onClick={() => onSelectLog(log.id)}
                             >
                                 <span className={styles.logMeta}>
-                                    {log.page} · {log.time} · {log.latency}
+                                    {log.pageId || '공통'} · {formatTime(log.createdAt)} · {formatLatency(log.latencyMs)}
                                 </span>
                                 <strong>{log.question}</strong>
                                 <span className={styles.logFooter}>
-                                    <span>{log.issue}</span>
-                                    <span>{log.status}</span>
+                                    <span>{issueLabel(log.issueType)}</span>
+                                    <span>{statusLabel(log.status)}</span>
                                 </span>
                             </button>
                         ))}
                     </div>
 
                     <div className={styles.logDetail}>
-                        <div className={styles.detailHeader}>
-                            <div>
-                                <span className={styles.logMeta}>
-                                    {selectedLog.page} · {selectedLog.time} · {selectedLog.latency}
-                                </span>
-                                <h3>{selectedLog.question}</h3>
-                            </div>
-                            <span className={styles.issueBadge}>{selectedLog.issue}</span>
-                        </div>
+                        {!selectedLog && (
+                            <div className={styles.emptyState}>왼쪽 목록에서 로그를 선택하세요.</div>
+                        )}
+                        {selectedLog && (
+                            <>
+                                <div className={styles.detailHeader}>
+                                    <div>
+                                        <span className={styles.logMeta}>
+                                            {selectedLog.pageId || '공통'} · {formatTime(selectedLog.createdAt)} ·{' '}
+                                            {formatLatency(selectedLog.latencyMs)}
+                                        </span>
+                                        <h3>{selectedLog.question}</h3>
+                                    </div>
+                                    <span className={styles.issueBadge}>{issueLabel(selectedLog.issueType)}</span>
+                                </div>
 
-                        <div className={styles.detailBlock}>
-                            <span className={styles.detailLabel}>답변</span>
-                            <p>{selectedLog.answer}</p>
-                        </div>
+                                <div className={styles.detailBlock}>
+                                    <span className={styles.detailLabel}>답변</span>
+                                    <p>{selectedLog.answer || selectedLog.errorMessage || '(답변 없음)'}</p>
+                                </div>
 
-                        <div className={styles.detailBlock}>
-                            <span className={styles.detailLabel}>검색 근거</span>
-                            <ul className={styles.sourceList}>
-                                {selectedLog.sources.map((source) => (
-                                    <li key={source}>{source}</li>
-                                ))}
-                            </ul>
-                        </div>
+                                <div className={styles.detailBlock}>
+                                    <span className={styles.detailLabel}>검색 질의</span>
+                                    <p>{selectedLog.searchQuery || '-'}</p>
+                                </div>
 
-                        <div className={styles.analysisGrid}>
-                            <div className={styles.analysisCard}>
-                                <span className={styles.detailLabel}>문제 판단</span>
-                                <p>{selectedLog.diagnosis}</p>
-                            </div>
-                            <div className={styles.analysisCard}>
-                                <span className={styles.detailLabel}>보강 제안</span>
-                                <p>{selectedLog.suggestion}</p>
-                            </div>
-                        </div>
+                                <div className={styles.detailBlock}>
+                                    <span className={styles.detailLabel}>검색 근거</span>
+                                    {selectedLog.evidences?.length > 0 ? (
+                                        <ul className={styles.sourceList}>
+                                            {selectedLog.evidences.map((source) => (
+                                                <li key={`${source.rankNo}-${source.source}`}>
+                                                    {source.rankNo}. {source.source}
+                                                    {source.symbol ? ` · ${source.symbol}` : ''}
+                                                    {source.lineRange ? ` · ${source.lineRange}` : ''}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p>근거 없음</p>
+                                    )}
+                                </div>
+
+                                <div className={styles.analysisGrid}>
+                                    <div className={styles.analysisCard}>
+                                        <span className={styles.detailLabel}>문제 판단</span>
+                                        <p>{latestAnalysis?.summary || '사후 분석 결과가 아직 없습니다.'}</p>
+                                    </div>
+                                    <div className={styles.analysisCard}>
+                                        <span className={styles.detailLabel}>보강 제안</span>
+                                        <p>{latestAnalysis?.suggestion || '분석 저장 후 보강 제안이 표시됩니다.'}</p>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </section>

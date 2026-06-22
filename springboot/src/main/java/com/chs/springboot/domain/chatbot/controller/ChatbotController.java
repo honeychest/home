@@ -20,6 +20,6 @@ public class ChatbotController {
 
     @PostMapping("/api/chat")
     public ChatResponse chat(@RequestBody ChatRequest req) {
-        return chatbotService.ask(req.getQuestion(), req.getHistory(), req.getPageId());
+        return chatbotService.ask(req.getQuestion(), req.getHistory(), req.getPageId(), req.getSessionId());
     }
 }

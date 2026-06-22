@@ -22,3 +22,18 @@ export function fetchChatbotReindexStatus(jobId) {
 export function askChatbot(question) {
     return api.post('/api/chat', { question });
 }
+
+// 챗봇 로그 요약 조회(관찰) — { totalLogs, suspectedLogs, averageLatencySeconds, slowLogs }
+export function fetchChatbotLogSummary(params = {}) {
+    return api.get('/api/admin/chatbot/logs/summary', { params });
+}
+
+// 챗봇 질문답변 턴 목록 조회(관찰) — Spring Page<ChatbotLogTurnSummary>
+export function fetchChatbotLogTurns(params = {}) {
+    return api.get('/api/admin/chatbot/logs/turns', { params });
+}
+
+// 챗봇 질문답변 턴 상세 조회(관찰) — ChatbotLogTurnDetail
+export function fetchChatbotLogTurnDetail(id) {
+    return api.get(`/api/admin/chatbot/logs/turns/${id}`);
+}

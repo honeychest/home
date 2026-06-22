@@ -28,23 +28,21 @@ public class ChatbotService {
     private static final int CONTINUATION_MAX_LEN = 10;
     private static final List<String> CONTINUATION_PREFIXES = List.of(
             "응", "그래", "네", "예", "ㅇㅇ", "어", "계속", "자세히", "더", "그거", "맞아", "ok", "okay");
-    // "이 페이지/여기/이 화면" 처럼 현재 화면을 가리키는 지시어. 이런 질문일 때만 pageId 로 검색을 보강한다.
-    // (일반 용어 질문 "오픈포지션이 뭐야?" 는 페이지에 매이면 안 되므로 검색을 건드리지 않는다.)
-    private static final List<String> PAGE_REFERENCE_HINTS = List.of(
-            "이 페이지", "이페이지", "현재 페이지", "이 화면", "이화면", "이 대시보드", "여기", "이 기능", "이거 뭐", "이건 뭐", "이 페이지는");
 
     private final EvidenceRetriever evidenceRetriever;
     private final GroundedAnswerGenerator answerGenerator;
     private final PageContextRegistry pageContextRegistry;
+    private final ChatbotLogService chatbotLogService;
 
     public ChatbotService(EvidenceRetriever evidenceRetriever, GroundedAnswerGenerator answerGenerator,
-                          PageContextRegistry pageContextRegistry) {
+                          PageContextRegistry pageContextRegistry, ChatbotLogService chatbotLogService) {
         this.evidenceRetriever = evidenceRetriever;
         this.answerGenerator = answerGenerator;
         this.pageContextRegistry = pageContextRegistry;
+        this.chatbotLogService = chatbotLogService;
     }
 
-    public ChatResponse ask(String question, List<ChatRequest.Turn> history, String pageId) {
+    public ChatResponse ask(String question, List<ChatRequest.Turn> history, String pageId, String sessionId) {
         log.info("[챗봇] 질문 수신: {} (pageId={})", question, pageId);
         long startMs = System.currentTimeMillis();
 
@@ -52,16 +50,12 @@ public class ChatbotService {
             PageContextRegistry.PageInfo page = pageContextRegistry.find(pageId);
 
             String searchQuery = buildSearchQuery(question, history);
-            // "이 페이지" 류 질문이면, 그 화면을 가리키는 명사를 검색질의에 덧붙여 올바른 페이지 문서를 찾게 한다.
-            if (page != null && referencesCurrentPage(question)) {
-                searchQuery = page.searchTerms() + " " + searchQuery;
-                log.info("[챗봇] 현재 페이지 지시어 감지 → 검색 페이지 보강: {}", page.label());
-            }
             if (!searchQuery.equals(question)) {
                 log.info("[챗봇] 검색 맥락 보강 질의: {}", searchQuery);
             }
 
-            RetrievedEvidence evidence = evidenceRetriever.retrieve(searchQuery);
+            // 현재 페이지 신호는 텍스트 키워드 추측이 아니라 pageId 메타데이터 가중(EvidenceRetriever)으로 반영한다.
+            RetrievedEvidence evidence = evidenceRetriever.retrieve(searchQuery, pageId);
             log.info("[챗봇] 검색된 청크 수: {}", evidence.documentCount());
             log.info("[챗봇] 근거 파일 목록: {}", evidence.sources());
 
@@ -79,27 +73,34 @@ public class ChatbotService {
 
             long elapsedMs = System.currentTimeMillis() - startMs;
             log.info("[챗봇] 답변 생성 소요시간: {}ms, 답변 길이: {}자", elapsedMs, answer == null ? 0 : answer.length());
+            recordSuccess(sessionId, pageId, question, answer, searchQuery, llmQuestion, pageContext, evidence, elapsedMs);
 
             return new ChatResponse(answer, evidence.sources());
 
         } catch (Exception e) {
+            long elapsedMs = System.currentTimeMillis() - startMs;
             log.error("[챗봇] 답변 생성 중 오류 발생: {}", e.getMessage(), e);
+            recordError(sessionId, pageId, question, elapsedMs, e.getMessage());
             return new ChatResponse("오류: " + e.getMessage(), Collections.emptyList());
         }
     }
 
-    /** "이 페이지/여기/이 화면" 처럼 사용자가 보고 있는 현재 화면을 가리키는 지시어가 들어있는지 판단. */
-    private boolean referencesCurrentPage(String question) {
-        if (question == null) {
-            return false;
+    private void recordSuccess(String sessionId, String pageId, String question, String answer, String searchQuery,
+                               String llmQuestion, String pageContext, RetrievedEvidence evidence, long elapsedMs) {
+        try {
+            chatbotLogService.recordSuccess(sessionId, pageId, question, answer, searchQuery, llmQuestion, pageContext,
+                    evidence, elapsedMs);
+        } catch (Exception logError) {
+            log.warn("[챗봇] 로그 저장 실패(답변은 유지): {}", logError.getMessage(), logError);
         }
-        String q = question.toLowerCase();
-        for (String hint : PAGE_REFERENCE_HINTS) {
-            if (q.contains(hint)) {
-                return true;
-            }
+    }
+
+    private void recordError(String sessionId, String pageId, String question, long elapsedMs, String errorMessage) {
+        try {
+            chatbotLogService.recordError(sessionId, pageId, question, elapsedMs, errorMessage);
+        } catch (Exception logError) {
+            log.warn("[챗봇] 오류 로그 저장 실패: {}", logError.getMessage(), logError);
         }
-        return false;
     }
 
     /** 직전 주제를 잇는 짧은 호응("응","자세히" 등)인지 판단. 글자수가 짧거나 정해진 접두어로 시작하면 true. */

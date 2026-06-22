@@ -1,6 +1,7 @@
 package com.chs.springboot.domain.chatbot.controller;
 
 import com.chs.springboot.domain.chatbot.dto.ReindexJob;
+import com.chs.springboot.domain.chatbot.service.ChatbotLogService;
 import com.chs.springboot.domain.chatbot.service.CodebaseIndexingService;
 import com.chs.springboot.global.auth.jwt.JwtTokenProvider;
 import com.chs.springboot.global.auth.service.AuthService;
@@ -31,6 +32,9 @@ class ChatbotAdminControllerSecurityTest {
 
     @MockBean
     private CodebaseIndexingService indexingService;
+
+    @MockBean
+    private ChatbotLogService chatbotLogService;
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
