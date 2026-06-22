@@ -28,21 +28,35 @@ public class ChatbotService {
     private static final int CONTINUATION_MAX_LEN = 10;
     private static final List<String> CONTINUATION_PREFIXES = List.of(
             "응", "그래", "네", "예", "ㅇㅇ", "어", "계속", "자세히", "더", "그거", "맞아", "ok", "okay");
+    // "이 페이지/여기/이 화면" 처럼 현재 화면을 가리키는 지시어. 이런 질문일 때만 pageId 로 검색을 보강한다.
+    // (일반 용어 질문 "오픈포지션이 뭐야?" 는 페이지에 매이면 안 되므로 검색을 건드리지 않는다.)
+    private static final List<String> PAGE_REFERENCE_HINTS = List.of(
+            "이 페이지", "이페이지", "현재 페이지", "이 화면", "이화면", "이 대시보드", "여기", "이 기능", "이거 뭐", "이건 뭐", "이 페이지는");
 
     private final EvidenceRetriever evidenceRetriever;
     private final GroundedAnswerGenerator answerGenerator;
+    private final PageContextRegistry pageContextRegistry;
 
-    public ChatbotService(EvidenceRetriever evidenceRetriever, GroundedAnswerGenerator answerGenerator) {
+    public ChatbotService(EvidenceRetriever evidenceRetriever, GroundedAnswerGenerator answerGenerator,
+                          PageContextRegistry pageContextRegistry) {
         this.evidenceRetriever = evidenceRetriever;
         this.answerGenerator = answerGenerator;
+        this.pageContextRegistry = pageContextRegistry;
     }
 
-    public ChatResponse ask(String question, List<ChatRequest.Turn> history) {
-        log.info("[챗봇] 질문 수신: {}", question);
+    public ChatResponse ask(String question, List<ChatRequest.Turn> history, String pageId) {
+        log.info("[챗봇] 질문 수신: {} (pageId={})", question, pageId);
         long startMs = System.currentTimeMillis();
 
         try {
+            PageContextRegistry.PageInfo page = pageContextRegistry.find(pageId);
+
             String searchQuery = buildSearchQuery(question, history);
+            // "이 페이지" 류 질문이면, 그 화면을 가리키는 명사를 검색질의에 덧붙여 올바른 페이지 문서를 찾게 한다.
+            if (page != null && referencesCurrentPage(question)) {
+                searchQuery = page.searchTerms() + " " + searchQuery;
+                log.info("[챗봇] 현재 페이지 지시어 감지 → 검색 페이지 보강: {}", page.label());
+            }
             if (!searchQuery.equals(question)) {
                 log.info("[챗봇] 검색 맥락 보강 질의: {}", searchQuery);
             }
@@ -58,7 +72,10 @@ public class ChatbotService {
                 log.info("[챗봇] 이어가기 단문 감지 → LLM 질문 보강: {}", llmQuestion);
             }
 
-            String answer = answerGenerator.generate(llmQuestion, searchQuery, toMessages(history));
+            // 현재 화면 안내문(LLM 이 "이 페이지" 를 해석하도록). 없으면 null → 생성기가 무시.
+            String pageContext = page == null ? null : page.promptHint() + " (" + page.label() + ")";
+
+            String answer = answerGenerator.generate(llmQuestion, searchQuery, toMessages(history), pageContext);
 
             long elapsedMs = System.currentTimeMillis() - startMs;
             log.info("[챗봇] 답변 생성 소요시간: {}ms, 답변 길이: {}자", elapsedMs, answer == null ? 0 : answer.length());
@@ -69,6 +86,20 @@ public class ChatbotService {
             log.error("[챗봇] 답변 생성 중 오류 발생: {}", e.getMessage(), e);
             return new ChatResponse("오류: " + e.getMessage(), Collections.emptyList());
         }
+    }
+
+    /** "이 페이지/여기/이 화면" 처럼 사용자가 보고 있는 현재 화면을 가리키는 지시어가 들어있는지 판단. */
+    private boolean referencesCurrentPage(String question) {
+        if (question == null) {
+            return false;
+        }
+        String q = question.toLowerCase();
+        for (String hint : PAGE_REFERENCE_HINTS) {
+            if (q.contains(hint)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 직전 주제를 잇는 짧은 호응("응","자세히" 등)인지 판단. 글자수가 짧거나 정해진 접두어로 시작하면 true. */

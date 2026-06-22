@@ -51,7 +51,8 @@ public class GroundedAnswerGenerator {
     }
 
     // searchQuery: 근거 검색에 쓸 질의(후속질문 맥락 보강된 것). question: LLM에 보낼 실제 질문 문장.
-    public String generate(String question, String searchQuery, List<Message> history) {
+    // pageContext: 사용자가 보고 있는 현재 화면 설명(없으면 null). "이 페이지" 류 지시어 해석에 쓴다.
+    public String generate(String question, String searchQuery, List<Message> history, String pageContext) {
         QuestionAnswerAdvisor qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
                 .searchRequest(SearchRequest.builder().query(searchQuery).topK(properties.getTopK()).build())
                 .promptTemplate(QA_TEMPLATE)
@@ -61,8 +62,23 @@ public class GroundedAnswerGenerator {
         return chatbotChatClient.prompt()
                 .advisors(qaAdvisor)
                 .messages(history)
-                .user(question)
+                .user(withPageContext(question, pageContext))
                 .call()
                 .content();
+    }
+
+    // 현재 화면 안내를 질문 앞에 덧붙인다. "이 페이지/여기" 는 이 화면을 가리키도록 하되,
+    // 일반 용어 질문("오픈포지션이 뭐야?")이면 화면에 얽매이지 말고 일반적으로 답하라고 지시한다.
+    private String withPageContext(String question, String pageContext) {
+        if (pageContext == null || pageContext.isBlank()) {
+            return question;
+        }
+        return """
+                [현재 화면 안내]
+                사용자는 지금 다음 화면을 보고 있다: %s
+                - "이 페이지/여기/이 화면/이거" 같은 지시어는 위 화면을 가리킨다.
+                - 단, 질문이 일반 용어나 개념을 묻는 것이면 화면에 얽매이지 말고 일반적으로 답하라.
+
+                질문: %s""".formatted(pageContext, question);
     }
 }

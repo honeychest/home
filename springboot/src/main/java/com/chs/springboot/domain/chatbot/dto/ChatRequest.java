@@ -8,6 +8,9 @@ public class ChatRequest {
     private String question;
     // 클라이언트(채팅창)가 보유한 이전 대화. 서버는 저장하지 않고 매 요청의 맥락으로만 사용한다. (없어도 동작)
     private List<Turn> history;
+    // 사용자가 질문할 때 보고 있던 화면 식별자(예: "signal", "analysis"). 프론트가 라우트에서 파생해 보낸다.
+    // "이 페이지 뭐야?" 류 질문을 올바른 페이지로 해석/검색하기 위한 힌트. 없어도 동작(하위호환).
+    private String pageId;
 
     public ChatRequest() {
     }
@@ -18,6 +21,14 @@ public class ChatRequest {
 
     public void setQuestion(String question) {
         this.question = question;
+    }
+
+    public String getPageId() {
+        return pageId;
+    }
+
+    public void setPageId(String pageId) {
+        this.pageId = pageId;
     }
 
     public List<Turn> getHistory() {

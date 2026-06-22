@@ -6,6 +6,22 @@ import { useEffect, useRef, useState } from 'react';
 import apiClient from '@/api/apiClient';
 import styles from './FloatingChatbot.module.css';
 
+// 현재 URL 경로 → 백엔드 pageId 로 변환. 챗봇이 Router 바깥에 마운트돼 있어 useLocation 대신
+// 전송 시점의 window.location.pathname 을 읽는다. 모르는 경로는 null(서버가 무시 → 기존 동작).
+function derivePageId(pathname) {
+    const p = (pathname || '').toLowerCase();
+    if (p.startsWith('/signal')) return 'signal';
+    if (p.startsWith('/analysis')) return 'analysis';
+    if (p.startsWith('/binance')) return 'binance';
+    if (p.startsWith('/trade')) return 'trade';
+    if (p.startsWith('/logistics')) return 'logistics';
+    if (p.startsWith('/monitor')) return 'monitor';
+    if (p.startsWith('/weather')) return 'weather';
+    if (p.startsWith('/winner') || p.startsWith('/random')) return 'random';
+    if (p.startsWith('/admin')) return 'admin';
+    return null;
+}
+
 // 봇 답변의 근거 출처 — 기본 접힘, 클릭하면 펼침
 function SourceList({ sources }) {
     const [expanded, setExpanded] = useState(false);
@@ -55,7 +71,9 @@ function FloatingChatbot() {
         setLoading(true);
 
         try {
-            const res = await apiClient.post('/api/chat', { question: q, history });
+            // 사용자가 지금 보고 있는 페이지를 함께 전송 → "이 페이지 뭐야?" 류 질문 해석/검색에 사용
+            const pageId = derivePageId(window.location.pathname);
+            const res = await apiClient.post('/api/chat', { question: q, history, pageId });
             const data = res.data || {};
             setMessages((prev) => [
                 ...prev,
