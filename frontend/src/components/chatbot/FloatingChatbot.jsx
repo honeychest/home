@@ -22,6 +22,11 @@ function derivePageId(pathname) {
     return null;
 }
 
+// 근거 경로에서 마지막 파일명만 추출(예: "frontend/src/.../Foo.jsx" → "Foo.jsx")
+function fileNameOf(source) {
+    return String(source).replace(/\\/g, '/').split('/').pop();
+}
+
 // 봇 답변의 근거 출처 — 기본 접힘, 클릭하면 펼침
 function SourceList({ sources }) {
     const [expanded, setExpanded] = useState(false);
@@ -33,7 +38,7 @@ function SourceList({ sources }) {
             {expanded && (
                 <div className={styles.sourceList}>
                     {sources.map((s, i) => (
-                        <div key={i}>{s}</div>
+                        <div key={i}>{fileNameOf(s)}</div>
                     ))}
                 </div>
             )}
