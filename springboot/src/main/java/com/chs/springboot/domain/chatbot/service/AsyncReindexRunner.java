@@ -89,4 +89,32 @@ public class AsyncReindexRunner {
             onComplete.run();
         }
     }
+
+
+    /** 특정 page/domain 소스만 증분 색인: 해당 source 벡터를 지운 뒤 같은 프리픽스 파일만 다시 넣는다. */
+    @Async
+    public void runDomain(ReindexJob job, String domain, List<String> sourcePrefixes, Runnable onComplete) {
+        try {
+            log.info("[도메인 색인 시작] jobId={}, domain={}", job.getJobId(), domain);
+
+            indexWriter.clearBySourcePrefixes(sourcePrefixes);
+            List<Document> documents = documentSource.collectDomain(sourcePrefixes);
+            log.info("[도메인 색인] 수집된 파일 수: {} (domain={})", documents.size(), domain);
+
+            List<Document> chunks = documentChunker.chunk(documents);
+            log.info("[도메인 색인] 청킹 완료, 총 청크 수: {} (domain={})", chunks.size(), domain);
+
+            job.setTotalChunks(chunks.size());
+            indexWriter.write(chunks, job::setProcessedChunks);
+
+            job.markCompleted(chunks.size());
+            log.info("[도메인 색인 완료] jobId={}, domain={}, 청크 수={}", job.getJobId(), domain, chunks.size());
+
+        } catch (Exception e) {
+            job.markFailed(e.getMessage());
+            log.error("[도메인 색인 실패] jobId={}, domain={}, 오류={}", job.getJobId(), domain, e.getMessage(), e);
+        } finally {
+            onComplete.run();
+        }
+    }
 }

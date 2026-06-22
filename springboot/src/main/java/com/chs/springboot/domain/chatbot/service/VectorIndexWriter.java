@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntConsumer;
 
@@ -39,6 +40,30 @@ public class VectorIndexWriter {
     public void clearDocs() {
         int deleted = pgVectorJdbcTemplate.update("DELETE FROM vector_store WHERE metadata->>'layer' = 'doc'");
         log.info("[색인] doc 레이어 벡터 삭제 완료: {}건", deleted);
+    }
+
+    /** source 경로 프리픽스에 매칭되는 벡터만 삭제(도메인 증분 색인용). */
+    public void clearBySourcePrefixes(List<String> sourcePrefixes) {
+        if (sourcePrefixes == null || sourcePrefixes.isEmpty()) {
+            log.info("[도메인 색인] 삭제할 source 프리픽스가 없어 벡터 삭제를 건너뜀");
+            return;
+        }
+
+        String sourceExpr = "translate(metadata->>'source', chr(92), '/')";
+        StringBuilder sql = new StringBuilder("DELETE FROM vector_store WHERE ");
+        List<Object> args = new ArrayList<>();
+        for (int i = 0; i < sourcePrefixes.size(); i++) {
+            if (i > 0) {
+                sql.append(" OR ");
+            }
+            sql.append("(").append(sourceExpr).append(" = ? OR ").append(sourceExpr).append(" LIKE ?)");
+            String prefix = sourcePrefixes.get(i).replace('\\', '/');
+            args.add(prefix);
+            args.add(prefix + "/%");
+        }
+
+        int deleted = pgVectorJdbcTemplate.update(sql.toString(), args.toArray());
+        log.info("[도메인 색인] source 프리픽스 벡터 삭제 완료: {}건 (prefixes={})", deleted, sourcePrefixes);
     }
 
     public void write(List<Document> chunks, IntConsumer progress) {

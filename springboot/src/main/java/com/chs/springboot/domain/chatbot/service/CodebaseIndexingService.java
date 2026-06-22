@@ -12,12 +12,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class CodebaseIndexingService {
 
     private final AsyncReindexRunner runner;
+    private final PageContextRegistry pageContextRegistry;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final ConcurrentHashMap<String, ReindexJob> jobs = new ConcurrentHashMap<>();
 
-    public CodebaseIndexingService(AsyncReindexRunner runner) {
+    public CodebaseIndexingService(AsyncReindexRunner runner, PageContextRegistry pageContextRegistry) {
         this.runner = runner;
+        this.pageContextRegistry = pageContextRegistry;
     }
 
     public ReindexJob startReindex() {
@@ -39,6 +41,23 @@ public class CodebaseIndexingService {
         jobs.put(job.getJobId(), job);
         // 전체 재색인과 동일한 락을 공유해 동시 실행을 막는다. doc 레이어만 증분 색인.
         runner.runDocs(job, () -> running.set(false));
+        return job;
+    }
+
+
+    public ReindexJob startDomainReindex(String domain) {
+        String normalizedDomain = domain == null ? "" : domain.trim().toLowerCase();
+        PageContextRegistry.PageInfo page = pageContextRegistry.find(normalizedDomain);
+        if (page == null) {
+            throw new IllegalArgumentException("unknown reindex domain: " + domain);
+        }
+        if (!running.compareAndSet(false, true)) {
+            throw new IllegalStateException("reindex already running");
+        }
+        ReindexJob job = new ReindexJob(UUID.randomUUID().toString());
+        jobs.put(job.getJobId(), job);
+        // 전체/doc 재색인과 동일한 락을 공유해 동시 실행을 막는다. 해당 도메인 source 만 증분 색인.
+        runner.runDomain(job, normalizedDomain, page.pathPrefixes(), () -> running.set(false));
         return job;
     }
 

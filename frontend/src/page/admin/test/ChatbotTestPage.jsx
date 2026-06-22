@@ -6,6 +6,7 @@ import { RefreshCw } from 'lucide-react';
 import {
     startChatbotReindex,
     startChatbotDocsReindex,
+    startChatbotDomainReindex,
     fetchChatbotReindexStatus,
     fetchChatbotLogSummary,
     fetchChatbotLogTurns,
@@ -29,6 +30,18 @@ const STATUS_LABELS = {
     SUCCESS: '정상',
     ERROR: '오류',
 };
+
+const DOMAIN_OPTIONS = [
+    { value: 'analysis', label: 'Analysis' },
+    { value: 'binance', label: 'Binance' },
+    { value: 'signal', label: 'Signal' },
+    { value: 'trade', label: 'Trade' },
+    { value: 'monitor', label: 'Monitor' },
+    { value: 'weather', label: 'Weather' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'logistics', label: 'Logistics' },
+    { value: 'random', label: 'Random' },
+];
 
 function toLocalDateTimeParam(date) {
     const pad = (value) => String(value).padStart(2, '0');
@@ -92,6 +105,7 @@ export default function ChatbotTestPage() {
     const [reindexing, setReindexing] = useState(false);
     const [reindexMsg, setReindexMsg] = useState('');
     const [reindexError, setReindexError] = useState(false);
+    const [selectedDomain, setSelectedDomain] = useState('analysis');
     const pollRef = useRef(null);
 
     // 로그 조회 상태
@@ -244,6 +258,7 @@ export default function ChatbotTestPage() {
 
     const onReindexFull = () => runReindex(startChatbotReindex);
     const onReindexDocs = () => runReindex(startChatbotDocsReindex);
+    const onReindexDomain = () => runReindex(() => startChatbotDomainReindex(selectedDomain));
 
     const onSelectLog = (id) => {
         setSelectedLogId(id);
@@ -276,13 +291,30 @@ export default function ChatbotTestPage() {
                     {reindexMsg || '대기 중'}
                 </span>
                 <div className={styles.reindexActions}>
-                    <button className={styles.compactButton} onClick={onReindexFull} disabled={reindexing}>
+                    <select
+                        className={styles.domainSelect}
+                        value={selectedDomain}
+                        onChange={(event) => setSelectedDomain(event.target.value)}
+                        disabled={reindexing}
+                        aria-label="도메인 선택"
+                    >
+                        {DOMAIN_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                    <button className={styles.compactButton} onClick={onReindexDomain} disabled={reindexing}>
                         <RefreshCw size={16} className={reindexing ? styles.spin : ''} />
-                        {reindexing ? '색인 중' : '전체 재색인'}
+                        {reindexing ? '색인 중' : '도메인 재색인'}
                     </button>
                     <button className={styles.compactButton} onClick={onReindexDocs} disabled={reindexing}>
                         <RefreshCw size={16} className={reindexing ? styles.spin : ''} />
                         {reindexing ? '색인 중' : '문서만 재색인'}
+                    </button>
+                    <button className={styles.compactButton} onClick={onReindexFull} disabled={reindexing}>
+                        <RefreshCw size={16} className={reindexing ? styles.spin : ''} />
+                        {reindexing ? '색인 중' : '전체 재색인'}
                     </button>
                 </div>
             </div>

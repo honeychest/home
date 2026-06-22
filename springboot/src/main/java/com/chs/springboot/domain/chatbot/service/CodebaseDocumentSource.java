@@ -68,6 +68,31 @@ public class CodebaseDocumentSource {
         return documents;
     }
 
+    /** page/domain 프리픽스에 걸린 소스만 수집(도메인 증분 색인용). */
+    public List<Document> collectDomain(List<String> pathPrefixes) throws Exception {
+        if (pathPrefixes == null || pathPrefixes.isEmpty()) {
+            return List.of();
+        }
+
+        Path base = properties.getSourceBase() != null ? Paths.get(properties.getSourceBase()) : null;
+        List<Document> documents = new ArrayList<>();
+
+        for (String rootStr : properties.getIndexRoots()) {
+            Path root = Paths.get(rootStr);
+            if (!Files.isDirectory(root)) {
+                log.warn("[도메인 색인] 색인 루트가 디렉토리가 아님, 건너뜀: {}", root);
+                continue;
+            }
+            try (var stream = Files.walk(root)) {
+                stream.filter(Files::isRegularFile)
+                      .filter(this::isIncluded)
+                      .filter(p -> isInDomain(base, root, p, pathPrefixes))
+                      .forEach(p -> readDocument(base, root, p, documents));
+            }
+        }
+        return documents;
+    }
+
     private boolean isIncluded(Path path) {
         String name = path.getFileName().toString();
         if (properties.getReindex().getIncludeExtensions().stream().noneMatch(name::endsWith)) {
@@ -90,14 +115,36 @@ public class CodebaseDocumentSource {
             if (content.isBlank()) {
                 return;
             }
-            // base 하위면 base 기준(예: "frontend/src/..."), 아니면 해당 루트 기준으로 상대화.
-            Path relativeFrom = (base != null && path.startsWith(base)) ? base : root;
-            String relativePath = relativeFrom.relativize(path).toString();
+            String relativePath = relativeSourcePath(base, root, path);
             // 경로 기준 레이어 태그: docs/generated/ 하위는 자연어 문서(doc), 그 외는 소스코드(code)
             String layer = relativePath.replace('\\', '/').startsWith("docs/generated/") ? "doc" : "code";
             documents.add(new Document(content, Map.of("source", relativePath, "layer", layer)));
         } catch (Exception e) {
             log.warn("[색인] 파일 읽기 실패, 건너뜀: {} | 원인: {}", path, e.getMessage());
         }
+    }
+
+    private boolean isInDomain(Path base, Path root, Path path, List<String> pathPrefixes) {
+        try {
+            String source = relativeSourcePath(base, root, path).replace('\\', '/');
+            for (String prefix : pathPrefixes) {
+                if (prefix == null || prefix.isBlank()) {
+                    continue;
+                }
+                String normalizedPrefix = prefix.replace('\\', '/');
+                if (source.equals(normalizedPrefix) || source.startsWith(normalizedPrefix + "/")) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[도메인 색인] 경로 계산 실패, 건너뜀: {} | 원인: {}", path, e.getMessage());
+        }
+        return false;
+    }
+
+    private String relativeSourcePath(Path base, Path root, Path path) {
+        // base 하위면 base 기준(예: "frontend/src/..."), 아니면 해당 루트 기준으로 상대화.
+        Path relativeFrom = (base != null && path.startsWith(base)) ? base : root;
+        return relativeFrom.relativize(path).toString();
     }
 }

@@ -47,6 +47,21 @@ class VectorIndexWriterTest {
         assertThat(progress).containsExactly(2, 4, 5);
     }
 
+    @Test
+    @DisplayName("도메인 증분 색인은 source 프리픽스에 해당하는 벡터만 삭제한다")
+    void clearBySourcePrefixes_deletesMatchingSources() {
+        ChatbotProperties properties = new ChatbotProperties();
+        VectorIndexWriter writer = new VectorIndexWriter(vectorStore, pgVectorJdbcTemplate, properties);
+
+        writer.clearBySourcePrefixes(List.of("springboot\\src\\main\\java\\com\\chs\\springboot\\domain\\analysis"));
+
+        verify(pgVectorJdbcTemplate).update(
+                "DELETE FROM vector_store WHERE (translate(metadata->>'source', chr(92), '/') = ? OR translate(metadata->>'source', chr(92), '/') LIKE ?)",
+                "springboot/src/main/java/com/chs/springboot/domain/analysis",
+                "springboot/src/main/java/com/chs/springboot/domain/analysis/%"
+        );
+    }
+
     private Document doc(String text) {
         return new Document(text, Map.of("source", text + ".java"));
     }

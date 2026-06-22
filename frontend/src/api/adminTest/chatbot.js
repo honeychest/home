@@ -13,6 +13,11 @@ export function startChatbotDocsReindex() {
     return api.post('/api/admin/chatbot/reindex/docs');
 }
 
+// 도메인별 증분 재색인(실행) — PageContextRegistry 의 pageId/domain 소스만 갱신.
+export function startChatbotDomainReindex(domain) {
+    return api.post(`/api/admin/chatbot/reindex/domain/${encodeURIComponent(domain)}`);
+}
+
 // 재색인 작업 상태 조회(관찰) — { status, processedChunks, totalChunks, documentCount, error }
 export function fetchChatbotReindexStatus(jobId) {
     return api.get(`/api/admin/chatbot/reindex/${jobId}`);
