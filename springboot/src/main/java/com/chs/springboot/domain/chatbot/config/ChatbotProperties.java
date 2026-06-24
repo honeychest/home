@@ -85,6 +85,8 @@ public class ChatbotProperties {
     }
 
     public static class Model {
+        // Codex 기능 전체 on/off. false 이면 runner 호출 없이 LOCAL 로 전환한다.
+        private boolean codexEnabled = true;
         // 채팅방(sessionId)별 Codex 성공 답변 허용 횟수. 0 이면 Codex 선택 시 즉시 LOCAL 로 전환된다.
         private int codexLimitPerChat = 2;
         // external runner HTTP 호출이 이 시간 안에 끝나지 않으면 실패로 보고 LOCAL 로 폴백한다.
@@ -93,6 +95,14 @@ public class ChatbotProperties {
         private String codexRunnerMode = "external";
         private String codexRunnerUrl;
         private String codexRunPath = "/api/codex/run";
+
+        public boolean isCodexEnabled() {
+            return codexEnabled;
+        }
+
+        public void setCodexEnabled(boolean codexEnabled) {
+            this.codexEnabled = codexEnabled;
+        }
 
         public int getCodexLimitPerChat() {
             return codexLimitPerChat;

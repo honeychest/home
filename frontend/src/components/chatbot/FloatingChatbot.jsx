@@ -103,13 +103,14 @@ function FloatingChatbot() {
                 const res = await apiClient.get('/api/chat/model-policy', { params: { sessionId } });
                 const data = res.data || {};
                 setModelPolicy(data);
-                if (Number(data.remainingCodexUses) <= 0) {
+                if (data.codexEnabled === false || Number(data.remainingCodexUses) <= 0) {
                     setModel('LOCAL');
                 }
             } catch {
                 setModelPolicy({
                     codexLimitPerChat: DEFAULT_CODEX_LIMIT,
                     remainingCodexUses: DEFAULT_CODEX_LIMIT,
+                    codexEnabled: true,
                     defaultModel: 'CODEX',
                     fallbackModel: 'LOCAL',
                 });
@@ -118,6 +119,12 @@ function FloatingChatbot() {
 
         loadModelPolicy();
     }, [open]);
+
+    useEffect(() => {
+        if (modelPolicy?.codexEnabled === false) {
+            setModel('LOCAL');
+        }
+    }, [modelPolicy]);
 
     const send = async () => {
         const q = question.trim();
@@ -146,11 +153,12 @@ function FloatingChatbot() {
                 setModelPolicy({
                     codexLimitPerChat: Number(data.codexLimitPerChat ?? DEFAULT_CODEX_LIMIT),
                     remainingCodexUses: Number(data.remainingCodexUses),
+                    codexEnabled: data.codexEnabled !== false,
                     defaultModel: 'CODEX',
                     fallbackModel: 'LOCAL',
                 });
             }
-            if (data.fallbackReason === 'codex_limit_exceeded') {
+            if (data.fallbackReason === 'codex_limit_exceeded' || data.fallbackReason === 'codex_disabled') {
                 setModel('LOCAL');
             }
             const answer = data.notice
@@ -185,6 +193,7 @@ function FloatingChatbot() {
     const sendDisabled = loading || !question.trim();
     const remainingCodexUses = Number(modelPolicy?.remainingCodexUses ?? DEFAULT_CODEX_LIMIT);
     const codexLimitPerChat = Number(modelPolicy?.codexLimitPerChat ?? DEFAULT_CODEX_LIMIT);
+    const codexEnabled = modelPolicy?.codexEnabled !== false;
 
     return (
         <div id="chatbot-root" className={styles.root}>
@@ -252,13 +261,15 @@ function FloatingChatbot() {
                             onChange={(e) => setModel(e.target.value)}
                             disabled={loading}
                         >
-                            <option value="CODEX" disabled={remainingCodexUses <= 0}>
+                            <option value="CODEX" disabled={!codexEnabled || remainingCodexUses <= 0}>
                                 Codex
                             </option>
                             <option value="LOCAL">LOCAL</option>
                         </select>
                         <span className={styles.modelMeta}>
-                            Codex {remainingCodexUses}/{codexLimitPerChat}회 남음
+                            {codexEnabled
+                                ? `Codex ${remainingCodexUses}/${codexLimitPerChat}회 남음`
+                                : 'Codex 비활성화됨'}
                         </span>
                     </div>
 

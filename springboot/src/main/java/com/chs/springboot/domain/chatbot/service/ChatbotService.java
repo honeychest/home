@@ -55,10 +55,15 @@ public class ChatbotService {
     }
 
     public ChatModelPolicyResponse modelPolicy(String sessionId) {
-        return new ChatModelPolicyResponse(codexLimit(), remainingCodexUses(sessionId), "CODEX", "LOCAL");
+        return new ChatModelPolicyResponse(codexLimit(), remainingCodexUses(sessionId), codexEnabled(),
+                codexEnabled() ? "CODEX" : "LOCAL", "LOCAL");
     }
 
     public ChatCodexHealthResponse codexHealth() {
+        if (!codexEnabled()) {
+            return new ChatCodexHealthResponse(false, "codex_disabled", null,
+                    "Codex feature is disabled by configuration.");
+        }
         CodexRunResult result = codexAnswerGenerator.healthCheck();
         return new ChatCodexHealthResponse(
                 result.isSuccess() && "OK".equalsIgnoreCase(result.answer().trim()),
@@ -136,6 +141,12 @@ public class ChatbotService {
             return new AnswerResult(answer, "LOCAL", null, null);
         }
 
+        if (!codexEnabled()) {
+            String notice = "Codex 기능이 현재 비활성화되어 LOCAL 모델로 전환했습니다. LOCAL 모델은 30초 이상 걸릴 수 있습니다.";
+            String answer = answerGenerator.generate(llmQuestion, searchQuery, toMessages(history), pageContext);
+            return new AnswerResult(answer, "LOCAL", "codex_disabled", notice);
+        }
+
         int remaining = remainingCodexUses(sessionId);
         if (remaining <= 0) {
             String notice = "이 채팅방의 Codex 사용 횟수 " + codexLimit()
@@ -188,6 +199,10 @@ public class ChatbotService {
 
     private int codexLimit() {
         return Math.max(0, properties.getModel().getCodexLimitPerChat());
+    }
+
+    private boolean codexEnabled() {
+        return properties.getModel().isCodexEnabled();
     }
 
     private String usageKey(String sessionId) {

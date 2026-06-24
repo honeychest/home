@@ -15,6 +15,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -84,6 +86,24 @@ class ChatbotServiceTest {
     }
 
     @Test
+    @DisplayName("Codex disabled 상태에서는 runner 호출 없이 LOCAL 폴백한다")
+    void ask_doesNotCallRunnerWhenCodexDisabled() {
+        ChatbotProperties properties = new ChatbotProperties();
+        properties.getModel().setCodexEnabled(false);
+        ChatbotService service = service(properties);
+        RetrievedEvidence evidence = new RetrievedEvidence(List.of(), List.of());
+        when(evidenceRetriever.retrieve("질문", null)).thenReturn(evidence);
+        when(answerGenerator.generate(any(), any(), any(), any())).thenReturn("LOCAL 답변");
+
+        ChatResponse response = service.ask("질문", List.of(), null, "session-1", "CODEX");
+
+        assertThat(response.getAnswer()).isEqualTo("LOCAL 답변");
+        assertThat(response.getEffectiveModel()).isEqualTo("LOCAL");
+        assertThat(response.getFallbackReason()).isEqualTo("codex_disabled");
+        verify(codexAnswerGenerator, never()).generate(any(), any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("Codex 헬스체크는 external runner 에 Say OK only 요청 결과를 반환한다")
     void codexHealth_returnsExternalRunnerStatus() {
         ChatbotService service = service();
@@ -97,13 +117,17 @@ class ChatbotServiceTest {
     }
 
     private ChatbotService service() {
+        return service(new ChatbotProperties());
+    }
+
+    private ChatbotService service(ChatbotProperties properties) {
         return new ChatbotService(
                 evidenceRetriever,
                 answerGenerator,
                 codexAnswerGenerator,
                 pageContextRegistry,
                 chatbotLogService,
-                new ChatbotProperties()
+                properties
         );
     }
 }
