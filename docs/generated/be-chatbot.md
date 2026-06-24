@@ -1,115 +1,78 @@
-# Chatbot (코드베이스 RAG)
+# Chatbot 도메인 (코드베이스 RAG · 백엔드)
 
-> 이 문서는 로컬 LLM(gemma-4-26b-a4b-it-mlx)이 소스 코드를 근거로 자동 생성했다. 검증 전 초안이다.
+> wiki-refresh로 실제 소스를 읽고 검증함(2026-06-24). 페이지 간 관계는 `index.md` 참고.
 
-## 목차
-- 개요 및 시스템 아키텍처
-- 설정 및 환경 구성 (Properties & Config)
-- 코드베이스 색인 파이프라인 (Reindexing Pipeline)
-- 심볼 인지 청킹 전략 (Symbol-Aware Chunking)
-- 검색 및 근거 수집 (Evidence Retrieval)
-- RAG 기반 답변 생성 (Grounded Answer Generation)
-- 관리 및 모니터링 API (Admin & Status Control)
+## 한 줄 요약
+이 프로젝트 자신의 코드/문서를 벡터로 색인해두고, 질문이 오면 관련 청크를 검색(RAG)해 LLM이 **근거 기반으로만** 답하게 하는 챗봇이다. 현재 보고 있는 화면(pageId) 가중, 후속질문 맥락 보강, 질문/답변 로그 적재, 3종 재색인(전체·문서·도메인)을 갖췄다.
 
-## 개요 및 시스템 아키텍처
+## 이런 걸 물을 때 찾으면 된다 (검색 키워드)
+- "챗봇은 어떻게 답을 만들어? RAG 파이프라인 / 벡터 검색"
+- "재색인 / reindex / docs 색인 / 도메인별 증분 색인 차이"
+- "현재 페이지 기반 검색 가중 pageId / pageBoost / overFetch"
+- "후속질문 '자세히' 맥락 보강 / 이어가기 단문 처리"
+- "챗봇 로그 / turns / 응답 지연 / 환각 억제 시스템 프롬프트"
+- "PGVector / 임베딩 / 청킹 / SYMBOL_AWARE / GitNexus 심볼 경계"
 
-본 시스템은 코드베이스를 대상으로 하는 RAG(Retrieval-Augmented Generation) 기반의 챗봇 서비스입니다. 시스템은 크게 코드베이스 데이터 수집 및 색인(Indexing) 프로세스와 사용자 질의에 대한 답변 생성(Generation) 프로세스로 구성됩니다.
+## 핵심 개념·용어
+- **RAG(Retrieval-Augmented Generation)**: 질문과 비슷한 문서 청크를 먼저 검색해 그 내용을 근거로 LLM이 답을 생성하는 방식. 환각을 줄인다.
+- **layer(레이어)**: 색인된 청크의 출처 구분 메타데이터. `docs/generated/` 하위 자연어 문서면 `doc`, 그 외 실제 소스코드면 `code`. (이 wiki-refresh가 갱신하는 건 `doc` 레이어.)
+- **pageId**: 사용자가 보고 있는 화면 식별자(예: `signal`, `weather`). 프론트(FloatingChatbot)가 라우트에서 뽑아 보낸다.
+- **소프트 가중(pageBoost)**: pageId에 해당하는 경로의 청크에 점수를 더해 재정렬. 하드 필터가 아니라 매칭 0건이어도 전역 결과는 그대로.
+- **청킹(chunking)**: 파일을 임베딩 단위로 쪼개는 것. 전략 `TOKEN`(토큰 단위) 또는 `SYMBOL_AWARE`(GitNexus 심볼 경계로 메서드/클래스 단위).
+- **PGVector**: PostgreSQL 벡터 확장. 임베딩을 `vector_store` 테이블에 저장하고 코사인 유사도 검색.
+- **턴(turn)/대화(conversation)**: 질문-답변 1회가 turn, 같은 sessionId 묶음이 conversation.
 
-**1. 데이터 수집 및 색인 프로세스 (Indexing Pipeline)**
-코드베이스의 소스 코드를 벡터 저장소에 저장하기 위한 비동기식 풀 리빌드(Full Rebuild) 과정을 거칩니다.
-*   **작업 오케스트레이션**: `CodebaseIndexingService`가 색인 작업의 시작을 제어하며, 중복 실행 방지를 위한 락(Lock)과 작업 상태 관리를 수행합니다. 실제 비동기 실행은 `AsyncReindexRunner`를 통해 프록시를 경유하여 수행됩니다.
-*   **데이터 수집**: `CodebaseDocumentSource`가 설정된 루트 경로(`ChatbotProperties.indexRoots`)를 탐색하며, 지정된 확장자를 가진 파일을 읽어 `Document` 객체로 생성합니다.
-*   **청킹(Chunking) 전략**: `CodebaseDocumentChunker`는 설정된 전략에 따라 두 가지 방식으로 동작합니다.
-    *   **TOKEN**: `TokenTextSplitter`를 사용하여 토큰 단위로 분할합니다.
-    립 **SYMBOL_AWARE**: `SymbolAwareChunker`가 `GitNexusBoundaryProvider`로부터 가져온 심볼 경계 정보를 활용하여 메서드나 클래스 단위로 정교하게 분할합니다. 만약 심볼 경계 정보가 없거나 유효하지 않은 경우 토큰 분할 방식으로 폴백(Fallback)합니다.
-*   **벡터 저장**: `VectorIndexWriter`는 기존 데이터를 삭제(`clear`)한 후, 생성된 청크들을 배치(Batch) 단위로 `VectorStore`에 저장합니다.
+## 구조 / 흐름 (확인된 코드 기준)
 
-**2. 질의응답 프로세스 (RAG Pipeline)**
-사용자의 질문에 대해 관련 코드를 검색하고 답변을 생성하는 과정입니다.
-*   **질의 수신**: `ChatbotController`가 사용자의 질문을 수신하여 `ChatbotService`로 전달합니다.
-*   **근거 검색(Retrieval)**: `EvidenceRetriever`가 `VectorStore`를 대상으로 유사도 검색(`similaritySearch`)을 수행하여 질문과 관련된 코드 청크들을 추출합니다.
-*   **답변 생성(Generation)**: `GroundedAnswerGenerator`는 검색된 근거를 바탕으로 `ChatClient`를 사용하여 답변을 생성합니다. 이때 `ChatbotConfig`에 정의된 시스템 프롬프트가 적용되어, 반드시 제공된 근거 내에서만 답변하도록 제어됩니다.
-*   **결과 반환**: 생성된 답변과 검색된 근거 파일 목록(`sources`)이 `ChatResponse`에 담겨 사용자에게 반환됩니다.
+파일 위치: `springboot/src/main/java/com/chs/springboot/domain/chatbot/`
 
-## 설정 및 환경 구성 (Properties & Config)
+### 질의응답 — `POST /api/chat` (`ChatbotController` → `ChatbotService.ask(question, history, pageId, sessionId)`)
+1. **페이지 정보 조회**: `PageContextRegistry.find(pageId)` → 화면 설명(promptHint)·경로 프리픽스.
+2. **검색 질의 보강**(`buildSearchQuery`): 직전 사용자 질문 최근 `SEARCH_CONTEXT_TURNS`(=2)개를 현재 질문 앞에 붙여 "자세히 설명해줘" 같은 맥락 의존 후속질문도 올바른 문서를 찾게 한다.
+3. **근거 검색**(`EvidenceRetriever.retrieve(searchQuery, pageId)`): 아래 *검색* 참고.
+4. **이어가기 단문 처리**(`isContinuation`): "응/그래/자세히/더" 등 짧은 호응이면 LLM 질문도 보강본으로 교체(새 주제면 원문 유지).
+5. **페이지 안내문 주입**: `page.promptHint() + (label)`을 `pageContext`로 전달.
+6. **답변 생성**(`GroundedAnswerGenerator.generate(llmQuestion, searchQuery, history, pageContext)`).
+7. **로그 적재**: 성공/오류를 `ChatbotLogService`에 기록(실패해도 답변은 유지). 응답은 `ChatResponse(answer, sources)`.
+- 대화 이력은 최근 `MAX_HISTORY`(=12)개만 Spring AI 메시지로 변환해 맥락용으로 주입.
 
-### 1. 챗봇 동작 및 청킹 전략 설정
-`ChatbotProperties`(`springboot/src/main/java/com/chs/springboot/domain/chatbot/config/ChatbotProperties.java`)를 통해 챗봇 운영에 필요한 핵심 파라미터를 관리한다.
-*   **색인 대상 및 경로**: `indexRoots`를 통해 색인할 루트 디렉토리 목록을 지정하며, `sourceBase` 설정 시 메타데이터의 경로를 해당 기준에 맞춰 상대화한다.
-*   **청킹 전략 (`Reindex`)**: 
-    *   `chunkStrategy`: `TOKEN`(기존 토큰 기반 분할)과 `SYMBOL_AWARE`(GitNexus 심볼 경계 활용) 중 하나를 선택할 수 있다.
-    *   `chunkSize`, `minChunkSizeChars`, `minChunkLengthToEmbed`, `maxNumChunks`: 청킹 시 사용되는 크기 및 제약 조건이다.
-    *   `includeExtensions`: 색인 대상 파일 확장자 목록을 관리한다. (기본값: `.java`, `.html`, `.md`, `.tsx`, `.jsx`, `.ts`, `.js`)
-    *   `overlapTokens`: 인접 청크 간 경계 손실 방지를 위한 오버랩 토큰 수이다.
-    *   `batchSize`: 벡터 저장소 기록 시 사용할 배치 크기이다.
-    *   `gitnexusRepo`: 심볼 경계 조회를 위한 GitNexus 저장소명이다.
+### 검색(근거 수집) — `EvidenceRetriever.retrieve(question, pageId)`
+- `topK`(=6) 그대로 뽑지 않고 `topK * overFetchMultiplier`(=4) = 24개를 과조회(`vectorStore.similaritySearch`).
+- pageId 경로 프리픽스로 시작하는 source 청크에는 `pageBoost`(=0.15)를 더한 **유효점수**로 재정렬해 상위 `topK`만 채택(원본 score는 불변, 정렬 시점에만 가산).
+- 채택 청크의 `source` 메타데이터를 distinct로 모아 `RetrievedEvidence(documents, sources)` 반환.
 
-### 2. 벡터 데이터베이스(PGVector) 설정
-`PgVectorConfig`(`springboot/src/main/java/com/chs/springboot/domain/chatbot/config/PgVectorConfig.java`)와 `PgVectorProperties`(`springboot/sringboot/src/main/java/com/chs/springboot/domain/chatbot/config/PgVectorProperties.java`)를 통해 PostgreSQL의 벡터 확장 기능을 위한 설정을 수행한다.
-*   **데이터소스 분리**: MySQL `@Primary` 데이터소스와 충돌을 방지하기 위해 `pgVectorDataSource` 및 `pgVectorJdbcTemplate`을 별도로 생성하여 관리한다.
-*   **벡터 저장소 구성**: `vectorStore` 빈은 `PgVectorStore`를 사용하여 생성된다.
-    *   `dimensions`: 임베딩 모델의 출력 차원(예: 2560)과 일치하도록 설정한다.
-    *   `distanceType`: 코사인 유사도(`COSINE_DISTANCE`)를 사용한다.
-    *   `indexType`: 데이터 규모를 고려하여 인덱스 없이 정확 검색(`NONE`)을 수행하도록 설정되어 있다.
-    *   `initializeSchema(true)`: 최초 기동 시 `vector_store` 테이블을 자동 생성한다.
+### 답변 생성 — `GroundedAnswerGenerator` + `ChatbotConfig`
+- `QuestionAnswerAdvisor`(VectorStore)로 `searchQuery` 기준 컨텍스트를 붙이되, 커스텀 `QA_TEMPLATE`로 "근거 종합은 허용, 코드/프로젝트 사실은 근거에 있는 것만, 일반 개념은 '일반적으로~'로 허용, 둘 다 없으면 모름" 규칙을 강제.
+- `ChatClient` 빈(`ChatbotConfig.chatbotChatClient`)은 시스템 프롬프트로 같은 2단 분리 규칙(코드 사실 vs 일반 지식)과 "근거 파일 경로는 본문에 적지 마라"를 고정 → 환각 억제. (출처 경로는 화면에서 별도 표시.)
+- `pageContext`가 있으면 "이 페이지/여기" 지시어가 그 화면을 가리키도록 질문 앞에 화면 안내를 덧붙인다.
+- LLM 백엔드는 LM Studio(OpenAI 호환). `HttpClientConfig`가 HTTP/1.1 고정(평문 HTTP/2 hang 회피).
 
-### 3. 외부 통신 및 클라이언트 설정
-*   **HTTP/1.1 고정**: `HttpClientConfig`(`springboot/src/main/java/com/chs/springboot/domain/chatbot/config/HttpClientConfig.java`)는 `RestClientCustomizer`를 통해 외부 호출 시 HTTP 버전을 1.1로 고정한다. 이는 LM Studio와 같은 서버가 평문 HTTP/2를 처리하지 못해 발생하는 무한 대기(hang) 현상을 방지하기 위함이다.
-*   **챗봇 클라이언트**: `ChatbotConfig`(`springboot/src/main/java/com/chs/springboot/domain/chatbot/config/ChatbotConfig.java`)는 `ChatClient` 빈을 생성하며, 시스템 프롬프트를 통해 "제공된 근거에 있는 내용만 사용"하도록 강제하여 환각을 억제한다.
+### 색인 파이프라인 — `CodebaseIndexingService`(오케스트레이션) → `AsyncReindexRunner`(`@Async` 실제 실행)
+- 동시 실행은 `AtomicBoolean running` 락으로 1건만 허용(다른 모드도 같은 락 공유, 중복 시 409). 작업은 `ReindexJob`(jobId·상태·진행률).
+- `@Async`는 프록시 기반이라 같은 클래스 내부 호출이면 무시되므로, 실행부를 별도 빈(`AsyncReindexRunner`)으로 분리해 반드시 프록시 경유.
+- **3가지 재색인 모드**(모두 `POST` 후 `GET /reindex/{jobId}`로 폴링):
+  1. `POST /api/admin/chatbot/reindex` — 전체 풀 리빌드. `clear()`(vector_store 전체 삭제) → `collect()`(모든 indexRoots) → 청킹 → write.
+  2. `POST /api/admin/chatbot/reindex/docs` — **doc 레이어만 증분**. `clearDocs()`(`metadata->>'layer'='doc'`만 삭제) → `collectDocs()`(`docs/generated`만) → write. 소스코드 벡터는 보존. **← 이 wiki-refresh가 쓰는 엔드포인트.**
+  3. `POST /api/admin/chatbot/reindex/domain/{domain}` — 특정 page/domain 소스만 증분. `clearBySourcePrefixes(...)`(해당 source 프리픽스 벡터만 삭제) → `collectDomain(prefixes)` → write. `{domain}`은 PageContextRegistry에 등록된 pageId여야 함(아니면 400).
+- **수집**(`CodebaseDocumentSource`): `indexRoots`를 walk하며 `includeExtensions`(.java/.html/.md/.tsx/.jsx/.ts/.js) 파일만, `excludePathPatterns`(에러 화면/템플릿) 제외. 각 Document에 `source`(상대경로)와 `layer`(doc/code) 메타데이터 부여.
+- **청킹**(`CodebaseDocumentChunker`): `chunkStrategy=TOKEN`이면 `TokenTextSplitter`. `SYMBOL_AWARE`이면 `SymbolAwareChunker`가 `GitNexusBoundaryProvider`(`npx gitnexus cypher`로 심볼 경계 조회)를 써서 '리프 우선 + gap-fill'로 메서드/클래스 단위 분할, 경계 없음/stale이면 토큰 분할로 폴백. 인접 청크 `overlapTokens`(=64) 오버랩. 청크 메타데이터에 `lines`(줄 범위)·`symbol`(심볼명) 포함. `GitNexusBoundaryProvider`는 외부 CLI 의존이라 타임아웃·파싱오류 등 모든 실패를 흡수해 빈 맵을 반환(→토큰 폴백)하므로 색인이 중단되지 않는다.
+- **쓰기**(`VectorIndexWriter`): `batchSize`(=8) 단위로 `vectorStore.add(...)`, 진행률을 `ReindexJob`에 갱신.
+- 설정 빈: `ChatbotProperties`(`chs.chatbot.*`) — topK=6, overFetchMultiplier=4, pageBoost=0.15, indexRoots, sourceBase, Reindex(청킹/배치/확장자/제외/전략/gitnexusRepo="lab").
+- 벡터 저장소 설정: `PgVectorConfig`/`PgVectorProperties` — MySQL `@Primary`와 충돌 피하려 `pgVectorDataSource`/`pgVectorJdbcTemplate` 분리, 코사인 거리, dimensions=임베딩 차원, `indexType=NONE`(인덱스 없이 정확검색), `initializeSchema(true)`(최초 기동 시 `vector_store` 테이블 자동 생성).
 
-## 코드베이스 색인 파이프라인 (Reindexing Pipeline)
+### 현재 화면 컨텍스트 — `PageContextRegistry`
+- pageId → `PageInfo(label, promptHint, searchTerms, pathPrefixes)` 정적 맵. 등록 pageId: `signal, analysis, binance, trade, logistics, monitor, weather, random, admin`.
+- `pathPrefixes`는 EvidenceRetriever의 pageId 소프트 가중과 도메인 증분 색인 대상 선정에 함께 쓰인다. 모르는 pageId는 null(무시).
 
-코드베이스 색인 파이프라인은 `CodebaseIndexingService`를 통해 오케스트레이션되며, `AsyncReindexRunner.run()` 메서드를 통해 비동기적으로 실행됩니다. 전체 프로세스는 다음과 같은 단계로 구성됩니다.
+### 로그 적재·조회 — `ChatbotLogService` + Admin API
+- `recordSuccess/recordError`(둘 다 `@Transactional`): `findOrCreateConversation(sessionId)` 후 `ChatbotTurn` 저장. 저장 필드: question/answer/searchQuery/llmQuestion/pageContext/status(SUCCESS·ERROR)/issueType(NONE·LATENCY·ERROR)/latencyMs/evidenceCount/errorMessage. 응답 지연 임계 `SLOW_THRESHOLD_MS`(=20000ms) 이상이면 issueType=LATENCY. 근거 청크는 `ChatbotRetrievedEvidence`(rankNo·source·symbol·lineRange·score·preview)로 저장.
+- 환경 구분 `sourceEnv`(프로파일)로 분리 집계. 모델: `ChatbotConversation`, `ChatbotTurn`, `ChatbotRetrievedEvidence`, `ChatbotAnalysis`(이슈 분석/제안, `ChatbotAnalysisAuthor`).
+- Admin 조회: `GET /api/admin/chatbot/logs/summary`(총건·의심·평균지연·느린건), `GET /api/admin/chatbot/logs/turns`(필터: from/to/pageId/issueType/status/minLatencyMs/keyword + 페이징), `GET /api/admin/chatbot/logs/turns/{id}`(근거·분석 포함 상세).
 
-1.  **데이터 수집 (Collection)**: `CodebaseDocumentSource.collect()`가 실행되어 설정된 색인 루트(`ChatbotProperties.indexRoots`)를 탐색합니다. 지정된 확장자(`ChatbotProperties.Reindex.includeExtensions`)에 해당하는 파일을 읽어 `Document` 객체로 생성하며, 파일 경로는 설정된 `sourceBase`를 기준으로 상대화되어 메타데이터에 저장됩니다.
-2.  **청킹 (Chunking)**: 수집된 문서들은 `CodebaseDocumentChunker.chunk()`를 통해 분할됩니다. 
-    *   `SYMBOL_AWARE` 전략이 활성화된 경우, `SymbolAwareChunker.chunk()`가 호출됩니다. 이 과정에서 `GitNexusBoundaryProvider.loadBoundaries()`를 통해 GitNexus로부터 심볼 경계 정보를 가져옵니다. 
-    *   `SymbolAwareChunker`는 '리프 우선(Leaf-first)' 방식을 사용하여 가장 작은 심볼 단위를 우선적으로 청크로 채택하고, 남은 영역을 'gap-fill' 방식으로 처리합니다. 너무 큰 세그먼트는 `TokenTextSplitter`를 통해 분할되며, 인접 청크 간에는 설정된 오버랩(`overlapTokens`)이 적용됩니다.
-    *   심볼 경계가 없거나 유효하지 않은 경우(예: `stale`한 경계), 해당 파일은 자동으로 기존의 토큰 기반 분할 방식으로 폴백(Fallback)됩니다.
-3.  **색인 쓰기 (Writing)**: 생성된 청크들은 `VectorIndexWriter.write()`를 통해 저장소에 기록됩니다. 
-    *   작업 시작 시 `VectorIndexWriter.clear()`가 호출되어 기존의 `vector_store` 테이블 데이터를 삭제합니다.
-    *   청크들은 설정된 배치 크기(`ChatbotProperties.Reindex.batchSize`) 단위로 `VectorStore.add()`를 통해 저장됩니다. 
-    *   진행 상태는 `ReindexJob` 객체에 실시간으로 업데이트되어 작업의 진행률(`processedChunks`)과 완료 상태를 관리합니다.
+### 관리 엔드포인트 요약 (`ChatbotAdminController`, `@RequestMapping("/api/admin/chatbot")`)
+- `POST /reindex`, `POST /reindex/docs`, `POST /reindex/domain/{domain}`, `GET /reindex/{id}`
+- `GET /logs/summary`, `GET /logs/turns`, `GET /logs/turns/{id}`
 
-## 심볼 인지 청킹 전략 (Symbol-Aware Chunking)
-
-심볼 인지 청킹 전략은 `ChatbotProperties.ChunkStrategy.SYMBOL_AWARE` 설정 시 동작하며, GitNexus의 심볼 경계 정보를 활용하여 코드를 메서드나 클래스 단위로 정밀하게 분할하는 방식이다. `GitNexusBoundaryProvider`가 `npx gitnexus cypher` 명령을 통해 추출한 파일별 심볼 경계(시작 줄, 끝 줄, 심볼명)를 기반으로 수행된다.
-
-핵심 알고리즘은 '리프 우선(Leaf-first)' 및 'Gap-fill' 전략을 따른다. `SymbolAwareChunker.buildSegments` 메서드는 가장 작은(안쪽) 심볼을 우선적으로 점유하여 청크 단위로 채택한다. 이를 통해 클래스보다 하위 개념인 메서드/함수가 먼저 라인을 점유하게 하며, 심볼이 겹치는 상위 컨테이너는 스킵하여 내용 중복을 방지한다. 심볼에 포함되지 않은 나머지 줄들은 `gap-fill` 과정을 통해 연속된 구간으로 묶인다.
-
-생성된 세그먼트는 `mergeAndSplit` 과정을 거친다. 설정된 `chunkSize`를 초과하는 큰 세그먼트는 `TokenTextSplitter`를 통해 다시 쪼개지며, 작은 세그먼트들은 `minChunkSizeChars`를 충족할 때까지 인접한 세그먼트들과 병합된다. 또한 `applyOverlap` 메서드를 통해 인접 청크 간에 이전 청크의 꼬리 부분을 줄 단위로 붙여 경계에서의 정보 손실을 방지한다.
-
-안전장치로서 `SymbolAwareChunker`는 다음과 같은 경우 토큰 분할(Token-based splitting)로 폴백한다.
-* `source` 메타데이터가 존재하지 않는 경우
-* 파일 내에 유효한 심볼 경계가 없는 경우
-* 추출된 경계의 끝줄이 실제 파일의 전체 줄 수를 초과하는 경우(`stale` 의심)
-
-최종적으로 생성된 청크는 `source` 경로, 줄 범위(`lines`), 그리고 추출된 심볼명(`symbol`)을 메타데이터로 포함하는 `Document` 객체로 변환된다.
-
-## 검색 및 근거 수집 (Evidence Retrieval)
-
-`EvidenceRetriever` 클래스는 `VectorStore`를 사용하여 질문과 관련된 코드베이스 근거를 검색하는 역할을 수행한다. `retrieve(String question)` 메서드는 `ChatbotProperties`에 설정된 `topK` 값을 기반으로 `SearchRequest`를 생성하여 `vectorStore.similaritySearch`를 호출한다.
-
-검색 결과로 반환된 `Document` 리스트에서 각 문서의 메타데이터에 포함된 `source` 값을 추출한다. 이 과정에서 `null`이거나 공백인 값은 제외하며, `distinct()`를 통해 중복된 파일 경로를 제거한다. 최종적으로 검색된 문서 목록과 정제된 소스 경로 리스트를 `RetrievedEvidence` 객체에 담아 반환한다.
-
-이 과정에서 사용되는 데이터 흐름은 다음과 같다:
-*   `ChatbotService.ask(String question)` 메서드가 `evidenceRetriever.retrieve(question)`를 호출하여 근거를 확보한다. (`springboot/src/main/java/com/chs/springboot/domain/chatbot/service/ChatbotService.java`)
-*   `EvidenceRetriever.retrieve(String question)`는 `vectorStore`를 통해 유사도 검색을 수행하고, 메타데이터의 `source` 정보를 추출하여 `RetrievedEvidence`를 생성한다. (`springboot/src/main/java/com/chs/springboot/domain/chatbot/service/EvidenceRetriever.java`)
-*   `RetrievedEvidence`는 검색된 `Document` 목록과 추출된 `sources` 문자열 리스트를 보유한다. (`springboot/src/main/java/com/chs/springboot/domain/chatbot/service/RetrievedEvidence.java`)
-
-## RAG 기반 답변 생성 (Grounded Answer Generation)
-
-RAG 기반 답변 생성은 `ChatbotService`가 질문을 수신하면 `EvidenceRetriever`를 통해 관련 근거를 검색하고, `GroundedAnswerGenerator`가 이를 바탕으로 답변을 생성하는 흐름으로 진행됩니다.
-
-먼저 `EvidenceRetriever`는 `VectorStore`를 사용하여 질문과 유사한 문서를 검색합니다. 이때 `ChatbotProperties`에 설정된 `topK` 값을 기준으로 검색을 수행하며, 검색된 각 `Document`의 메타데이터에서 `source` 정보를 추출하여 질문과 관련된 파일 경로 목록을 포함한 `RetrievedEvidence` 객체를 생성합니다 (`springboot/src/main/java/com/chs/springboot/domain/chatbot/service/EvidenceRetriever.java`).
-
-검색된 근거를 바탕으로 답변을 생성하는 단계는 `GroundedAnswerGenerator`에서 담당합니다. 이 클래스는 `QuestionAnswerAdvisor`를 사용하여 `VectorStore`에 저장된 정보를 검색할 수 있는 어드바이저를 구성합니다. 이후 `ChatClient`의 프롬프트에 해당 어드바이저를 등록하여 질문을 전달함으로써, 검색된 컨텍스트 내에서만 답변이 생성되도록 합니다 (`springboot/src/main/java/com/chs/springboot/domain/chatbot/service/GroundedAnswerGenerator.java`).
-
-최종적으로 `ChatbotService`는 생성된 답변과 `EvidenceRetriever`로부터 얻은 근거 파일 목록을 결합하여 `ChatResponse` 객체를 반환합니다 (`springboot/src/main/java/com/chs/springboot/domain/chatbot/service/ChatbotService.java`). 이때 `ChatbotConfig`에 정의된 시스템 프롬프트는 모델이 반드시 제공된 근거 내에서만 답변하고, 근거가 없는 경우 "모름"이라고 답하도록 강제하여 환각을 억제합니다 (`springboot/src/main/java/com/chs/springboot/domain/chatbot/config/ChatbotConfig.java`).
-
-## 관리 및 모니터링 API (Admin & Status Control)
-
-`ChatbotAdminController.java`를 통해 제공되는 관리 및 모니터링 API는 다음과 같습니다.
-
-*   **재색인 작업 시작 (`POST /api/admin/chatbot/reindex`)**: `CodebaseIndexingService.java`를 호출하여 새로운 색인 작업을 시작합니다. 작업이 이미 실행 중인 경우 `IllegalStateException`을 발생시키며, 성공 시 `ReindexJob.java`에 정의된 작업 ID와 상태를 반환합니다.
-*   **재색인 상태 조회 (`GET /api/admin/chatbot/reindex/{id}`)**: 특정 작업의 진행 상태를 확인합니다. `ReindexJob.java`에 기록된 작업 ID, 상태(RUNNING, COMPLETED, FAILED), 문서 수, 처리된 청크 수, 전체 청크 수, 오류 메시지 등을 `ReindexStatusResponse.java` 형식으로 반환합니다. 만약 존재하지 않는 ID인 경우 `404 Not Found`를 반환합니다.
+## 연관 도메인
+- 프론트: `fe-page-admin`(챗봇 로그/테스트 탭), FloatingChatbot 위젯(`fe-shared`/`fe-components`). 옛 Thymeleaf `GET /chatbot` 페이지는 제거됨.
+- 색인 대상은 프로젝트 전체 소스 + `docs/generated/*.md`. 문서 품질이 답변 품질을 좌우(이 wiki-refresh의 목적). 상세 관계는 `index.md`.
