@@ -7,6 +7,7 @@ import apiClient from '@/api/apiClient';
 import styles from './FloatingChatbot.module.css';
 
 const CHATBOT_SESSION_KEY = 'chs-chatbot-session-id';
+const DEFAULT_CODEX_LIMIT = 2;
 
 function getChatbotSessionId() {
     try {
@@ -60,10 +61,28 @@ function SourceList({ sources }) {
     );
 }
 
+function loadingText(model, remaining) {
+    if (model === 'CODEX') {
+        if (remaining <= 0) {
+            return 'Codex 사용 횟수를 모두 사용해 LOCAL 모델로 전환 중입니다. LOCAL 모델은 30초 이상 걸릴 수 있어요.';
+        }
+        const afterThis = Math.max(0, remaining - 1);
+        if (afterThis === 0) {
+            return 'Codex가 답변 중입니다. 이 응답 후에는 LOCAL 모델이 응답합니다.';
+        }
+        return `Codex가 답변 중입니다. 이 응답 후 Codex ${afterThis}회가 남고, 이후에는 LOCAL 모델이 응답합니다.`;
+    }
+    return 'LOCAL 모델이 답변 중입니다. 30초 이상 걸릴 수 있어요.';
+}
+
 function FloatingChatbot() {
     const [open, setOpen] = useState(false);
     const [question, setQuestion] = useState('');
     const [loading, setLoading] = useState(false);
+    const [model, setModel] = useState('CODEX');
+    const [modelPolicy, setModelPolicy] = useState(null);
+    const [pendingModel, setPendingModel] = useState('CODEX');
+    const [pendingRemaining, setPendingRemaining] = useState(DEFAULT_CODEX_LIMIT);
     // messages: { role: 'user' | 'bot', text: string, sources?: string[] }
     const [messages, setMessages] = useState([]);
     const messagesEndRef = useRef(null);
@@ -74,6 +93,31 @@ function FloatingChatbot() {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
     }, [messages, open]);
+
+    useEffect(() => {
+        if (!open) return;
+
+        const loadModelPolicy = async () => {
+            try {
+                const sessionId = getChatbotSessionId();
+                const res = await apiClient.get('/api/chat/model-policy', { params: { sessionId } });
+                const data = res.data || {};
+                setModelPolicy(data);
+                if (Number(data.remainingCodexUses) <= 0) {
+                    setModel('LOCAL');
+                }
+            } catch {
+                setModelPolicy({
+                    codexLimitPerChat: DEFAULT_CODEX_LIMIT,
+                    remainingCodexUses: DEFAULT_CODEX_LIMIT,
+                    defaultModel: 'CODEX',
+                    fallbackModel: 'LOCAL',
+                });
+            }
+        };
+
+        loadModelPolicy();
+    }, [open]);
 
     const send = async () => {
         const q = question.trim();
@@ -87,19 +131,36 @@ function FloatingChatbot() {
 
         setMessages((prev) => [...prev, { role: 'user', text: q }]);
         setQuestion('');
+        const remainingBeforeSend = Number(modelPolicy?.remainingCodexUses ?? DEFAULT_CODEX_LIMIT);
+        setPendingModel(model);
+        setPendingRemaining(remainingBeforeSend);
         setLoading(true);
 
         try {
             // 사용자가 지금 보고 있는 페이지를 함께 전송 → "이 페이지 뭐야?" 류 질문 해석/검색에 사용
             const pageId = derivePageId(window.location.pathname);
             const sessionId = getChatbotSessionId();
-            const res = await apiClient.post('/api/chat', { question: q, history, pageId, sessionId });
+            const res = await apiClient.post('/api/chat', { question: q, history, pageId, sessionId, model });
             const data = res.data || {};
+            if (Number.isFinite(Number(data.remainingCodexUses))) {
+                setModelPolicy({
+                    codexLimitPerChat: Number(data.codexLimitPerChat ?? DEFAULT_CODEX_LIMIT),
+                    remainingCodexUses: Number(data.remainingCodexUses),
+                    defaultModel: 'CODEX',
+                    fallbackModel: 'LOCAL',
+                });
+            }
+            if (data.fallbackReason === 'codex_limit_exceeded') {
+                setModel('LOCAL');
+            }
+            const answer = data.notice
+                ? `${data.notice}\n\n${data.answer || '(답변 없음)'}`
+                : data.answer || '(답변 없음)';
             setMessages((prev) => [
                 ...prev,
                 {
                     role: 'bot',
-                    text: data.answer || '(답변 없음)',
+                    text: answer,
                     sources: Array.isArray(data.sources) ? data.sources : [],
                 },
             ]);
@@ -122,6 +183,8 @@ function FloatingChatbot() {
     };
 
     const sendDisabled = loading || !question.trim();
+    const remainingCodexUses = Number(modelPolicy?.remainingCodexUses ?? DEFAULT_CODEX_LIMIT);
+    const codexLimitPerChat = Number(modelPolicy?.codexLimitPerChat ?? DEFAULT_CODEX_LIMIT);
 
     return (
         <div id="chatbot-root" className={styles.root}>
@@ -171,11 +234,32 @@ function FloatingChatbot() {
                         {loading && (
                             <div className={styles.msgRow + ' ' + styles.msgRowBot}>
                                 <div className={styles.bubble + ' ' + styles.bubbleBot + ' ' + styles.hint}>
-                                    답변 생성 중... (로컬 AI 모델이라 수십 초 걸릴 수 있어요)
+                                    {loadingText(pendingModel, pendingRemaining)}
                                 </div>
                             </div>
                         )}
                         <div ref={messagesEndRef} />
+                    </div>
+
+                    <div className={styles.modelBar}>
+                        <label className={styles.modelLabel} htmlFor="chatbot-model">
+                            답변 모델
+                        </label>
+                        <select
+                            id="chatbot-model"
+                            className={styles.modelSelect}
+                            value={model}
+                            onChange={(e) => setModel(e.target.value)}
+                            disabled={loading}
+                        >
+                            <option value="CODEX" disabled={remainingCodexUses <= 0}>
+                                Codex
+                            </option>
+                            <option value="LOCAL">LOCAL</option>
+                        </select>
+                        <span className={styles.modelMeta}>
+                            Codex {remainingCodexUses}/{codexLimitPerChat}회 남음
+                        </span>
                     </div>
 
                     <div id="chatbot-input-area" className={styles.inputArea}>

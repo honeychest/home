@@ -1,121 +1,61 @@
-# 작업 의뢰서 — AggTrade WebSocket 자동복구 실패 (4일 침묵)
+## 먼저 읽을 것
+- `docs/generated/log.md` (전 이력) 과 `docs/generated/index.md` (문서 카탈로그·관계맵·lint).
+- 프로젝트 규칙: `/chs/chs-rules.md`, `CLAUDE.md`(GitNexus 사용 규칙). 로컬 개발 지침의 확인 형식과 승인
+  규칙(쓰기·삭제·편집·생성은 사용자 응답에 `승인` 문자열 있을 때만)을 지킬 것.
 
-작성: 2026-06-07 KST
+## 지금까지 한 일 (완료)
+- `docs/generated/` 위키 22개 재작성 + 용어집 보강 + 소스 검증. 중복 `chatbot.md` 삭제(→`be-chatbot.md` 단일화).
+  `index.md`/`log.md` 신설.
+- doc 레이어 재색인 완료(현재 **113청크**). 용어집(`domain-glossary.md`)·`be-chatbot.md` 정정분까지 모두 반영됨.
+- **[1번] pageBoost를 docs/generated 위키에 적용 완료**: `PageContextRegistry.PageInfo`에 `boostPrefixes` 필드
+  신설(하위호환 4-arg 생성자 유지), 9개 페이지에 짝 위키 경로를 넓게 매핑. `EvidenceRetriever`가
+  `pathPrefixes ∪ boostPrefixes`로 가중. `pathPrefixes`는 불변이라 도메인 재색인 범위는 영향 없음(책임 분리).
+  적용은 **앱 재시작만**(재색인 불필요). 빌드/테스트/`detect_changes` 검증 통과.
+- `be-chatbot.md`의 PageInfo 설명을 5-arg로 정정.
 
-## 1. 증상
-- 6/3 21:10:39 마지막 trade DB 적재. 이후 6/7 서버 재시작까지 약 4일 침묵.
-- 재시작 후 즉시 정상 수신.
-- 로직 결함 아님. 재연결 메커니즘 영구 정지.
+## RAG 파이프라인 핵심 (오해 방지)
+- 3단계: ①청킹(코드/CPU, 모델 아님) → ②임베딩(텍스트→벡터, **전체 재색인 시 여기가 ~3시간**, 로컬 LM Studio)
+  → ③챗(검색청크로 답 생성, gemma).
+- 모델 2종: **임베딩모델**(②, 색인·질문 양쪽이 같은 모델이어야 함) ↔ **챗모델**(③, gemma/Claude 자유 교체).
+- 챗모델 교체(③→Claude): 답변 품질·속도 개선, **재색인 불필요**. 임베딩 교체(②): 좌표계가 바뀌어 **전체 재임베딩
+  1회(3시간)+질문당 과금+코드 외부전송** 발생. (Claude는 임베딩 API 없음 → 임베딩은 OpenAI/Voyage 등 별도.)
 
-## 2. 영향 범위
-- 운영 컨테이너: `chs-app-1` 단독 (수집은 leader-only, `chs-app-2` 는 stand-by)
-- 영향 stream: `AggTradeStream/{BTCUSDT,ENAUSDT}/{SPOT,FUTURES}` 4종, `BinanceStream/ticker`, `UpbitStream/ticker` — 모든 외부 WebSocket 동시 마비
+## 핵심 사실 (재조사 불필요)
+- 앱: `http://localhost:8080`. `/api/chat`은 permitAll → 평가용 직접 호출 가능.
+  - 평가: `curl -s -X POST localhost:8080/api/chat -H "Content-Type: application/json; charset=utf-8"
+    --data-binary @payload.json`
+  - payload: `{"question":"...","pageId":"signal","sessionId":"eval","history":[]}` (한글은 UTF-8 파일로).
+- **`/api/admin/**` 직접 호출 불가**(`SecurityConfig` JWT + `AdminIpInterceptor` 허용 IP). 재색인·상태조회는
+  **사용자가 admin→test→Chatbot 탭 버튼**으로 실행(에이전트가 못 돌림).
+- 재색인 3종: `/reindex`(전체, **~3시간**, 증분 아님 — DELETE 전체 후 전부 재임베딩),
+  `/reindex/docs`(docs/generated만, 몇 분), `/reindex/domain/{domain}`(그 도메인 소스만).
+  - **적용 시점 구분**: pageBoost·topK 등 검색 가중/파라미터는 **질문 시점 계산** → 앱 재시작만.
+    excludePathPatterns·chunkStrategy·overlapTokens는 **색인 시점** → 재색인 필요.
+- 색인 설정: `chatbot/config/ChatbotProperties.java` + `application.properties`(topK=6, overFetchMultiplier=4,
+  pageBoost=0.15, chunkSize=512, minChunkSizeChars=350, overlapTokens=64, **chunkStrategy=SYMBOL_AWARE 이미 설정됨**).
+  index-roots(application-local.properties): springboot/src, frontend/src, docs/generated, source-base=레포 루트.
 
-## 3. 확정 원인
+## 남은 작업 (우선순위)
+추천 순서: **3(평가셋) → 5/6 → (모델·인프라는 별도)**
 
-### 3-1. 단일 HttpClient 공유로 인한 광역 영향 (가장 결정적)
-- `BinanceWebSocketStream.java:23` `private static final WebSocketConnector SHARED_CONNECTOR = createSharedConnector();`
-- `BinanceWebSocketStream.java:259-263` `HttpClient client = HttpClient.newHttpClient();` 정적 1회 생성
-- → 6개 stream 인스턴스 전부 동일 JDK HttpClient 공유
-- 호스트 외부 TLS 장애 시 client 내부 selector/connector 상태 손상 → 새 `buildAsync(...)` 가 `CompletableFuture` 반환은 하지만 영원히 미완료 (`whenComplete` 콜백 호출 0건 = 로그에서 `handshake 실패`, `오류 (gen=…)` 모두 0건으로 검증)
-- JVM 재시작만이 복구 경로
+1. **[운영] 평가셋 구축(3번)** — 지금 평가가 스팟체크뿐. `GET /api/admin/chatbot/logs/turns`(admin, 사용자 경유)로
+   약한 질문 N개 추출 → 고정 회귀 평가셋. 5·6 효과를 숫자로 재기 위한 토대라 **먼저**.
+2. **[설정] chunkStrategy=SYMBOL_AWARE 코드 적용(5번)** — config는 이미 SYMBOL_AWARE이나, 마지막 재색인이 docs만이라
+   **코드 레이어 미적용**. 전체 `/reindex`(3시간) 해야 적용. 평가셋 깔고 A/B.
+3. **[설정] 검색 파라미터 튜닝(6번)** — topK/pageBoost/overlap. 평가셋 기반, 감으로 바꾸지 말 것.
+4. **[보류/드롭 권장] co-located 문서 제외(2번)** — `frontend/src/page/**/*.md`(signal-page.md, signal-components.md,
+   trade-page.md, cesium-page.md, binance-page.md). **재검토 결과 위키와 중복 아님**(위키=요약, co-located=상세
+   레퍼런스). 스팟체크("게이지 색 구간")에서 `signal-components.md`가 핵심 근거였음 → 제외 시 상세질문 답변력 손실.
+   게다가 제외하려면 code 레이어 재색인(3시간 또는 도메인분할) 필요. **하지 않기를 권장.**
+5. **[인프라/별도] 모델·속도** — 답변 LLM 생성이 ~27초(로컬 gemma, LATENCY 임계 초과). 챗모델 Claude 교체로 개선
+   가능(재색인 불필요). 임베딩 클라우드화는 속도↑이나 3시간 재임베딩+과금+코드 외부전송(별도 결정).
 
-### 3-2. 단일 스레드 ScheduledExecutorService 에 watchdog + reconnect + abort 적체
-- `AggTradeStreamService.java:40-45` `Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "aggtrade-stream"))`
-- `BinanceWebSocketStream.connect()` (line 114) `scheduler.execute(openStream)`
-- `BinanceWebSocketStream.startWatchdog()` (line 120) `scheduler.scheduleAtFixedRate(checkStale, 10s, 10s)`
-- `BinanceWebSocketStream.scheduleReconnect()` (line 256) `scheduler.schedule(connect, ...)`
-- `BinanceWebSocketStream.checkStale()` (line 137) `currentWebSocket.abort()` 동기 호출
-- → 호스트 단 socket 이 hung 이면 `abort()` 가 OS TCP keepalive(~2h) 만료까지 반환 안 함
-- → 단일 스레드 점유 → fixedRate watchdog 다음 tick 지연 (10s 주기여야 하는데 4일간 실제 stale 감지 30건뿐, 평균 간격 ~3.2시간 — TCP keepalive 단위와 일치)
-- `BinanceStreamService`, `UpbitStreamService` 도 각각 `pool-7-thread-1`, `pool-8-thread-1` 단일 스레드 풀 사용 추정 (동일 패턴 확인 필요)
+## 제약·주의
+- 2·5·6번 코드/설정 변경 → `CLAUDE.md`대로 수정 전 `gitnexus_impact`로 영향 분석 후 사용자에게 blast radius 보고 +
+  `승인` 받고 진행. `EvidenceRetriever`/`PageContextRegistry`는 챗봇 전 경로 영향이라 특히 주의.
+- 문서(docs/generated) 변경은 위험 낮음. 단 변경 후 `/reindex/docs` 1회로 챗봇 반영(사용자가 버튼 실행).
+- 색인-시점 변경 여러 개는 모았다 마지막에 재색인 1회로 묶는 게 효율적. 단 묶으면 개별 기여 측정 불가 → 평가셋 있을 때만.
 
-### 3-3. checkStale 외곽 예외 처리 부재
-- `BinanceWebSocketStream.java:124-143` `checkStale()` 전체 try/catch 없음
-- `scheduleAtFixedRate` 태스크가 unchecked exception throw 시 후속 실행 영구 중단 (JDK 스펙, silent)
-- 현 케이스 직접 사망 증거는 없지만(stale 30건 감지됨), abort/scheduleReconnect 내부 예외 발생 시 사망 위험 잠재
-
-### 3-4. 운영 로그 레벨 WARN 으로 진단 가시성 부족
-- `application-prod.properties` `logging.level.root=WARN`
-- `BinanceWebSocketStream` 패키지 INFO 미지정
-- `log.info("연결 시도/연결 성공")` 4일 내내 0건 = 실제 흐름 추적 불가능
-- 운영자가 재연결 성공 여부 알 수 없음
-
-### 3-5. 운영 알림 부재로 발견 지연
-- `LogNotificationService` 호출이 stream pool 과 동일 스레드에서 실행 (`pool-7-thread-1` 로그 확인) → 풀 hang 시 알림 자체도 hang
-- DB threshold 정체에 대한 외부 헬스체크 알림 경로 없음
-
-## 4. 수정 작업 (우선순위順)
-
-### P0 — 즉시 (광역 마비 차단)
-- [ ] **4-1. HttpClient 인스턴스 stream 별 격리**
-  - `SHARED_CONNECTOR` 제거. `BinanceWebSocketStream` 생성자에서 자체 `HttpClient.newHttpClient()` 또는 외부 주입
-  - `BinanceWebSocketStream.java:23, 259-263` 수정
-
-- [ ] **4-2. 연속 stale N회 시 HttpClient 재생성 + 객체 강제 재초기화 경로**
-  - generation 증가만으론 hung 상태 HttpClient 복구 불가
-  - 임계 초과 시 `HttpClient` 새 인스턴스로 교체
-
-### P0 — 동시 (단일 풀 해체)
-- [ ] **4-3. watchdog 전용 별도 ScheduledExecutorService**
-  - 신규 single-thread executor (daemon, name `bws-watchdog`)
-  - `startWatchdog()` 가 이 executor 사용. I/O 풀과 격리
-
-- [ ] **4-4. reconnect 전용 별도 ScheduledExecutorService**
-  - watchdog 과도 분리. reconnect/openStream 만 사용
-  - `openStream` 의 `connector.connect(...).whenCompleteAsync(handler, reconnectExecutor)` 로 콜백 풀 명시
-
-- [ ] **4-5. `webSocket.abort()` 비동기 + 타임아웃**
-  - `CompletableFuture.runAsync(ws::abort, abortExecutor).orTimeout(3, SECONDS)`
-  - abort 가 OS TCP timeout 까지 hang 해도 watchdog 스레드 반환 보장
-
-### P1 — 안정성
-- [ ] **4-6. `checkStale()` 전체 `try { ... } catch (Throwable t) { log.error(...) }` 로 감싸기**
-  - scheduleAtFixedRate 사망 방지
-  - `scheduler.execute`/`scheduler.schedule` 람다 모두 동일 패턴
-
-- [ ] **4-7. `LogNotificationService` 별도 executor 로 분리**
-  - 알림 hang/실패가 stream 풀에 역류하지 않게
-
-- [ ] **4-8. `BinanceStreamService`, `UpbitStreamService` 의 scheduler 도 동일 점검**
-  - 스레드명 `pool-7-thread-1`, `pool-8-thread-1` 로 단일 스레드 풀 추정
-  - AggTradeStreamService 와 동일 패턴으로 분리·격리 적용
-
-### P1 — 가시성
-- [ ] **4-9. 운영 로그 레벨 조정**
-  - `application-prod.properties` 에 `logging.level.com.chs.springboot.domain.binance.service.BinanceWebSocketStream=INFO` 추가
-  - 연결 시도/성공 추적 가능하도록
-
-- [ ] **4-10. 헬스체크 + 외부 알림**
-  - `feedHealthRegistry` 기반 최근 수신 timestamp 액추에이터/모니터링 노출
-  - N분(예: 3분) 이상 정체 시 stream 알림 채널과 독립된 경로(별도 텔레그램 봇 / 외부 cron) 로 통보
-
-### P2 — 회귀 테스트
-- [ ] **4-11. `BinanceWebSocketStreamTest` 케이스 추가**
-  - `checkStale` 내부 throw 강제 → watchdog 살아있는지 검증
-  - `abort` mock 5초 sleep → watchdog 다음 tick 정상 발화 검증
-  - `connector.connect` 가 영구 pending → reconnect executor hang 해도 watchdog tick 유지 검증
-  - HttpClient 격리 효과: 한 stream 의 connector 가 죽어도 다른 stream 영향 없음 검증
-
-## 5. 배포 후 검증
-- 운영 트래픽 6시간 모니터링: stale 로그 발생 시 후속 `연결 성공` 로그 페어 확인 (4-9 적용 후)
-- 호스트 외부 네트워크 일시 차단 시뮬레이션 (10~120초) 후 60초 이내 자동 복구 확인
-- DB threshold 마지막 timestamp 3분 이상 정체 없는지 헬스체크 알림 정상 발화 확인
-
-## 6. 위험 라인 인덱스
-- `BinanceWebSocketStream.java:23` `SHARED_CONNECTOR` static 단일 인스턴스
-- `BinanceWebSocketStream.java:114` `scheduler.execute(openStream)` — 단일 풀
-- `BinanceWebSocketStream.java:120` `scheduler.scheduleAtFixedRate(checkStale, ...)` — 단일 풀, try/catch 없음
-- `BinanceWebSocketStream.java:124-143` `checkStale` 본문 — 외곽 예외 처리 부재
-- `BinanceWebSocketStream.java:137` `currentWebSocket.abort()` — 동기, hang 위험
-- `BinanceWebSocketStream.java:256` `scheduler.schedule(connect, ...)` — 단일 풀
-- `BinanceWebSocketStream.java:259-263` `createSharedConnector` — `connectTimeout` 만, HttpClient 1개
-- `AggTradeStreamService.java:40-45` `newSingleThreadScheduledExecutor("aggtrade-stream")` — 단일 스레드 풀, 4 stream 공유
-- `application-prod.properties` `logging.level.root=WARN` + BinanceWebSocketStream INFO 미지정
-
-## 7. 근거 로그 요약
-- 6/3 21:00:25 `TelegramPollingService: Remote host terminated the handshake` (호스트 외부 TLS 장애 첫 신호)
-- 6/3 21:10:39 마지막 trade DB 적재 (사용자 확인)
-- 6/3 21:10 ~ 6/7 11:50 구간 `BinanceWebSocketStream` 이벤트: `stale 감지` 30건, `종료(gen=4/6, status=1006)` 2건, **`연결 성공`/`handshake 실패`/`오류` 0건**
-- 같은 구간 Telegram polling 단속적 실패 약 30건 = 호스트 네트워크 단속 장애 (영구 장애 아님)
-- 6/7 11:46 재시작 직후 동일 stale 패턴 → 정상 재연결 복구 확인
+## 첫 메시지로 시작할 것
+"위 인계 기준으로, 먼저 `docs/generated/log.md`와 `index.md`를 읽고 현황을 확인한 뒤, 평가셋(3번)부터 진행할지 —
+아니면 챗모델 교체 같은 인프라 항목을 먼저 볼지 제안해줘."

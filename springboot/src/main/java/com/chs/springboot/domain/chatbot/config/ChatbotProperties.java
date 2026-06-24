@@ -18,6 +18,7 @@ public class ChatbotProperties {
     private int overFetchMultiplier = 4;
     // 현재 pageId 경로 프리픽스에 매칭되는 청크에 더해줄 가산점(score 0~1 위에 더함). 소프트 가중용.
     private double pageBoost = 0.15;
+    private Model model = new Model();
     private Reindex reindex = new Reindex();
 
     public List<String> getIndexRoots() {
@@ -68,11 +69,70 @@ public class ChatbotProperties {
         this.reindex = reindex;
     }
 
+    public Model getModel() {
+        return model;
+    }
+
+    public void setModel(Model model) {
+        this.model = model;
+    }
+
     // 청킹 전략. TOKEN = 기존 TokenTextSplitter(맹목 토큰 분할),
     // SYMBOL_AWARE = GitNexus 심볼 경계로 메서드/클래스 단위 분할(폴백 내장).
     public enum ChunkStrategy {
         TOKEN,
         SYMBOL_AWARE
+    }
+
+    public static class Model {
+        // 채팅방(sessionId)별 Codex 성공 답변 허용 횟수. 0 이면 Codex 선택 시 즉시 LOCAL 로 전환된다.
+        private int codexLimitPerChat = 2;
+        // external runner HTTP 호출이 이 시간 안에 끝나지 않으면 실패로 보고 LOCAL 로 폴백한다.
+        private int codexTimeoutSeconds = 30;
+        // Docker 앱 컨테이너에서는 codex CLI 를 직접 실행하지 않고 external runner 만 호출한다.
+        private String codexRunnerMode = "external";
+        private String codexRunnerUrl;
+        private String codexRunPath = "/api/codex/run";
+
+        public int getCodexLimitPerChat() {
+            return codexLimitPerChat;
+        }
+
+        public void setCodexLimitPerChat(int codexLimitPerChat) {
+            this.codexLimitPerChat = codexLimitPerChat;
+        }
+
+        public int getCodexTimeoutSeconds() {
+            return codexTimeoutSeconds;
+        }
+
+        public void setCodexTimeoutSeconds(int codexTimeoutSeconds) {
+            this.codexTimeoutSeconds = codexTimeoutSeconds;
+        }
+
+        public String getCodexRunnerMode() {
+            return codexRunnerMode;
+        }
+
+        public void setCodexRunnerMode(String codexRunnerMode) {
+            this.codexRunnerMode = codexRunnerMode;
+        }
+
+        public String getCodexRunnerUrl() {
+            return codexRunnerUrl;
+        }
+
+        public void setCodexRunnerUrl(String codexRunnerUrl) {
+            this.codexRunnerUrl = codexRunnerUrl;
+        }
+
+        public String getCodexRunPath() {
+            return codexRunPath;
+        }
+
+        public void setCodexRunPath(String codexRunPath) {
+            this.codexRunPath = codexRunPath;
+        }
     }
 
     public static class Reindex {

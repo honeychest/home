@@ -50,3 +50,23 @@
 - 삭제: `docs/generated/chatbot.md`(git에 D로 추적, 복구 가능). index.md 카탈로그·lint·관계 갱신.
 - 결과: 챗봇 백엔드 문서는 `be-chatbot.md` 단일 소스. RAG 검색에서 중복 청크로 인한 순위 희석 제거.
 - 재색인: 보류. (삭제분도 재색인해야 벡터에서 옛 chatbot.md 청크가 빠짐 — clearDocs가 doc 레이어 전체를 지웠다 다시 넣으므로 자연 반영.)
+
+## [2026-06-24] 재색인 + before/after 평가 — 대상: 전체 doc 레이어, 결과: go
+- 사용자가 admin UI에서 `POST /api/admin/chatbot/reindex/docs` 실행 → COMPLETED. doc 레이어 205청크 삭제 → 107청크 재생성(현재 24개·128,115자 ÷ 107 ≈ 1,198자/청크로 정상, 압축 효과).
+- 평가(signal pageId): ① "이게 뭐하는 화면이야?" before≈after(둘 다 정확) — 이 질문은 PageContextRegistry.promptHint(코드) 의존이라 둔감. ② "스텔스 패턴 어떻게 탐지?" → Type A/B 정확, 근거에 docs/generated/fe-page-signal.md 등장. ③ "버퍼 크기?" → 20/50/5000 정확, 근거에 fe-page-signal.md 등장. → 재작성 문서가 키워드 질문에서 검색·기여 확인.
+- 관찰(개선 후보): pageBoost가 docs/generated 경로엔 안 걸림(소스 경로만) → 일반 질문에서 무관 docs가 끼어듦. co-located 소스 *.md(signal-page.md 등)와 docs/generated 위키 중복. (코드/설정 변경 사안 — 별도 진행)
+
+## [2026-06-24] 용어집 보강 — 대상: domain-glossary.md, 변경요약: 검수필요 3개 확정 + 시스템/파이프라인/RAG 용어 추가
+- 확정(소스 검증): 에너지(aggTrade 누적·청산 시 차감), TugOfWar(롱/숏 에너지 줄다리기), Stealth(Type A 거래량급증∩인사이드바=스텔스 거래 / Type B 비도지∩거래량∩작은몸통=스텔스 의심).
+- 추가: 인사이드바·도지·김치프리미엄(트레이딩), 롤업·백필·리더노드·SSE·WebSocket·guestToken·routingKey(시스템), RAG·layer·재색인·청킹/SYMBOL_AWARE·pageId/pageBoost(챗봇). 각 항목 일반정의+프로젝트 쓰임, 검증된 수치/식별자 포함.
+- ⚠ 이 편집은 위 재색인 **이후**라 아직 벡터에 미반영. 챗봇에 적용하려면 `/reindex/docs` 1회 더 필요. → **아래 [코드] 항목에서 해소됨**.
+
+## [2026-06-24] 코드 — 1번 pageBoost를 docs/generated 위키에 적용 + 문서 정정, 결과: 완료
+- `PageContextRegistry.PageInfo`에 `boostPrefixes` 필드 신설(하위호환 4-arg 생성자 유지). 9개 페이지에 짝이 되는 위키 경로를 넓게 매핑(`fe-page-*` + 관련 `be-*`/`fe-domain-*`). `EvidenceRetriever.pagePrefixes`가 `pathPrefixes ∪ boostPrefixes`로 가중. `pathPrefixes`는 불변 → 도메인 재색인 범위(`startDomainReindex`)는 영향 없음(검색 가중 ↔ 재색인 범위 책임 분리).
+- 검증: `compileJava`/`compileTestJava` OK, `EvidenceRetrieverTest`·`ChatbotServiceTest` 5통과(테스트 수정 불필요 — 4-arg 생성자 유지 덕), `detect_changes` 변경 심볼이 의도(EvidenceRetriever.pagePrefixes, PageContextRegistry.PAGES/find)와 일치.
+- 적용 시점: 검색 가중은 질문 시점 계산 → **앱 재시작만**으로 동작(재색인 불필요).
+- `be-chatbot.md`의 PageInfo 설명을 5-arg(boostPrefixes 포함)로 정정.
+- 사용자가 `/reindex/docs` 1회 실행 → 107→**113청크**(용어집 보강 + be-chatbot.md 정정 반영). 위 용어집 항목의 미반영 경고 해소.
+- 스팟체크(signal, "에너지 게이지 색 구간 어떻게 돼?"): 근거=`EnergyGauge.jsx` + `signal-page.md` + `signal-components.md`. 위키(`fe-page-signal.md`)는 top6 밖 — 상세 질문엔 위키 유사도가 낮아 정상(가중은 소프트 넛지). **co-located 상세문서(`signal-components.md`)가 핵심 근거였음 → 2번(co-located 제외) 보류 판단이 옳았음을 입증**(제외했으면 이 질문 최고 근거를 잃음).
+- 관찰: 답변 LLM 생성 ~27초(로컬 gemma, `SLOW_THRESHOLD_MS`=20000 초과 → LATENCY 적재). 검색 자체는 ~1초. 체감 개선 레버는 챗모델 교체(재색인 무관).
+- 보류: 2번(중복 아님 확인 → 드롭 권장), 5번 SYMBOL_AWARE 코드 적용(전체 `/reindex` 3시간), 6번 파라미터 튜닝(평가셋 필요), 모델/임베딩 인프라 결정.

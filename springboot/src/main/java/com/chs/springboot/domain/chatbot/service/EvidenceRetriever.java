@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Component
 public class EvidenceRetriever {
@@ -57,13 +58,18 @@ public class EvidenceRetriever {
         return new RetrievedEvidence(ranked, sources);
     }
 
-    /** pageId 에 매핑된 경로 프리픽스(정규화된 '/' 기준). 모르는 pageId 면 빈 리스트. */
+    /**
+     * pageId 에 매핑된 가중 경로 프리픽스(정규화된 '/' 기준). 모르는 pageId 면 빈 리스트.
+     * 소스 경로(pathPrefixes) + 짝이 되는 위키 문서 경로(boostPrefixes) 를 모두 가중 대상으로 합친다.
+     */
     private List<String> pagePrefixes(String pageId) {
         PageContextRegistry.PageInfo page = pageContextRegistry.find(pageId);
-        if (page == null || page.pathPrefixes() == null) {
+        if (page == null) {
             return List.of();
         }
-        return page.pathPrefixes().stream()
+        Stream<String> path = page.pathPrefixes() == null ? Stream.empty() : page.pathPrefixes().stream();
+        Stream<String> boost = page.boostPrefixes() == null ? Stream.empty() : page.boostPrefixes().stream();
+        return Stream.concat(path, boost)
                 .filter(p -> p != null && !p.isBlank())
                 .map(p -> p.replace('\\', '/'))
                 .collect(Collectors.toList());

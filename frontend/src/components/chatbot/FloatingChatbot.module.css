@@ -166,6 +166,44 @@
     font-style: italic;
 }
 
+.modelBar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 0;
+    background: #f8fafc;
+    border-top: 1px solid #e5e7eb;
+}
+
+.modelLabel {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.modelSelect {
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #1f2937;
+    font-size: 12px;
+    font-family: inherit;
+}
+
+.modelSelect:focus {
+    outline: none;
+    border-color: #4a6fa5;
+    box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.15);
+}
+
+.modelMeta {
+    margin-left: auto;
+    font-size: 12px;
+    color: #64748b;
+}
+
 /* 입력 영역 — 메시지 영역과 같은 밝은 배경으로 톤 통일, 입력칸만 흰색으로 띄움 */
 .inputArea {
     display: flex;

@@ -3,10 +3,14 @@
 package com.chs.springboot.domain.chatbot.controller;
 
 import com.chs.springboot.domain.chatbot.dto.ChatRequest;
+import com.chs.springboot.domain.chatbot.dto.ChatCodexHealthResponse;
+import com.chs.springboot.domain.chatbot.dto.ChatModelPolicyResponse;
 import com.chs.springboot.domain.chatbot.dto.ChatResponse;
 import com.chs.springboot.domain.chatbot.service.ChatbotService;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -20,6 +24,17 @@ public class ChatbotController {
 
     @PostMapping("/api/chat")
     public ChatResponse chat(@RequestBody ChatRequest req) {
-        return chatbotService.ask(req.getQuestion(), req.getHistory(), req.getPageId(), req.getSessionId());
+        return chatbotService.ask(req.getQuestion(), req.getHistory(), req.getPageId(), req.getSessionId(),
+                req.getModel());
+    }
+
+    @GetMapping("/api/chat/model-policy")
+    public ChatModelPolicyResponse modelPolicy(@RequestParam(required = false) String sessionId) {
+        return chatbotService.modelPolicy(sessionId);
+    }
+
+    @GetMapping("/api/chat/codex-health")
+    public ChatCodexHealthResponse codexHealth() {
+        return chatbotService.codexHealth();
     }
 }

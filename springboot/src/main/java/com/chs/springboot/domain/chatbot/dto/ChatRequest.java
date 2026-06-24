@@ -13,6 +13,8 @@ public class ChatRequest {
     private String pageId;
     // 브라우저 채팅창 단위 대화 식별자. 서버 로그에서 여러 질문/답변을 하나의 대화 흐름으로 묶는 데 사용한다.
     private String sessionId;
+    // 사용자가 선택한 답변 모델. "CODEX" 또는 "LOCAL". 없으면 서버 기본값(CODEX)을 사용한다.
+    private String model;
 
     public ChatRequest() {
     }
@@ -39,6 +41,14 @@ public class ChatRequest {
 
     public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
     }
 
     public List<Turn> getHistory() {

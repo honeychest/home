@@ -61,8 +61,8 @@
 - 벡터 저장소 설정: `PgVectorConfig`/`PgVectorProperties` — MySQL `@Primary`와 충돌 피하려 `pgVectorDataSource`/`pgVectorJdbcTemplate` 분리, 코사인 거리, dimensions=임베딩 차원, `indexType=NONE`(인덱스 없이 정확검색), `initializeSchema(true)`(최초 기동 시 `vector_store` 테이블 자동 생성).
 
 ### 현재 화면 컨텍스트 — `PageContextRegistry`
-- pageId → `PageInfo(label, promptHint, searchTerms, pathPrefixes)` 정적 맵. 등록 pageId: `signal, analysis, binance, trade, logistics, monitor, weather, random, admin`.
-- `pathPrefixes`는 EvidenceRetriever의 pageId 소프트 가중과 도메인 증분 색인 대상 선정에 함께 쓰인다. 모르는 pageId는 null(무시).
+- pageId → `PageInfo(label, promptHint, searchTerms, pathPrefixes, boostPrefixes)` 정적 맵. 등록 pageId: `signal, analysis, binance, trade, logistics, monitor, weather, random, admin`. (`boostPrefixes` 생략 시 빈 목록으로 채우는 하위호환 4-arg 생성자도 있음.)
+- `pathPrefixes`(소스 경로)는 EvidenceRetriever의 pageId 소프트 가중 + 도메인 증분 색인 대상 선정에 함께 쓰인다. `boostPrefixes`(짝이 되는 `docs/generated` 위키 문서 경로)는 **검색 가중에만** 더해지고 도메인 재색인 범위에는 영향 없다 — EvidenceRetriever는 `pathPrefixes ∪ boostPrefixes`로 가중한다. 모르는 pageId는 null(무시).
 
 ### 로그 적재·조회 — `ChatbotLogService` + Admin API
 - `recordSuccess/recordError`(둘 다 `@Transactional`): `findOrCreateConversation(sessionId)` 후 `ChatbotTurn` 저장. 저장 필드: question/answer/searchQuery/llmQuestion/pageContext/status(SUCCESS·ERROR)/issueType(NONE·LATENCY·ERROR)/latencyMs/evidenceCount/errorMessage. 응답 지연 임계 `SLOW_THRESHOLD_MS`(=20000ms) 이상이면 issueType=LATENCY. 근거 청크는 `ChatbotRetrievedEvidence`(rankNo·source·symbol·lineRange·score·preview)로 저장.
