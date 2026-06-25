@@ -128,6 +128,53 @@
 
 ---
 
+# 운영 · 모니터링 표시 용어
+
+> monitor 페이지(특히 하단 "알림 이력" 표)와 피드 상태 카드에 코드 그대로 표시되는 식별자/상태값의 뜻.
+> 사용자가 "FEED_UPBIT가 뭐야?", "지속 1분이 무슨 뜻?", "STALE이 뭐야?" 처럼 화면에 보이는 값을 물을 때 답할 근거.
+> 출처: `AlertHistory.MetricType`/`Severity`(엔티티), `FeedStatus`(enum), `AlertService`(임계 로직), `AlertHistoryTable.jsx`(표시).
+
+## 알림 지표 (metric_type)
+
+알림 이력 표 "지표" 칸에 enum 코드로 표시된다. 한글 라벨로도 함께 보여준다.
+
+- **CPU** — 프로세서 사용률(%) 과부하 알림.
+- **RAM** — 메모리 사용률(%) 과부하 알림.
+- **DISK** — 디스크 사용률(%) 과부하 알림.
+- **REDIS_QUEUE** — Redis 큐 적체 알림.
+- **API_ERROR** — API 에러율 알림(피드 ID가 매핑 안 되는 경우의 기본값으로도 쓰임).
+- **FEED_BINANCE_TICKER** — 바이낸스 시세 피드(`binance-ticker`) 수신 끊김/지연 알림.
+- **FEED_BINANCE_AGG** — 바이낸스 체결 피드(`binance-aggTrade`) 수신 끊김/지연 알림.
+- **FEED_UPBIT** — 업비트 시세 피드(`upbit`) 수신 끊김/지연 알림.
+
+## 심각도 (severity)
+
+- **WARN** — 경고. 피드가 잠시 지연(STALE)된 수준.
+- **CRITICAL** — 긴급. 자원 임계 지속 초과 또는 피드 끊김(DOWN) 수준.
+
+## 피드 상태 (FeedStatus, UP / STALE / DOWN)
+
+업스트림 WebSocket 수신 채널의 freshness(최근 수신 신선도) 판정. monitor 페이지 "피드 상태" 카드의 배지로 표시된다.
+
+- **UP**(🟢) — 정상 수신 중.
+- **STALE**(🟡) — 마지막 수신 후 10초 경과(지연). WARN 알림 대상.
+- **DOWN**(🔴) — 마지막 수신 후 30초 경과(끊김). CRITICAL 알림 대상.
+
+## 알림 이력 표의 값 (현재값 · 임계값 · 지속)
+
+- **현재값(value)** — 알림 시점 측정값. 자원은 사용률(%), 피드는 마지막 수신 후 경과 초.
+- **임계값(threshold)** — 알림 발생 기준. 자원 80%, 피드 STALE 10초 / DOWN 30초.
+- **지속(duration)** — 임계 초과가 이어진 시간. 표에서는 `durationSec`을 분으로 올림해 "N분"으로 보여준다. 예) "FEED_UPBIT … 1분"은 업비트 피드 이상이 약 1분간 지속됐다는 뜻.
+
+## 알림 발생·억제 규칙 (AlertService 기준)
+
+- **CPU/RAM** — 80% 이상이 30초(5초×6회) 지속되면 CRITICAL, 같은 지표는 1시간 쿨다운.
+- **DISK** — 80% 이상이면 하루 1회만 알림.
+- **피드(FEED_*)** — STALE이면 WARN, DOWN이면 CRITICAL. 피드·상태별 1시간 쿨다운.
+- **무음(silence)** — Redis `monitor:silence=ON`이면 전체 알림 일시 정지.
+
+---
+
 # 챗봇(RAG) 용어
 
 ## RAG (Retrieval-Augmented Generation)

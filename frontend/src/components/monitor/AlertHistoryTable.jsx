@@ -3,6 +3,18 @@ import { useEffect, useMemo, useState } from 'react';
 import apiClient from '@/api/apiClient.js';
 import styles from './AlertHistoryTable.module.css';
 
+// 지표 enum 코드 → 한글 라벨. 정의는 docs/generated/domain-glossary.md "운영·모니터링 표시 용어".
+const METRIC_LABEL = {
+    CPU: 'CPU 사용률',
+    RAM: 'RAM 사용률',
+    DISK: 'DISK 사용률',
+    REDIS_QUEUE: 'Redis 큐 적체',
+    API_ERROR: 'API 에러율',
+    FEED_BINANCE_TICKER: '바이낸스 시세 피드',
+    FEED_BINANCE_AGG: '바이낸스 체결 피드',
+    FEED_UPBIT: '업비트 시세 피드',
+};
+
 const fmt = (dt) => {
     if (!dt) return '-';
     const d = new Date(dt);
@@ -69,6 +81,9 @@ export default function AlertHistoryTable() {
                             <option value="DISK">DISK</option>
                             <option value="REDIS_QUEUE">REDIS_QUEUE</option>
                             <option value="API_ERROR">API_ERROR</option>
+                            <option value="FEED_BINANCE_TICKER">바이낸스 시세 피드</option>
+                            <option value="FEED_BINANCE_AGG">바이낸스 체결 피드</option>
+                            <option value="FEED_UPBIT">업비트 시세 피드</option>
                         </select>
                     </label>
                     <button type="button" className={styles.searchBtn} onClick={handleSearch}>검색</button>
@@ -95,7 +110,7 @@ export default function AlertHistoryTable() {
                         ) : content.map((row) => (
                             <tr key={row.id}>
                                 <td>{fmt(row.sentAt)}</td>
-                                <td className={styles.mono}>{row.metricType}</td>
+                                <td className={styles.mono} title={row.metricType}>{METRIC_LABEL[row.metricType] ?? row.metricType}</td>
                                 <td className={styles.mono}>{row.value?.toFixed?.(1) ?? row.value}</td>
                                 <td className={styles.mono}>{row.threshold?.toFixed?.(1) ?? row.threshold}</td>
                                 <td className={styles.mono}>{Math.max(0, Math.ceil((row.durationSec ?? 0) / 60))}분</td>

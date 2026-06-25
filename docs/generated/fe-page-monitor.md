@@ -12,6 +12,7 @@
 - "CPU RAM DISK 게이지 / 사용량"
 - "Docker 컨테이너 상태 / Redis leader / 큐 점유율"
 - "WebSocket 피드 상태 UP STALE DOWN / 수신 건수 델타"
+- "알림 이력 지표 FEED_UPBIT / 지속 N분 / 임계값 / 심각도 WARN CRITICAL"
 - "모니터 데이터는 어디서? /ws/monitor /api/monitor/snapshot"
 
 ## 핵심 개념·용어
@@ -20,6 +21,7 @@
 - **델타(delta)**: 직전 스냅샷 대비 피드 수신 건수 증가분(`receivedCount` 차이).
 - **leader**: Redis `server:leader` — 수집 주도 노드.
 - **큐 점유율**: `redisQueue` / `config:aggtrade:max-queue-size` 비율(%).
+- **알림 이력 표**: 하단 `AlertHistoryTable`. 컬럼은 지표(metric_type)·현재값·임계값·지속(분)·심각도. 지표는 enum 코드(`FEED_UPBIT` 등)와 한글 라벨을 함께 표시한다. 지표/심각도/임계 규칙 정의는 `domain-glossary.md`의 "운영·모니터링 표시 용어" 참고.
 
 ## 구조 / 흐름 (확인된 코드 기준)
 
