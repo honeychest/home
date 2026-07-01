@@ -29,6 +29,7 @@ class BinanceStreamServiceTest {
         feedHealthRegistry = mock(FeedHealthRegistry.class);
         stream = mock(BinanceWebSocketStream.class);
         service = new BinanceStreamService(handler, notificationService, feedHealthRegistry,
+                mock(com.chs.springboot.global.monitor.health.WsReconnectMonitor.class),
                 (url, logLabel, listener, scheduler, reconnectDelaySeconds) -> {
                     capturedListener = listener;
                     return stream;

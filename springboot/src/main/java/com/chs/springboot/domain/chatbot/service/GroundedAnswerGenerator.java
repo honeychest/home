@@ -2,6 +2,9 @@
 package com.chs.springboot.domain.chatbot.service;
 
 import com.chs.springboot.domain.chatbot.config.ChatbotProperties;
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthCheckRecorder;
+import com.chs.springboot.global.monitor.health.HealthStatus;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.messages.Message;
@@ -40,14 +43,19 @@ public class GroundedAnswerGenerator {
             질문: {query}
             """);
 
+    private static final String EXT_LLM_KEY = HealthCheckCatalog.EXT_LLM.key();
+
     private final ChatClient chatbotChatClient;
     private final VectorStore vectorStore;
     private final ChatbotProperties properties;
+    private final HealthCheckRecorder healthCheckRecorder;
 
-    public GroundedAnswerGenerator(ChatClient chatbotChatClient, VectorStore vectorStore, ChatbotProperties properties) {
+    public GroundedAnswerGenerator(ChatClient chatbotChatClient, VectorStore vectorStore,
+                                   ChatbotProperties properties, HealthCheckRecorder healthCheckRecorder) {
         this.chatbotChatClient = chatbotChatClient;
         this.vectorStore = vectorStore;
         this.properties = properties;
+        this.healthCheckRecorder = healthCheckRecorder;
     }
 
     // searchQuery: 근거 검색에 쓸 질의(후속질문 맥락 보강된 것). question: LLM에 보낼 실제 질문 문장.
@@ -59,12 +67,21 @@ public class GroundedAnswerGenerator {
                 .build();
 
         // history(이전 대화)는 맥락용으로만 주입. 근거 검색(qaAdvisor)은 현재 question 기준.
-        return chatbotChatClient.prompt()
-                .advisors(qaAdvisor)
-                .messages(history)
-                .user(withPageContext(question, pageContext))
-                .call()
-                .content();
+        // 이 호출 하나가 벡터검색(임베딩)+채팅을 모두 수행 → ext-llm 외부 응답 성공/실패를 여기서 계측.
+        try {
+            String content = chatbotChatClient.prompt()
+                    .advisors(qaAdvisor)
+                    .messages(history)
+                    .user(withPageContext(question, pageContext))
+                    .call()
+                    .content();
+            healthCheckRecorder.markOk(EXT_LLM_KEY);
+            return content;
+        } catch (RuntimeException e) {
+            healthCheckRecorder.markFail(EXT_LLM_KEY, HealthStatus.DOWN, "CRITICAL",
+                    "LLM 채팅·임베딩 호출 실패: " + e.getMessage());
+            throw e;
+        }
     }
 
     // 현재 화면 안내를 질문 앞에 덧붙인다. "이 페이지/여기" 는 이 화면을 가리키도록 하되,

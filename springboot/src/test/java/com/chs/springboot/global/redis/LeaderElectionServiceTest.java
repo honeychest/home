@@ -68,7 +68,8 @@ class LeaderElectionServiceTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.setIfAbsent(anyString(), eq("server-A"), any(Duration.class))).thenReturn(false);
         when(valueOps.get(anyString())).thenReturn("server-B");
-        service = new LeaderElectionService(redisTemplate, eventPublisher);
+        service = new LeaderElectionService(redisTemplate, eventPublisher,
+                mock(com.chs.springboot.global.monitor.health.HealthHeartbeat.class));
         ReflectionTestUtils.setField(service, "serverName", "server-A");
     }
 

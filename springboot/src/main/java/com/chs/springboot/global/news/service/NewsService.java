@@ -2,7 +2,9 @@
 package com.chs.springboot.global.news.service;
 
 import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthCheckRecorder;
 import com.chs.springboot.global.monitor.health.HealthHeartbeat;
+import com.chs.springboot.global.monitor.health.HealthStatus;
 import com.chs.springboot.global.news.dto.NewsItem;
 import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndFeed;
@@ -40,10 +42,14 @@ public class NewsService {
     private volatile List<NewsItem> cache = List.of();
 
     private static final String HEALTH_KEY = HealthCheckCatalog.SCHED_NEWS.key();
+    // ext-news-rss: 스케줄러 실행(sched-news)과 별개로 "외부 RSS 응답" 성공/실패를 계측
+    private static final String EXT_KEY = HealthCheckCatalog.EXT_NEWS_RSS.key();
     private final HealthHeartbeat healthHeartbeat;
+    private final HealthCheckRecorder healthCheckRecorder;
 
-    public NewsService(HealthHeartbeat healthHeartbeat) {
+    public NewsService(HealthHeartbeat healthHeartbeat, HealthCheckRecorder healthCheckRecorder) {
         this.healthHeartbeat = healthHeartbeat;
+        this.healthCheckRecorder = healthCheckRecorder;
     }
 
     // 앱 시작 시 1회 즉시 수집, 이후 5분마다 반복
@@ -68,11 +74,23 @@ public class NewsService {
         cache = deduplicate(collected);
         log.debug("[NewsService] 뉴스 캐시 갱신 완료 - {}건", cache.size());
 
-        // 한 소스라도 성공하면 정상, 전부 실패면 다운
+        // 한 소스라도 성공하면 정상, 전부 실패면 다운 (스케줄러 실행 여부)
         if (okCount > 0) {
             healthHeartbeat.beat(HEALTH_KEY);
         } else {
             healthHeartbeat.fail(HEALTH_KEY, lastError != null ? lastError : "모든 RSS 소스 실패");
+        }
+
+        // ext-news-rss: 외부 RSS 서버 응답 건강도 (전부 실패=다운, 일부 실패=경고, 전부 성공=정상)
+        int total = SOURCES.size();
+        if (okCount == 0) {
+            healthCheckRecorder.markFail(EXT_KEY, HealthStatus.DOWN, "CRITICAL",
+                    "모든 RSS 소스 실패" + (lastError != null ? " · " + lastError : ""));
+        } else if (okCount < total) {
+            healthCheckRecorder.markFail(EXT_KEY, HealthStatus.DEGRADED, "WARN",
+                    "일부 RSS 실패 (%d/%d)".formatted(okCount, total) + (lastError != null ? " · " + lastError : ""));
+        } else {
+            healthCheckRecorder.markOk(EXT_KEY);
         }
     }
 

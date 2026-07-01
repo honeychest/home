@@ -6,6 +6,8 @@
 // 연관: TelegramPollingService, StringRedisTemplate
 package com.chs.springboot.global.redis;
 
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +41,10 @@ public class LeaderElectionService {
 
     private final StringRedisTemplate redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
+    private final HealthHeartbeat healthHeartbeat;
+
+    // sched-leader-election: election 루프(5초)가 Redis 도달·정상 갱신 중인지. 전 노드에서 beat/fail.
+    private static final String HEALTH_KEY = HealthCheckCatalog.SCHED_LEADER_ELECTION.key();
 
     @Value("${SERVER_NAME:LOCAL}")
     private String serverName;
@@ -62,8 +68,10 @@ public class LeaderElectionService {
             } else {
                 tryAcquire();
             }
+            healthHeartbeat.beat(HEALTH_KEY); // election 루프 정상 갱신(Redis 도달)
         } catch (Exception e) {
             log.error("Leader election error lease={} error={}", SERVER_LEADER_LEASE, e.getMessage());
+            healthHeartbeat.fail(HEALTH_KEY, e.getMessage());
             updateLeadership(false);
         }
     }

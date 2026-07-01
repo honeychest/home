@@ -140,6 +140,51 @@ class HealthCheckServiceTest {
         assertThat(statusOf(HealthCheckCatalog.RES_WS_CONNECTIONS.key())).isEqualTo(HealthStatus.UNKNOWN);
     }
 
+    @Test
+    void eventDerivedNoOpenEventIsUp() {
+        // open 이벤트 없음(기본 null) → 정상(UP)
+        assertThat(statusOf(HealthCheckCatalog.DATA_CANDLE_GAP.key())).isEqualTo(HealthStatus.UP);
+    }
+
+    @Test
+    void eventDerivedOpenDegradedIsDegraded() {
+        HealthCheckEvent open = new HealthCheckEvent();
+        open.setStatus("DEGRADED");
+        open.setCause("gap 2개");
+        when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
+                HealthCheckCatalog.DATA_CANDLE_GAP.key())).thenReturn(open);
+
+        assertThat(statusOf(HealthCheckCatalog.DATA_CANDLE_GAP.key())).isEqualTo(HealthStatus.DEGRADED);
+    }
+
+    @Test
+    void eventDerivedOpenDownIsDown() {
+        HealthCheckEvent open = new HealthCheckEvent();
+        open.setStatus("DOWN");
+        open.setCause("flat 40%");
+        when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
+                HealthCheckCatalog.DATA_QUALITY.key())).thenReturn(open);
+
+        assertThat(statusOf(HealthCheckCatalog.DATA_QUALITY.key())).isEqualTo(HealthStatus.DOWN);
+    }
+
+    @Test
+    void externalNoEventIsUp() {
+        // L6 외부연동: 호출 이력 없으면(open 없음) 정상(UP) — 결정1=가
+        assertThat(statusOf(HealthCheckCatalog.EXT_TELEGRAM_SEND.key())).isEqualTo(HealthStatus.UP);
+    }
+
+    @Test
+    void externalOpenFailureIsDown() {
+        HealthCheckEvent open = new HealthCheckEvent();
+        open.setStatus("DOWN");
+        open.setCause("송신 실패");
+        when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
+                HealthCheckCatalog.EXT_LLM.key())).thenReturn(open);
+
+        assertThat(statusOf(HealthCheckCatalog.EXT_LLM.key())).isEqualTo(HealthStatus.DOWN);
+    }
+
     private HealthStatus statusOf(String key) {
         when(eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(anyKey()))
                 .thenReturn(List.of());

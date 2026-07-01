@@ -6,6 +6,7 @@ import com.chs.springboot.domain.binance.service.AggTradeStreamService;
 import com.chs.springboot.domain.upbit.websocket.UpbitPriceWebSocketHandler;
 import com.chs.springboot.global.monitor.feed.FeedHealthConfig;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
+import com.chs.springboot.global.monitor.health.WsReconnectMonitor;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -37,6 +38,7 @@ public class UpbitStreamService {
     private final UpbitPriceWebSocketHandler handler;
     private final NotificationService notificationService;
     private final FeedHealthRegistry feedHealthRegistry;
+    private final WsReconnectMonitor wsReconnectMonitor;
     private final AggTradeStreamService.StreamFactory streamFactory;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
@@ -44,16 +46,18 @@ public class UpbitStreamService {
 
     @Autowired
     public UpbitStreamService(UpbitPriceWebSocketHandler handler, NotificationService notificationService,
-                              FeedHealthRegistry feedHealthRegistry) {
-        this(handler, notificationService, feedHealthRegistry, BinanceWebSocketStream::new);
+                              FeedHealthRegistry feedHealthRegistry, WsReconnectMonitor wsReconnectMonitor) {
+        this(handler, notificationService, feedHealthRegistry, wsReconnectMonitor, BinanceWebSocketStream::new);
     }
 
     UpbitStreamService(UpbitPriceWebSocketHandler handler, NotificationService notificationService,
                        FeedHealthRegistry feedHealthRegistry,
+                       WsReconnectMonitor wsReconnectMonitor,
                        AggTradeStreamService.StreamFactory streamFactory) {
         this.handler = handler;
         this.notificationService = notificationService;
         this.feedHealthRegistry = feedHealthRegistry;
+        this.wsReconnectMonitor = wsReconnectMonitor;
         this.streamFactory = streamFactory;
     }
 
@@ -68,8 +72,10 @@ public class UpbitStreamService {
                             log.error("[UpbitStream] subscribe send failed: {}", e.getMessage());
                             return null;
                         }));
-        stream.onError(error ->
-                notificationService.sendAlert("[UpbitStream] error: " + error.getMessage()));
+        stream.onError(error -> {
+            wsReconnectMonitor.record("UpbitStream/ticker");
+            notificationService.sendAlert("[UpbitStream] error: " + error.getMessage());
+        });
         stream.connect();
     }
 

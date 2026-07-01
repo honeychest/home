@@ -218,9 +218,9 @@ function HandoffPanel() {
             </div>
             {open && (
                 <div className={b.handoff}>
-                    <div><strong>진행</strong> : 계측 완료 24/33 (피드 3 · 하트비트 12 · 리소스 5 · 인프라 4). 남은 9는 위 로드맵 참조.</div>
+                    <div><strong>진행</strong> : 계측 완료 33/33 🎉 (피드 4 · 하트비트 13 · 리소스 5 · 인프라 4 · 데이터 2 · 외부 5). 전 항목 계측 완료.</div>
                     <div><strong>구조</strong> : 백그라운드 상시 점검 → <span className={styles.mono}>health_check_event</span> 이력 저장 → 보드는 최신값 읽기만 (정상 지속 시 DB 쓰기 0).</div>
-                    <div><strong>패턴 4종</strong> : ① 하트비트+watchdog(잡) &nbsp; ② 공용 평가기(피드) &nbsp; ③ 능동 프로브(인프라 mysql/redis/kafka/postgres, ext-* 미구현) &nbsp; ④ 스냅샷 재사용(리소스, MetricCollectorService 값 임계 판정)</div>
+                    <div><strong>패턴 5종</strong> : ① 하트비트+watchdog(잡) &nbsp; ② 공용 평가기(피드) &nbsp; ③ 능동 프로브(인프라 mysql/redis/kafka/postgres) &nbsp; ④ 스냅샷 재사용(리소스, MetricCollectorService 값 임계 판정) &nbsp; ⑤ 이벤트 기반(L4 능동쿼리 · L6 외부연동 호출지점 push)</div>
                     <div><strong>핵심 파일</strong> : <span className={styles.mono}>global/monitor/health/</span> (HealthHeartbeat·Config·Watchdog·Recorder·Service·Controller·Catalog·InfraHealthProbe), FeedHealthEvaluator, <span className={styles.mono}>MetricCollectorService</span>(cpu/ram/disk 스냅샷), 테이블 <span className={styles.mono}>health_check_event</span>(V9)</div>
                     <div><strong>새 하트비트 체크 추가</strong> : 1) <span className={styles.mono}>HealthHeartbeatConfig.register(체크, stale, down)</span> &nbsp; 2) 대상 서비스 성공=<span className={styles.mono}>beat</span> / 실패=<span className={styles.mono}>fail</span> &nbsp; 3) 착수 전 <span className={styles.mono}>gitnexus_impact</span>로 영향도 확인</div>
                     <div><strong>주의</strong> : <span className={styles.mono}>sched-leader-election</span> 은 HIGH(15개 의존) — 별도 신중 배선</div>

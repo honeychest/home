@@ -3,6 +3,7 @@ package com.chs.springboot.domain.binance.service;
 import com.chs.springboot.domain.binance.websocket.BinancePriceWebSocketHandler;
 import com.chs.springboot.global.monitor.feed.FeedHealthConfig;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
+import com.chs.springboot.global.monitor.health.WsReconnectMonitor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -37,6 +38,7 @@ public class BinanceStreamService {
     private final BinancePriceWebSocketHandler handler;
     private final NotificationService notificationService;
     private final FeedHealthRegistry feedHealthRegistry;
+    private final WsReconnectMonitor wsReconnectMonitor;
     private final AggTradeStreamService.StreamFactory streamFactory;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -46,17 +48,20 @@ public class BinanceStreamService {
     @Autowired
     public BinanceStreamService(BinancePriceWebSocketHandler handler,
                                 NotificationService notificationService,
-                                FeedHealthRegistry feedHealthRegistry) {
-        this(handler, notificationService, feedHealthRegistry, BinanceWebSocketStream::new);
+                                FeedHealthRegistry feedHealthRegistry,
+                                WsReconnectMonitor wsReconnectMonitor) {
+        this(handler, notificationService, feedHealthRegistry, wsReconnectMonitor, BinanceWebSocketStream::new);
     }
 
     BinanceStreamService(BinancePriceWebSocketHandler handler,
                          NotificationService notificationService,
                          FeedHealthRegistry feedHealthRegistry,
+                         WsReconnectMonitor wsReconnectMonitor,
                          AggTradeStreamService.StreamFactory streamFactory) {
         this.handler = handler;
         this.notificationService = notificationService;
         this.feedHealthRegistry = feedHealthRegistry;
+        this.wsReconnectMonitor = wsReconnectMonitor;
         this.streamFactory = streamFactory;
     }
 
@@ -66,8 +71,10 @@ public class BinanceStreamService {
         log.info("[BinanceStream] upstream connect (symbols={})", SUBSCRIBED_SYMBOLS);
         stream = streamFactory.create(url, "BinanceStream/ticker", this::onMessage,
                 scheduler, RECONNECT_DELAY_SEC);
-        stream.onError(error ->
-                notificationService.sendAlert("[BinanceStream] error: " + error.getMessage()));
+        stream.onError(error -> {
+            wsReconnectMonitor.record("BinanceStream/ticker");
+            notificationService.sendAlert("[BinanceStream] error: " + error.getMessage());
+        });
         stream.connect();
     }
 

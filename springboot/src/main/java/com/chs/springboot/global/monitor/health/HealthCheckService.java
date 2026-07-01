@@ -100,6 +100,19 @@ public class HealthCheckService {
                 status = wsConnStatus(conns);
                 detail = describeWsConn(conns);
                 thresholdText = WSCONN_THRESHOLD_TEXT;
+            } else if (isEventDerivedKey(c.key())) {
+                // 능동 평가기(예: DataIntegrityEvaluator)가 이벤트로 적립한 결과를 읽는다.
+                // 미복구(open) 이벤트 있으면 그 상태, 없으면 정상(UP). "알려진 실패 없음" 낙관 표시.
+                HealthCheckEvent open =
+                        eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(c.key());
+                if (open != null) {
+                    status = "DEGRADED".equals(open.getStatus()) ? HealthStatus.DEGRADED : HealthStatus.DOWN;
+                    detail = open.getCause() != null ? open.getCause() : "이상 감지";
+                } else {
+                    status = HealthStatus.UP;
+                    detail = "정상";
+                }
+                thresholdText = null;
             } else {
                 status = HealthStatus.UNKNOWN;
                 detail = "미구현 — 추후 계측";
@@ -210,6 +223,19 @@ public class HealthCheckService {
     public static String describeWsConn(int conns) {
         if (conns < 0) return "수집 기록 없음";
         return "WS 세션 " + conns + "개";
+    }
+
+    // 능동 평가기·호출지점 push 로 이벤트를 적립하는 체크(표시는 open 이벤트 유무로 판정).
+    // L4 무결성 2종 + L2 WS재연결 1종 + L6 외부연동 5종. open 이벤트 없으면 "알려진 실패 없음"으로 정상(UP) 표시.
+    private static boolean isEventDerivedKey(String key) {
+        return key.equals(HealthCheckCatalog.DATA_CANDLE_GAP.key())
+                || key.equals(HealthCheckCatalog.DATA_QUALITY.key())
+                || key.equals(HealthCheckCatalog.FEED_WS_RECONNECT.key())
+                || key.equals(HealthCheckCatalog.EXT_TELEGRAM_SEND.key())
+                || key.equals(HealthCheckCatalog.EXT_LLM.key())
+                || key.equals(HealthCheckCatalog.EXT_WEATHER_API.key())
+                || key.equals(HealthCheckCatalog.EXT_NEWS_RSS.key())
+                || key.equals(HealthCheckCatalog.EXT_SECURITY_SCAN.key());
     }
 
     private static boolean isInfraKey(String key) {

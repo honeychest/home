@@ -26,6 +26,7 @@ public class HealthHeartbeatConfig {
         register(heartbeat, HealthCheckCatalog.PIPE_AGGTRADE_FLUSH, 60, 180);       // 플러시 주기 가변 → 보수적
         register(heartbeat, HealthCheckCatalog.PIPE_S3_ARCHIVE, 1500, 2100);        // 10분
         register(heartbeat, HealthCheckCatalog.PIPE_KAFKA_CONSUMER, 60, 180);       // 유입 주기 가변 → 보수적(리더 전용)
+        register(heartbeat, HealthCheckCatalog.SCHED_LEADER_ELECTION, 15, 30);      // 5초(전 노드 election 루프)
         return heartbeat;
     }
 

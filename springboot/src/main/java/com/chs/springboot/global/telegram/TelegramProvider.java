@@ -3,6 +3,9 @@
 // 연관: ContactController.java (문의 수신 시 sendPhoto/sendMessage 호출)
 package com.chs.springboot.global.telegram;
 
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthCheckRecorder;
+import com.chs.springboot.global.monitor.health.HealthStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
@@ -29,6 +32,13 @@ public class TelegramProvider {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
+    private static final String HEALTH_KEY = HealthCheckCatalog.EXT_TELEGRAM_SEND.key();
+    private final HealthCheckRecorder healthCheckRecorder;
+
+    public TelegramProvider(HealthCheckRecorder healthCheckRecorder) {
+        this.healthCheckRecorder = healthCheckRecorder;
+    }
+
     // 도배 방지를 위한 메모리 캐시 (메시지 내용, 마지막 전송 시간)
     private final Map<String, Long> messageCache = new ConcurrentHashMap<>();
     private static final long MIN_INTERVAL = 60000; // 동일 메시지 제한 (1분)
@@ -53,8 +63,10 @@ public class TelegramProvider {
 
             restTemplate.postForEntity(url, httpRequest, String.class);
             messageCache.put(message, currentTime); // 전송 성공 시 캐시 갱신
+            healthCheckRecorder.markOk(HEALTH_KEY);
             log.info("Telegram message sent successfully");
         } catch (Exception e) {
+            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DOWN, "CRITICAL", "송신 실패: " + e.getMessage());
             log.error("Failed to send telegram message: {}", e.getMessage());
         }
 
@@ -98,8 +110,10 @@ public class TelegramProvider {
 
             restTemplate.postForEntity(url, new HttpEntity<>(body, headers), String.class);
             messageCache.put(caption, currentTime);
+            healthCheckRecorder.markOk(HEALTH_KEY);
             log.info("Telegram photo sent successfully");
         } catch (Exception e) {
+            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DOWN, "CRITICAL", "사진 송신 실패: " + e.getMessage());
             log.error("Failed to send telegram photo: {}", e.getMessage());
         }
 

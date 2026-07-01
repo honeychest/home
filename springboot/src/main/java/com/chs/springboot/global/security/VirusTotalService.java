@@ -1,6 +1,9 @@
 // [AGENT] 역할: VirusTotal API v3 — SHA-256 해시로 파일 악성코드 검사 | 연관파일: ContactController.java | 동작: 조회성공+malicious>0→차단, 404(미등록)→통과, 429(할당량초과)→통과, API키 미설정→스킵 | 일일 한도 500회(10회 이하 경고)
 package com.chs.springboot.global.security;
 
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthCheckRecorder;
+import com.chs.springboot.global.monitor.health.HealthStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -27,6 +30,13 @@ public class VirusTotalService {
 
     @Value("${virustotal.api-key:}")
     private String apiKey;
+
+    private static final String HEALTH_KEY = HealthCheckCatalog.EXT_SECURITY_SCAN.key();
+    private final HealthCheckRecorder healthCheckRecorder;
+
+    public VirusTotalService(HealthCheckRecorder healthCheckRecorder) {
+        this.healthCheckRecorder = healthCheckRecorder;
+    }
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -68,6 +78,7 @@ public class VirusTotalService {
             @SuppressWarnings("unchecked")
             Map<String, Object> stats      = (Map<String, Object>) attributes.get("last_analysis_stats");
 
+            healthCheckRecorder.markOk(HEALTH_KEY); // API 정상 응답
             int malicious = (int) stats.getOrDefault("malicious", 0);
             if (malicious > 0) {
                 log.warn("VirusTotal: malicious file detected (hash={})", hash);
@@ -76,14 +87,17 @@ public class VirusTotalService {
             return true;
 
         } catch (HttpClientErrorException.NotFound e) {
-            // VirusTotal DB에 없는 파일 → 통과 (신규 스크린샷 등)
+            // VirusTotal DB에 없는 파일 → 통과 (신규 스크린샷 등). API 자체는 정상 응답.
+            healthCheckRecorder.markOk(HEALTH_KEY);
             return true;
         } catch (HttpClientErrorException.TooManyRequests e) {
             // 일일 할당량(500회) 또는 분당 한도(4회) 초과 → 통과 (사용자 차단 안 함)
+            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DEGRADED, "WARN", "VirusTotal 할당량 초과: " + e.getMessage());
             log.error("VirusTotal 할당량 초과 — 파일 검사를 건너뜁니다. ({})", e.getMessage());
             return true;
         } catch (Exception e) {
             // 기타 API 호출 실패 → 통과 처리 (서비스 중단 방지)
+            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DOWN, "CRITICAL", "VirusTotal API 오류: " + e.getMessage());
             log.error("VirusTotal API error: {}", e.getMessage());
             return true;
         }

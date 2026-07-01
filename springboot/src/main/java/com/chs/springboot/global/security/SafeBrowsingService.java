@@ -1,6 +1,9 @@
 // [AGENT] 역할: Google Safe Browsing API v4 — 메시지 내 URL 악성 여부 검사 | 연관파일: ContactController.java | 동작: 텍스트에서 URL 추출→위협(MALWARE/SOCIAL_ENGINEERING/UNWANTED_SOFTWARE) 탐지, 429(할당량초과)→통과, API키 미설정→스킵 | 일일 한도 10,000회
 package com.chs.springboot.global.security;
 
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthCheckRecorder;
+import com.chs.springboot.global.monitor.health.HealthStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -32,6 +35,13 @@ public class SafeBrowsingService {
 
     @Value("${google.safebrowsing.api-key:}")
     private String apiKey;
+
+    private static final String HEALTH_KEY = HealthCheckCatalog.EXT_SECURITY_SCAN.key();
+    private final HealthCheckRecorder healthCheckRecorder;
+
+    public SafeBrowsingService(HealthCheckRecorder healthCheckRecorder) {
+        this.healthCheckRecorder = healthCheckRecorder;
+    }
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -72,6 +82,7 @@ public class SafeBrowsingService {
                     API_URL + apiKey, new HttpEntity<>(body, headers), Map.class
             );
 
+            healthCheckRecorder.markOk(HEALTH_KEY); // API 정상 응답
             // matches 키가 있으면 위협 감지
             boolean threat = response != null && response.containsKey("matches");
             if (threat) log.warn("Safe Browsing threat detected in message");
@@ -79,10 +90,12 @@ public class SafeBrowsingService {
 
         } catch (HttpClientErrorException.TooManyRequests e) {
             // 일일 할당량(10,000회) 초과 → 통과 (사용자 차단 안 함)
+            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DEGRADED, "WARN", "SafeBrowsing 할당량 초과: " + e.getMessage());
             log.error("Safe Browsing 할당량 초과 — URL 검사를 건너뜁니다. ({})", e.getMessage());
             return true;
         } catch (Exception e) {
             // 기타 API 호출 실패 → 통과 처리 (서비스 중단 방지)
+            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DOWN, "CRITICAL", "SafeBrowsing API 오류: " + e.getMessage());
             log.error("Safe Browsing API error: {}", e.getMessage());
             return true;
         }
