@@ -11,6 +11,7 @@ import TestTest      from '../../page/error/TestTest.jsx';
 import BinancePage   from '../../page/binance/BinancePage.jsx';
 import TradePage     from '../../page/trade/TradePage.jsx';
 import AdminPage     from '../../page/admin/AdminPage.jsx';
+import HealthBoardPage from '../../page/admin/health/HealthBoardPage.jsx';
 import AnalysisPage  from '../../page/analysis/AnalysisPage.jsx';
 import MonitorPage      from '../../page/monitor/MonitorPage.jsx';
 import LogisticsPage   from '../../page/logistics/LogisticsPage.jsx';
@@ -75,6 +76,9 @@ function MainRouter() {
 
                 {/* Admin 페이지 */}
                 <Route path="/admin" element={<AdminPage />} />
+
+                {/* 헬스 체크 보드 (독립 라우트, 로그인 필요) */}
+                <Route path="/admin/health" element={<HealthBoardPage />} />
 
                 {/* Admin 로그인 */}
                 <Route path="/admin/login" element={<AdminLoginPage />} />

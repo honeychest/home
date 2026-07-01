@@ -1,0 +1,158 @@
+/* [AGENT] 헬스 보드 전용 레이아웃 — 라이트(monitor-teal) 테마 기준.
+   계층 카드 3열 그리드 + 상태 점 + hover 팝오버. 흰 배경/어두운 글씨. */
+
+/* 상단 거대 상태바 */
+.statusBar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin: 6px 0 14px;
+    font-size: 14px;
+    color: var(--monitor-text-primary);
+    border: 1px solid var(--monitor-border);
+    background: #fff;
+}
+.statusBarOk {
+    background: #ECFDF5;
+    border-color: #A7F3D0;
+}
+.statusBarAlert {
+    background: #FEF2F2;
+    border-color: #FECACA;
+}
+.statusHeadline { font-size: 16px; font-weight: 800; }
+.count { font-weight: 700; }
+.spacer { flex: 1 1 auto; }
+.toggleBtn {
+    padding: 5px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid rgba(17, 24, 39, 0.15);
+    background: #fff;
+    color: var(--monitor-text-secondary);
+}
+.toggleBtnOn {
+    background: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.30);
+    color: var(--monitor-severity-critical);
+}
+
+/* 계층 카드 그리드 */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+.layerCard {
+    border: 1px solid var(--monitor-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    color: var(--monitor-text-primary);
+    box-shadow: 0 6px 18px rgba(2, 6, 23, 0.04);
+}
+.layerCardAlert {
+    border-color: var(--monitor-severity-critical);
+    box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.25);
+}
+.layerHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-weight: 800;
+    font-size: 13px;
+    color: var(--monitor-text-primary);
+}
+.miniCounts { display: flex; gap: 8px; font-size: 12px; font-weight: 700; }
+
+/* 체크 행 */
+.row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.row:hover { background: rgba(13, 148, 136, 0.08); }
+.rowPinned { background: rgba(13, 148, 136, 0.10); }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.rowLabel {
+    flex: 1 1 auto;
+    font-size: 13px;
+    color: var(--monitor-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.prio { font-size: 11px; color: var(--monitor-text-secondary); font-family: monospace; flex: 0 0 auto; }
+
+/* hover / pin 시 상세 팝오버 (라이트 툴팁) */
+.popover {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 2px);
+    z-index: 30;
+    min-width: 250px;
+    max-width: 340px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    background: #fff;
+    color: var(--monitor-text-primary);
+    border: 1px solid rgba(17, 24, 39, 0.12);
+    box-shadow: 0 12px 32px rgba(2, 6, 23, 0.18);
+    font-size: 12px;
+    line-height: 1.5;
+    display: none;
+}
+.row:hover .popover,
+.rowPinned .popover { display: block; }
+.popRow { display: flex; gap: 8px; }
+.popKey { flex: 0 0 68px; color: var(--monitor-text-secondary); }
+.popVal { flex: 1 1 auto; word-break: break-word; }
+
+/* 강화 팝오버 (요약 카드) */
+.popHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(17, 24, 39, 0.10);
+    font-weight: 700;
+    font-size: 13px;
+}
+.popBadge {
+    flex: 0 0 auto;
+    padding: 1px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #fff;
+}
+.popSection {
+    margin: 8px 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--monitor-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.failItem {
+    display: flex;
+    gap: 6px;
+    padding: 2px 0;
+    font-size: 11.5px;
+}
+.failTime { flex: 0 0 auto; font-family: monospace; color: var(--monitor-text-secondary); }
+.failBody { flex: 1 1 auto; word-break: break-word; }
+.failNone { color: var(--monitor-text-secondary); font-size: 11.5px; }

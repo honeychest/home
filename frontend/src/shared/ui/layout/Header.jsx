@@ -19,6 +19,7 @@ const NAV_ITEMS = [
     { label: 'Winner',    path: '/winner' },
     { label: 'Monitor',   path: '/monitor' },
     { label: 'Admin',     path: '/admin'  },
+    { label: 'Health',    path: '/admin/health',  requireAdmin: true },
     { label: 'Test',      path: '/admin/test',    requireAdmin: true },
     { label: 'Editor',    path: '/winner/editor', requireAdmin: true },
 ];
