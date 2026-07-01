@@ -75,6 +75,8 @@ public class MetricCollectorService {
     private volatile double lastCpu = -1d;
     private volatile double lastRam = -1d;
     private volatile double lastDisk = -1d;
+    private volatile long lastRawAggTradeBytes = -1L;
+    private volatile int lastWsConnections = -1;
 
     public double getLastCpu() {
         return lastCpu;
@@ -88,6 +90,16 @@ public class MetricCollectorService {
     /** 헬스보드 res-disk 재사용 — leader 노드에서만 갱신(collect()의 leader 분기 참조) */
     public double getLastDisk() {
         return lastDisk;
+    }
+
+    /** 헬스보드 res-rawtable-growth 재사용 — raw_agg_trade 물리크기(data+index 바이트). leader에서만 갱신, -1=미수집 */
+    public long getLastRawAggTradeBytes() {
+        return lastRawAggTradeBytes;
+    }
+
+    /** 헬스보드 res-ws-connections 재사용 — 4개 WS 핸들러 세션 합. leader에서만 갱신, -1=미수집 */
+    public int getLastWsConnections() {
+        return lastWsConnections;
     }
 
     @Scheduled(fixedDelay = 3000)
@@ -113,6 +125,7 @@ public class MetricCollectorService {
 
         Long rawAggTradeRows = safe(this::collectRawAggTradeRowsEstimate);
         Long rawAggTradeBytes = safe(this::collectRawAggTradeBytesEstimate);
+        if (rawAggTradeBytes != null) lastRawAggTradeBytes = rawAggTradeBytes;
         Long rawAggTradeS3Rows = safe(this::collectRawAggTradeS3Rows);
         Long rawAggTradeS3Bytes = safe(this::collectRawAggTradeS3Bytes);
 
@@ -126,6 +139,7 @@ public class MetricCollectorService {
         int wsCandle = Optional.ofNullable(safe(candleWebSocketHandler::getSessionCount)).orElse(0);
         int wsTotal = wsMonitor + wsBinance + wsUpbit + wsCandle;
         Integer wsConnections = wsTotal;
+        lastWsConnections = wsTotal;
 
         List<MetricSnapshot.ContainerInfo> containers = cachedContainers;
         if (containers == null) containers = List.of();

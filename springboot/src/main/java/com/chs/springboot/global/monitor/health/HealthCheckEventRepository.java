@@ -3,6 +3,7 @@ package com.chs.springboot.global.monitor.health;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface HealthCheckEventRepository extends JpaRepository<HealthCheckEvent, Long> {
@@ -18,4 +19,7 @@ public interface HealthCheckEventRepository extends JpaRepository<HealthCheckEve
 
     /** 특정 체크의 아직 복구되지 않은(진행 중) 이벤트 1건 */
     HealthCheckEvent findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(String checkKey);
+
+    /** 리테이션 정리 — 마지막 실패활동이 cutoff 이전인 이력 삭제(삭제 건수 반환) */
+    long deleteByLastFailedAtBefore(LocalDateTime cutoff);
 }

@@ -41,6 +41,15 @@ public class HealthCheckService {
     // 인프라(res-*) 판정 기준: Actuator HealthIndicator / AdminClient 응답 그대로(경고 단계 없음, UP 아니면 DOWN)
     private static final String INFRA_THRESHOLD_TEXT = "능동 프로브(연결 확인) — UP 아니면 DOWN";
 
+    // rawtable/ws 판정 기준: 퍼센트가 아닌 절대값 임계. 상수 1곳에서 관리(추후 튜닝 용이).
+    // 표시(HealthCheckService)와 이력 적립(ResourceHealthEvaluator)이 아래 static 판정을 공유 → 단일 소스.
+    private static final long RAWTABLE_DEGRADED_BYTES = 3L * 1024 * 1024 * 1024; // 3GB
+    private static final long RAWTABLE_DOWN_BYTES = 6L * 1024 * 1024 * 1024;     // 6GB
+    private static final String RAWTABLE_THRESHOLD_TEXT = "경고 ≥3GB · 다운 ≥6GB (data+index)";
+    private static final int WSCONN_DEGRADED = 300;
+    private static final int WSCONN_DOWN = 800;
+    private static final String WSCONN_THRESHOLD_TEXT = "경고 ≥300 · 다운 ≥800 (4개 핸들러 합)";
+
     private final FeedHealthRegistry feedHealthRegistry;
     private final HealthHeartbeat healthHeartbeat;
     private final HealthCheckEventRepository eventRepository;
@@ -81,6 +90,16 @@ public class HealthCheckService {
                 status = probe.status();
                 detail = probe.detail();
                 thresholdText = INFRA_THRESHOLD_TEXT;
+            } else if (c.key().equals(HealthCheckCatalog.RES_RAWTABLE_GROWTH.key())) {
+                long bytes = metricCollectorService.getLastRawAggTradeBytes();
+                status = rawTableStatus(bytes);
+                detail = describeRawTable(bytes);
+                thresholdText = RAWTABLE_THRESHOLD_TEXT;
+            } else if (c.key().equals(HealthCheckCatalog.RES_WS_CONNECTIONS.key())) {
+                int conns = metricCollectorService.getLastWsConnections();
+                status = wsConnStatus(conns);
+                detail = describeWsConn(conns);
+                thresholdText = WSCONN_THRESHOLD_TEXT;
             } else {
                 status = HealthStatus.UNKNOWN;
                 detail = "미구현 — 추후 계측";
@@ -163,6 +182,34 @@ public class HealthCheckService {
     private static String describeResource(Double value) {
         if (value == null) return "수집 기록 없음";
         return "%.1f%%".formatted(value);
+    }
+
+    // ── rawtable/ws 공용 판정 — 표시와 이력 적립(ResourceHealthEvaluator)이 공유 ──
+
+    /** raw_agg_trade 물리크기(바이트) → 상태. -1(미수집)=UNKNOWN. */
+    public static HealthStatus rawTableStatus(long bytes) {
+        if (bytes < 0) return HealthStatus.UNKNOWN;
+        if (bytes >= RAWTABLE_DOWN_BYTES) return HealthStatus.DOWN;
+        if (bytes >= RAWTABLE_DEGRADED_BYTES) return HealthStatus.DEGRADED;
+        return HealthStatus.UP;
+    }
+
+    public static String describeRawTable(long bytes) {
+        if (bytes < 0) return "수집 기록 없음";
+        return "raw_agg_trade %.1fGB".formatted(bytes / (1024d * 1024d * 1024d));
+    }
+
+    /** WS 세션 합계 → 상태. -1(미수집)=UNKNOWN. */
+    public static HealthStatus wsConnStatus(int conns) {
+        if (conns < 0) return HealthStatus.UNKNOWN;
+        if (conns >= WSCONN_DOWN) return HealthStatus.DOWN;
+        if (conns >= WSCONN_DEGRADED) return HealthStatus.DEGRADED;
+        return HealthStatus.UP;
+    }
+
+    public static String describeWsConn(int conns) {
+        if (conns < 0) return "수집 기록 없음";
+        return "WS 세션 " + conns + "개";
     }
 
     private static boolean isInfraKey(String key) {

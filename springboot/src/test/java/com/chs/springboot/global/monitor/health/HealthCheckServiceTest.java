@@ -82,6 +82,64 @@ class HealthCheckServiceTest {
         assertThat(status).isEqualTo(HealthStatus.DOWN);
     }
 
+    private static final long GB = 1024L * 1024 * 1024;
+
+    @Test
+    void rawTableUnderDegradedThresholdIsUp() {
+        when(metricCollectorService.getLastRawAggTradeBytes()).thenReturn(1 * GB);
+
+        assertThat(statusOf(HealthCheckCatalog.RES_RAWTABLE_GROWTH.key())).isEqualTo(HealthStatus.UP);
+    }
+
+    @Test
+    void rawTableAtDegradedThresholdIsDegraded() {
+        when(metricCollectorService.getLastRawAggTradeBytes()).thenReturn(3 * GB);
+
+        assertThat(statusOf(HealthCheckCatalog.RES_RAWTABLE_GROWTH.key())).isEqualTo(HealthStatus.DEGRADED);
+    }
+
+    @Test
+    void rawTableAtDownThresholdIsDown() {
+        when(metricCollectorService.getLastRawAggTradeBytes()).thenReturn(6 * GB);
+
+        assertThat(statusOf(HealthCheckCatalog.RES_RAWTABLE_GROWTH.key())).isEqualTo(HealthStatus.DOWN);
+    }
+
+    @Test
+    void rawTableNeverCollectedIsUnknown() {
+        when(metricCollectorService.getLastRawAggTradeBytes()).thenReturn(-1L);
+
+        assertThat(statusOf(HealthCheckCatalog.RES_RAWTABLE_GROWTH.key())).isEqualTo(HealthStatus.UNKNOWN);
+    }
+
+    @Test
+    void wsConnUnderDegradedThresholdIsUp() {
+        when(metricCollectorService.getLastWsConnections()).thenReturn(120);
+
+        assertThat(statusOf(HealthCheckCatalog.RES_WS_CONNECTIONS.key())).isEqualTo(HealthStatus.UP);
+    }
+
+    @Test
+    void wsConnAtDegradedThresholdIsDegraded() {
+        when(metricCollectorService.getLastWsConnections()).thenReturn(300);
+
+        assertThat(statusOf(HealthCheckCatalog.RES_WS_CONNECTIONS.key())).isEqualTo(HealthStatus.DEGRADED);
+    }
+
+    @Test
+    void wsConnAtDownThresholdIsDown() {
+        when(metricCollectorService.getLastWsConnections()).thenReturn(800);
+
+        assertThat(statusOf(HealthCheckCatalog.RES_WS_CONNECTIONS.key())).isEqualTo(HealthStatus.DOWN);
+    }
+
+    @Test
+    void wsConnNeverCollectedIsUnknown() {
+        when(metricCollectorService.getLastWsConnections()).thenReturn(-1);
+
+        assertThat(statusOf(HealthCheckCatalog.RES_WS_CONNECTIONS.key())).isEqualTo(HealthStatus.UNKNOWN);
+    }
+
     private HealthStatus statusOf(String key) {
         when(eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(anyKey()))
                 .thenReturn(List.of());

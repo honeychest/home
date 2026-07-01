@@ -218,7 +218,7 @@ function HandoffPanel() {
             </div>
             {open && (
                 <div className={b.handoff}>
-                    <div><strong>진행</strong> : 계측 완료 22/33 (피드 3 · 하트비트 12 · 리소스 3 · 인프라 4). 남은 11은 위 로드맵 참조.</div>
+                    <div><strong>진행</strong> : 계측 완료 24/33 (피드 3 · 하트비트 12 · 리소스 5 · 인프라 4). 남은 9는 위 로드맵 참조.</div>
                     <div><strong>구조</strong> : 백그라운드 상시 점검 → <span className={styles.mono}>health_check_event</span> 이력 저장 → 보드는 최신값 읽기만 (정상 지속 시 DB 쓰기 0).</div>
                     <div><strong>패턴 4종</strong> : ① 하트비트+watchdog(잡) &nbsp; ② 공용 평가기(피드) &nbsp; ③ 능동 프로브(인프라 mysql/redis/kafka/postgres, ext-* 미구현) &nbsp; ④ 스냅샷 재사용(리소스, MetricCollectorService 값 임계 판정)</div>
                     <div><strong>핵심 파일</strong> : <span className={styles.mono}>global/monitor/health/</span> (HealthHeartbeat·Config·Watchdog·Recorder·Service·Controller·Catalog·InfraHealthProbe), FeedHealthEvaluator, <span className={styles.mono}>MetricCollectorService</span>(cpu/ram/disk 스냅샷), 테이블 <span className={styles.mono}>health_check_event</span>(V9)</div>
