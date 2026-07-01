@@ -25,6 +25,48 @@ const isAlert = (status) => status === 'DOWN' || status === 'DEGRADED';
 // 실패 이벤트 상태 → 한글
 const FAIL_STATUS_KO = { DOWN: '다운', DEGRADED: '경고', RESOLVED: '복구' };
 
+// 미구현 체크의 계측 계획(패턴 · 권장 주기) — 화면 로드맵 표시용.
+// 구현·테스트 완료로 상태가 UNKNOWN을 벗어나면 로드맵에서 자동 제거됨.
+const IMPL_PLAN = {
+    // L1 인프라 — 능동 프로브
+    'infra-mysql': { pattern: '능동 프로브', when: '15~30초' },
+    'infra-redis': { pattern: '능동 프로브', when: '15~30초' },
+    'infra-kafka': { pattern: '능동 프로브', when: '15~30초' },
+    'infra-postgres': { pattern: '능동 프로브', when: '15~30초' },
+    // L2 — WS 콜백 훅
+    'feed-ws-reconnect': { pattern: 'WS 콜백 훅', when: '60초 창 재연결 집계' },
+    // L3 파이프라인 — 하트비트 + watchdog
+    'pipe-kafka-consumer': { pattern: '하트비트+watchdog', when: '소비 지연 감지' },
+    'pipe-aggtrade-flush': { pattern: '하트비트+watchdog', when: '5초 무하트비트시 경고' },
+    'pipe-rollup-1s': { pattern: '하트비트+watchdog', when: '5초 무하트비트시 경고' },
+    'pipe-rollup-1m': { pattern: '하트비트+watchdog', when: '2~3분 무성공시 다운' },
+    'pipe-rollup-5m': { pattern: '하트비트+watchdog', when: '10~15분' },
+    'pipe-empty-candle-fix': { pattern: '하트비트', when: '10~15분' },
+    'pipe-s3-archive': { pattern: '하트비트', when: '20~30분' },
+    // L4 무결성 — 능동 쿼리(공용 평가기)
+    'data-candle-gap': { pattern: '능동 쿼리', when: '1~5분' },
+    'data-quality': { pattern: '능동 쿼리', when: '1~5분' },
+    // L5 스케줄러 — 하트비트
+    'sched-leader-election': { pattern: '하트비트', when: '15~20초 무갱신시 경고' },
+    'sched-weather': { pattern: '하트비트', when: '25~30분 무성공시 경고' },
+    'sched-news': { pattern: '하트비트', when: '12~15분' },
+    'sched-telegram-poll': { pattern: '하트비트', when: '2~3분 무성공시 다운' },
+    'sched-openinterest-poll': { pattern: '하트비트', when: '3~5분' },
+    'sched-analysis': { pattern: '하트비트', when: '3~5분' },
+    // L6 외부연동
+    'ext-telegram-send': { pattern: '사용 시점 push', when: '주기 없음' },
+    'ext-llm': { pattern: '능동 프로브', when: '1~5분' },
+    'ext-weather-api': { pattern: '하트비트(수집 시)', when: 'sched-weather 연동' },
+    'ext-news-rss': { pattern: '하트비트(수집 시)', when: 'sched-news 연동' },
+    'ext-security-scan': { pattern: '사용 시점 push', when: '주기 없음' },
+    // L7 리소스 — MetricCollector 3초 스냅샷 재사용
+    'res-cpu': { pattern: '스냅샷 재사용', when: 'MetricCollector 3초' },
+    'res-ram': { pattern: '스냅샷 재사용', when: 'MetricCollector 3초' },
+    'res-disk': { pattern: '스냅샷 재사용', when: 'MetricCollector 3초' },
+    'res-rawtable-growth': { pattern: '스냅샷 재사용', when: '임계 판정 추가' },
+    'res-ws-connections': { pattern: '스냅샷 재사용', when: '임계 판정 추가' },
+};
+
 function groupByLayer(checks) {
     const order = [];
     const map = new Map();
@@ -106,6 +148,89 @@ function LayerCard({ layer, onlyAlerts, pinned, onToggle }) {
     );
 }
 
+// 하단 구현 로드맵 — 미구현(UNKNOWN) 체크만 계층별로 나열. 구현되면 자동 제거.
+function RoadmapPanel({ checks }) {
+    const [open, setOpen] = useState(true);
+    if (checks.length === 0) return null;
+
+    const total = checks.length;
+    const pending = checks.filter((c) => c.status === 'UNKNOWN');
+    const done = total - pending.length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const groups = groupByLayer(pending);
+
+    return (
+        <div className={styles.card}>
+            <div className={styles.titleRow}>
+                <div className={styles.title}>구현 로드맵 — 남은 {pending.length} / {total}</div>
+                <button
+                    type="button"
+                    className={`${styles.btn} ${styles.pushRight}`}
+                    onClick={() => setOpen((o) => !o)}
+                >
+                    {open ? '접기 ▲' : '펼치기 ▼'}
+                </button>
+            </div>
+
+            <div className={b.roadmapBar}><div className={b.roadmapBarFill} style={{ width: `${pct}%` }} /></div>
+            <div className={`${styles.muted} ${b.roadmapDesc}`}>
+                헬스는 백그라운드에서 상시 점검하고 실패/복구 순간만 기록합니다.
+                아래는 아직 계측이 안 된 항목 — 구현·테스트가 끝나 상태가 잡히면 이 목록에서 자동으로 사라집니다.
+            </div>
+
+            {open && (pending.length === 0 ? (
+                <div className={styles.muted}>전부 구현 완료 🎉</div>
+            ) : (
+                groups.map((layer) => (
+                    <div key={layer.code} className={b.roadmapLayer}>
+                        <div className={b.roadmapLayerTitle}>{layer.label}</div>
+                        {layer.items.map((c) => {
+                            const plan = IMPL_PLAN[c.key] ?? {};
+                            return (
+                                <div key={c.key} className={b.roadmapItem}>
+                                    <span className={b.roadmapName}>▸ {c.label}</span>
+                                    <span className={b.roadmapPattern}>{plan.pattern ?? '-'}</span>
+                                    <span className={b.roadmapWhen}>{plan.when ?? ''}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))
+            ))}
+        </div>
+    );
+}
+
+// 하단 작업 인수인계 — 새 세션에서 이어가기 위한 개발 현황 기록(기본 펼침)
+function HandoffPanel() {
+    const [open, setOpen] = useState(true);
+    return (
+        <div className={styles.card}>
+            <div className={styles.titleRow}>
+                <div className={styles.title}>작업 인수인계 (개발 현황)</div>
+                <button
+                    type="button"
+                    className={`${styles.btn} ${styles.pushRight}`}
+                    onClick={() => setOpen((o) => !o)}
+                >
+                    {open ? '접기 ▲' : '펼치기 ▼'}
+                </button>
+            </div>
+            {open && (
+                <div className={b.handoff}>
+                    <div><strong>진행</strong> : 계측 완료 15/33 (피드 3 · 하트비트 12). 남은 18은 위 로드맵 참조.</div>
+                    <div><strong>구조</strong> : 백그라운드 상시 점검 → <span className={styles.mono}>health_check_event</span> 이력 저장 → 보드는 최신값 읽기만 (정상 지속 시 DB 쓰기 0).</div>
+                    <div><strong>패턴 3종</strong> : ① 하트비트+watchdog(잡) &nbsp; ② 공용 평가기(피드) &nbsp; ③ 능동 프로브(인프라/외부)</div>
+                    <div><strong>핵심 파일</strong> : <span className={styles.mono}>global/monitor/health/</span> (HealthHeartbeat·Config·Watchdog·Recorder·Service·Controller·Catalog), FeedHealthEvaluator, 테이블 <span className={styles.mono}>health_check_event</span>(V9)</div>
+                    <div><strong>새 하트비트 체크 추가</strong> : 1) <span className={styles.mono}>HealthHeartbeatConfig.register(체크, stale, down)</span> &nbsp; 2) 대상 서비스 성공=<span className={styles.mono}>beat</span> / 실패=<span className={styles.mono}>fail</span> &nbsp; 3) 착수 전 <span className={styles.mono}>gitnexus_impact</span>로 영향도 확인</div>
+                    <div><strong>주의</strong> : <span className={styles.mono}>sched-leader-election</span> 은 HIGH(15개 의존) — 별도 신중 배선</div>
+                    <div><strong>작업 단일 소스</strong> : 이 화면(인수인계 + 로드맵)만으로 지속 가능. <span className={styles.mono}>docs/health-check-board.md</span>는 챗봇/설계 참조용.</div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function HealthBoardPage() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -164,6 +289,7 @@ export default function HealthBoardPage() {
     return (
         <Layout footerCenter={['Health', 'Monitor', 'Admin']} enableSupport={false}>
             <div className={styles.page}>
+                <div className={b.scrollArea}>
                 <div className={styles.card}>
                     <div className={styles.titleRow}>
                         <div className={styles.title}>시스템 헬스 체크 보드</div>
@@ -216,6 +342,9 @@ export default function HealthBoardPage() {
                     {onlyAlerts && summary && summary.down === 0 && summary.degraded === 0 && (
                         <div className={`${styles.muted} ${styles.tableEmpty}`}>이상 항목 없음 — 전부 정상</div>
                     )}
+                </div>
+                <RoadmapPanel checks={data?.checks ?? []} />
+                <HandoffPanel />
                 </div>
             </div>
         </Layout>

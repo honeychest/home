@@ -3,6 +3,7 @@ package com.chs.springboot.domain.binance.service;
 import com.chs.springboot.domain.binance.model.AggTrade1s;
 import com.chs.springboot.domain.binance.repository.AggTrade1sRepository;
 import com.chs.springboot.domain.binance.repository.AggTradeCollectStatusRepository;
+import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,7 +42,8 @@ class AggTrade1sRollupServiceTest {
                 mock(AggTrade1sRepository.class),
                 mock(AggTradeCollectStatusRepository.class),
                 mock(StringRedisTemplate.class),
-                jdbcTemplate
+                jdbcTemplate,
+                mock(HealthHeartbeat.class)
         );
 
         ReflectionTestUtils.invokeMethod(service, "batchInsert", List.of(

@@ -62,14 +62,25 @@
 | res-rawtable-growth | L7 리소스 | P1 | raw_agg_trade 테이블 폭증 | △ |
 | res-ws-connections | L7 리소스 | P2 | WS 연결수 이상 | △ |
 
-## 진행 순서 (하나씩 처리)
+## 진행 현황
 
-1. **1차 (완료 대상 — 뼈대):** 독립 라우트 보드 + `health_check_event` 테이블
-   + 체크 카탈로그 33개 전부 나열 + 피드(feed-*) 실연동, 나머지는 `UNKNOWN(미구현)` 표시.
-2. 2차 P0 사각지대: `pipe-*` (Kafka/flush/롤업 heartbeat 계측).
-3. 3차: `infra-kafka`, `infra-postgres`, `sched-leader-election`.
-4. 4차 P1: `sched-*` heartbeat, `data-*`·`res-*` 합류.
-5. 5차 P2: 외부연동·나머지.
+> **최신 진행 현황(완료/남은 항목, 계측 상태)은 화면 `/admin/health` 하단
+> "작업 인수인계" 패널 + "구현 로드맵"이 단일 소스다.** 이 문서는 변하지 않는
+> 설계·체크리스트·패턴 참조용(챗봇용)이며, 진행 수치는 여기에 두지 않는다(드리프트 방지).
+
+## 새 하트비트 체크 추가 방법 (3단계)
+
+1. `HealthHeartbeatConfig`에 `register(체크, staleSeconds, downSeconds)` (주기의 약 2.5×/5×).
+2. 대상 서비스: 성공 지점 `healthHeartbeat.beat(KEY)`, 실패 지점 `healthHeartbeat.fail(KEY, cause)`.
+   - 리더 전용 잡은 리더에서만 beat → 비리더는 UNKNOWN(대기)로 남아 오탐 없음.
+   - try/catch 추가가 침습적이면 fail 생략 가능(watchdog staleness가 다운 포착).
+3. 착수 전 `gitnexus_impact({target, direction:"upstream"})`로 영향도 확인·보고.
+
+## 구현 순서 가이드 (패턴별)
+
+착수 후보(우선순위·잔여 목록은 화면 로드맵 참조): 인프라 프로브(L1),
+리소스 스냅샷 재사용(L7), 데이터 쿼리(L4), 외부연동(L6),
+그리고 별도 신중 처리 대상 `sched-leader-election`(HIGH).
 
 ## 계측 규약 (2차 이후)
 

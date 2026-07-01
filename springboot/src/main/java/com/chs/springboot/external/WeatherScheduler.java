@@ -28,6 +28,8 @@
 package com.chs.springboot.external;
 
 import com.chs.springboot.domain.weather.service.WeatherService;
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -56,6 +58,11 @@ public class WeatherScheduler {
 
     @Autowired
     private LeaderElectionService leaderElection;
+
+    @Autowired
+    private HealthHeartbeat healthHeartbeat;
+
+    private static final String HEALTH_KEY = HealthCheckCatalog.SCHED_WEATHER.key();
 
     /**
      * collectWeatherData: 매 10분마다 실행되는 자동 수집 메서드.
@@ -102,9 +109,11 @@ public class WeatherScheduler {
         System.out.println("--- [스케줄러] 10분 주기 자동 수집 시작: " + LocalDateTime.now() + " ---");
         try {
             weatherService.getWeatherByHour(null); // 현재 시각 기준 수집
+            healthHeartbeat.beat(HEALTH_KEY);
             System.out.println("--- [스케줄러] 수집 완료 ---");
         } catch (Exception e) {
             // 수집 실패 시 로그만 출력하고 다음 실행 주기를 기다림 (앱 종료 방지)
+            healthHeartbeat.fail(HEALTH_KEY, e.getMessage());
             System.err.println("--- [스케줄러] 에러: " + e.getMessage() + " ---");
         }
     }

@@ -8,6 +8,8 @@ import com.chs.springboot.domain.analysis.model.AnalysisTemplate;
 import com.chs.springboot.domain.analysis.repository.AnalysisTemplateRepository;
 import com.chs.springboot.domain.binance.repository.AggTrade1mRepository;
 import com.chs.springboot.domain.binance.service.SignalSseService;
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -36,13 +38,19 @@ public class AnalysisDetectionScheduler {
     private final LeaderElectionService       leaderElectionService;
     private final AggTrade1mRepository        agg1mRepository;
     private final ObjectMapper                objectMapper;
+    private final HealthHeartbeat             healthHeartbeat;
+
+    private static final String HEALTH_KEY = HealthCheckCatalog.SCHED_ANALYSIS.key();
 
     @Scheduled(fixedDelay = 60_000)
     public void run() {
         if (!leaderElectionService.isLeader()) return;
 
         List<AnalysisTemplate> templates = templateRepository.findAllByOrderByCreatedAtDesc();
-        if (templates.isEmpty()) return;
+        if (templates.isEmpty()) {
+            healthHeartbeat.beat(HEALTH_KEY);
+            return;
+        }
 
         for (String symbol : SYMBOLS) {
             List<Map<String, Object>> rows = agg1mRepository.findTopNWithCombinedDelta(symbol, LIMIT_COUNT);
@@ -73,6 +81,7 @@ public class AnalysisDetectionScheduler {
                 }
             }
         }
+        healthHeartbeat.beat(HEALTH_KEY);
     }
 
     private List<AnalysisDetectionEngine.CandleData> toCandles(List<Map<String, Object>> rows) {

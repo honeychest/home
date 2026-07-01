@@ -32,6 +32,7 @@ public class HealthCheckService {
     private static final String FEED_THRESHOLD_TEXT = "경고 ≥10초 · 다운 ≥30초";
 
     private final FeedHealthRegistry feedHealthRegistry;
+    private final HealthHeartbeat healthHeartbeat;
     private final HealthCheckEventRepository eventRepository;
 
     /** 보드에 표시할 전체 체크 목록 */
@@ -53,6 +54,11 @@ public class HealthCheckService {
                 status = mapFeedStatus(fh);
                 detail = describeFeed(fh);
                 thresholdText = FEED_THRESHOLD_TEXT;
+            } else if (healthHeartbeat.isRegistered(c.key())) {
+                HealthHeartbeat.Beat beat = healthHeartbeat.evaluate(c.key());
+                status = beat.status();
+                detail = describeBeat(beat);
+                thresholdText = null;
             } else {
                 status = HealthStatus.UNKNOWN;
                 detail = "미구현 — 추후 계측";
@@ -105,5 +111,15 @@ public class HealthCheckService {
             return "수신 기록 없음";
         }
         return fh.secondsSinceLastMessage() + "초 전 수신 (누적 " + fh.receivedCount() + ")";
+    }
+
+    private static String describeBeat(HealthHeartbeat.Beat beat) {
+        if (beat.status() == HealthStatus.UNKNOWN) {
+            return "대기 — 아직 실행 기록 없음";
+        }
+        if (beat.secondsSinceBeat() == null) {
+            return "최근 실행 실패";
+        }
+        return beat.secondsSinceBeat() + "초 전 마지막 성공";
     }
 }

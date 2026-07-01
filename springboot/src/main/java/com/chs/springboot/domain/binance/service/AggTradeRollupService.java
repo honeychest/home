@@ -13,6 +13,8 @@ import com.chs.springboot.domain.binance.repository.AggTrade1mRepository;
 import com.chs.springboot.domain.binance.repository.AggTrade5mRepository;
 import com.chs.springboot.domain.binance.repository.AggTradeCollectStatusRepository;
 import com.chs.springboot.global.chs;
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +65,10 @@ public class AggTradeRollupService {
     private final JdbcTemplate batchJdbcTemplate;
     private final AggTrade1sRollupService agg1sRollupService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final HealthHeartbeat healthHeartbeat;
+
+    private static final String HK_ROLLUP_1M = HealthCheckCatalog.PIPE_ROLLUP_1M.key();
+    private static final String HK_ROLLUP_5M = HealthCheckCatalog.PIPE_ROLLUP_5M.key();
 
     // ─── 기동 시 catch-up (1s catchUp 완료 후 체이닝) ────────────────────
 
@@ -412,6 +418,7 @@ public class AggTradeRollupService {
             log.debug("[Rollup1m] {} {} 집계 완료", candle.getSymbol(), candle.getMarketType());
             eventPublisher.publishEvent(new Candle1mCompletedEvent(this, candle));
         }
+        healthHeartbeat.beat(HK_ROLLUP_1M);
     }
 
     // ─── 5분봉 롤업 (매 5분 :30초) — agg_trade_1m → agg_trade_5m ───────────
@@ -434,6 +441,7 @@ public class AggTradeRollupService {
             log.debug("[Rollup5m] {} {} 집계 완료", candle.getSymbol(), candle.getMarketType());
             eventPublisher.publishEvent(new CandleCompletedEvent(this, candle));
         }
+        healthHeartbeat.beat(HK_ROLLUP_5M);
     }
 
     private void upsert1mReplacingBad(AggTrade1m candle) {

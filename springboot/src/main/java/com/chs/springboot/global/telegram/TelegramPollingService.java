@@ -4,6 +4,8 @@
 // 연관: TelegramUpdateProcessor.java (update 처리), TelegramWebhookController.java (webhook 모드 대안)
 package com.chs.springboot.global.telegram;
 
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,9 @@ public class TelegramPollingService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     private final LeaderElectionService leaderElection;
+    private final HealthHeartbeat healthHeartbeat;
+
+    private static final String HEALTH_KEY = HealthCheckCatalog.SCHED_TELEGRAM_POLL.key();
 
     /** 다음 조회 시작 offset (중복 처리 방지) */
     private final AtomicLong offset = new AtomicLong(0);
@@ -79,6 +84,7 @@ public class TelegramPollingService {
                     "https://api.telegram.org/bot" + token + "/getUpdates?offset=" + offset.get() + "&limit=100",
                     Map.class
             );
+            healthHeartbeat.beat(HEALTH_KEY);
             if (response == null) return;
 
             @SuppressWarnings("unchecked")
@@ -93,6 +99,7 @@ public class TelegramPollingService {
             }
 
         } catch (Exception e) {
+            healthHeartbeat.fail(HEALTH_KEY, e.getMessage());
             log.error("Telegram polling error: {}", e.getMessage());
         }
     }

@@ -5,6 +5,8 @@ package com.chs.springboot.domain.binance.service;
 
 import com.chs.springboot.domain.binance.model.OpenInterest;
 import com.chs.springboot.domain.binance.repository.OpenInterestRepository;
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,8 +29,11 @@ public class OpenInterestPollingService {
     private final LeaderElectionService leaderElectionService;
     private final OpenInterestRepository openInterestRepository;
     private final SignalSseService signalSseService;
+    private final HealthHeartbeat healthHeartbeat;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private static final String HEALTH_KEY = HealthCheckCatalog.SCHED_OPENINTEREST_POLL.key();
 
     private static final String OI_API_URL    = "https://fapi.binance.com/fapi/v1/openInterest";
     private static final String PRICE_API_URL = "https://fapi.binance.com/fapi/v1/ticker/price";
@@ -40,6 +45,8 @@ public class OpenInterestPollingService {
             return;
         }
 
+        int okCount = 0;
+        String lastError = null;
         for (String symbol : SYMBOLS) {
             try {
                 String url = OI_API_URL + "?symbol=" + symbol;
@@ -73,9 +80,18 @@ public class OpenInterestPollingService {
                 dto.put("collectedAtMs", timestamp);
                 dto.put("price",         price != null ? price.toPlainString() : null);
                 signalSseService.broadcastOiUpdate(dto);
+                okCount++;
             } catch (Exception e) {
+                lastError = symbol + ": " + e.getMessage();
                 log.warn("[OI Polling] {} 실패: {}", symbol, e.getMessage());
             }
+        }
+
+        // 헬스 하트비트: 한 심볼이라도 성공하면 beat, 전부 실패면 fail
+        if (okCount > 0) {
+            healthHeartbeat.beat(HEALTH_KEY);
+        } else {
+            healthHeartbeat.fail(HEALTH_KEY, lastError != null ? lastError : "모든 심볼 수집 실패");
         }
     }
 }

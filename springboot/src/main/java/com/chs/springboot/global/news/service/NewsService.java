@@ -1,6 +1,8 @@
 // [AGENT] 뉴스 RSS 수집 서비스 — 5분 캐싱, 중복 제거
 package com.chs.springboot.global.news.service;
 
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.news.dto.NewsItem;
 import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndFeed;
@@ -37,16 +39,27 @@ public class NewsService {
     // volatile: 멀티스레드 환경에서 캐시 갱신이 즉시 반영되도록 보장
     private volatile List<NewsItem> cache = List.of();
 
+    private static final String HEALTH_KEY = HealthCheckCatalog.SCHED_NEWS.key();
+    private final HealthHeartbeat healthHeartbeat;
+
+    public NewsService(HealthHeartbeat healthHeartbeat) {
+        this.healthHeartbeat = healthHeartbeat;
+    }
+
     // 앱 시작 시 1회 즉시 수집, 이후 5분마다 반복
     // fixedDelay: 이전 실행 완료 후 5분 뒤 재실행 (RSS 서버 부하 방지)
     @Scheduled(fixedDelay = 5 * 60 * 1000)
     public void refresh() {
         List<NewsItem> collected = new ArrayList<>();
+        int okCount = 0;
+        String lastError = null;
         for (String[] src : SOURCES) {
             try {
                 collected.addAll(fetch(src[0], src[1], src[2]));
+                okCount++;
             } catch (Exception e) {
                 // 한 소스 실패해도 나머지는 계속 수집
+                lastError = src[1] + ": " + e.getMessage();
                 log.warn("[NewsService] RSS 수집 실패 - source={}, error={}", src[0], e.getMessage());
             }
         }
@@ -54,6 +67,13 @@ public class NewsService {
         collected.removeIf(item -> item.publishedAt() != null && item.publishedAt().isBefore(cutoff));
         cache = deduplicate(collected);
         log.debug("[NewsService] 뉴스 캐시 갱신 완료 - {}건", cache.size());
+
+        // 한 소스라도 성공하면 정상, 전부 실패면 다운
+        if (okCount > 0) {
+            healthHeartbeat.beat(HEALTH_KEY);
+        } else {
+            healthHeartbeat.fail(HEALTH_KEY, lastError != null ? lastError : "모든 RSS 소스 실패");
+        }
     }
 
     // 외부에서 캐시된 뉴스 목록 조회

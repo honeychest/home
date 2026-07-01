@@ -9,6 +9,8 @@ import com.chs.springboot.domain.binance.model.AggTradeCollectStatus;
 import com.chs.springboot.domain.binance.repository.AggTrade1sRepository;
 import com.chs.springboot.domain.binance.repository.AggTradeCollectStatusRepository;
 import com.chs.springboot.global.chs;
+import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
+import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -38,11 +40,15 @@ public class AggTrade1sRollupService {
 
     private static final String CATCHUP_LOCK_KEY = "aggtrade:1s:rollup:catchup:lock";
 
+    private static final String HK_ROLLUP_1S = HealthCheckCatalog.PIPE_ROLLUP_1S.key();
+    private static final String HK_EMPTY_FIX = HealthCheckCatalog.PIPE_EMPTY_CANDLE_FIX.key();
+
     private final LeaderElectionService leaderElectionService;
     private final AggTrade1sRepository agg1sRepository;
     private final AggTradeCollectStatusRepository statusRepository;
     private final StringRedisTemplate redisTemplate;
     private final JdbcTemplate batchJdbcTemplate;
+    private final HealthHeartbeat healthHeartbeat;
 
     private volatile CompletableFuture<Void> catchUpFuture;
 
@@ -78,6 +84,7 @@ public class AggTrade1sRollupService {
                 // close 없으면 skip
             }
         }
+        healthHeartbeat.beat(HK_ROLLUP_1S);
     }
 
     // ─── 주기적 빈 캔들 교정 (@Scheduled fixedRate=5분) ──────────────────
@@ -106,6 +113,7 @@ public class AggTrade1sRollupService {
             log.info("[AggTrade1sCorrect] {} {} {}건 교정",
                 t.getSymbol(), t.getMarketType(), toCorrect.size());
         }
+        healthHeartbeat.beat(HK_EMPTY_FIX);
     }
 
     // ─── 백필 (@PostConstruct 비동기) ─────────────────────────────────────
