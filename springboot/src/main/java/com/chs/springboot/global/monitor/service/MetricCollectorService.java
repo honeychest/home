@@ -73,9 +73,21 @@ public class MetricCollectorService {
     private volatile double prev5xxCount = 0d;
     private volatile double prevTotalCount = 0d;
     private volatile double lastCpu = -1d;
+    private volatile double lastRam = -1d;
+    private volatile double lastDisk = -1d;
 
     public double getLastCpu() {
         return lastCpu;
+    }
+
+    /** 헬스보드 res-ram 재사용 — leader 노드에서만 갱신(collect()의 leader 분기 참조) */
+    public double getLastRam() {
+        return lastRam;
+    }
+
+    /** 헬스보드 res-disk 재사용 — leader 노드에서만 갱신(collect()의 leader 분기 참조) */
+    public double getLastDisk() {
+        return lastDisk;
     }
 
     @Scheduled(fixedDelay = 3000)
@@ -93,6 +105,8 @@ public class MetricCollectorService {
         }
         Double ram = safe(this::collectRamPercent);
         Double disk = safe(this::collectDiskPercent);
+        if (ram != null) lastRam = ram;
+        if (disk != null) lastDisk = disk;
         Long diskTotalBytes = safe(this::collectDiskTotalBytes);
         Long diskFreeBytes = safe(this::collectDiskFreeBytes);
         Double apiErrorRate = null;

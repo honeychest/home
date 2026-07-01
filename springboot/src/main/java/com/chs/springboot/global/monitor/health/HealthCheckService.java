@@ -6,6 +6,7 @@ package com.chs.springboot.global.monitor.health;
 import com.chs.springboot.global.monitor.feed.FeedHealthConfig;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
 import com.chs.springboot.global.monitor.feed.FeedStatus;
+import com.chs.springboot.global.monitor.service.MetricCollectorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -31,9 +32,20 @@ public class HealthCheckService {
     // 피드 판정 기준 (FeedHealthConfig 등록값과 동일: staleSeconds=10, downSeconds=30)
     private static final String FEED_THRESHOLD_TEXT = "경고 ≥10초 · 다운 ≥30초";
 
+    // 리소스(res-*) 판정 기준: 다운 임계는 AlertService의 기존 CPU/RAM/DISK 80% CRITICAL 라인과 동일값 재사용.
+    // 경고(70%)는 다운 전 조기 경보용 여유값.
+    private static final double RES_DEGRADED_PCT = 70d;
+    private static final double RES_DOWN_PCT = 80d;
+    private static final String RES_THRESHOLD_TEXT = "경고 ≥70% · 다운 ≥80%(AlertService 임계와 동일)";
+
+    // 인프라(res-*) 판정 기준: Actuator HealthIndicator / AdminClient 응답 그대로(경고 단계 없음, UP 아니면 DOWN)
+    private static final String INFRA_THRESHOLD_TEXT = "능동 프로브(연결 확인) — UP 아니면 DOWN";
+
     private final FeedHealthRegistry feedHealthRegistry;
     private final HealthHeartbeat healthHeartbeat;
     private final HealthCheckEventRepository eventRepository;
+    private final MetricCollectorService metricCollectorService;
+    private final InfraHealthProbe infraHealthProbe;
 
     /** 보드에 표시할 전체 체크 목록 */
     public List<HealthCheckView> getChecks() {
@@ -59,6 +71,16 @@ public class HealthCheckService {
                 status = beat.status();
                 detail = describeBeat(beat);
                 thresholdText = null;
+            } else if (isResourceKey(c.key())) {
+                Double value = resourceValue(c.key());
+                status = mapResourceStatus(value);
+                detail = describeResource(value);
+                thresholdText = RES_THRESHOLD_TEXT;
+            } else if (isInfraKey(c.key())) {
+                InfraHealthProbe.Probe probe = infraProbe(c.key());
+                status = probe.status();
+                detail = probe.detail();
+                thresholdText = INFRA_THRESHOLD_TEXT;
             } else {
                 status = HealthStatus.UNKNOWN;
                 detail = "미구현 — 추후 계측";
@@ -111,6 +133,50 @@ public class HealthCheckService {
             return "수신 기록 없음";
         }
         return fh.secondsSinceLastMessage() + "초 전 수신 (누적 " + fh.receivedCount() + ")";
+    }
+
+    private static boolean isResourceKey(String key) {
+        return key.equals(HealthCheckCatalog.RES_CPU.key())
+                || key.equals(HealthCheckCatalog.RES_RAM.key())
+                || key.equals(HealthCheckCatalog.RES_DISK.key());
+    }
+
+    private Double resourceValue(String key) {
+        double v;
+        if (key.equals(HealthCheckCatalog.RES_CPU.key())) {
+            v = metricCollectorService.getLastCpu();
+        } else if (key.equals(HealthCheckCatalog.RES_RAM.key())) {
+            v = metricCollectorService.getLastRam();
+        } else {
+            v = metricCollectorService.getLastDisk();
+        }
+        return v < 0 ? null : v;
+    }
+
+    private static HealthStatus mapResourceStatus(Double value) {
+        if (value == null) return HealthStatus.UNKNOWN;
+        if (value >= RES_DOWN_PCT) return HealthStatus.DOWN;
+        if (value >= RES_DEGRADED_PCT) return HealthStatus.DEGRADED;
+        return HealthStatus.UP;
+    }
+
+    private static String describeResource(Double value) {
+        if (value == null) return "수집 기록 없음";
+        return "%.1f%%".formatted(value);
+    }
+
+    private static boolean isInfraKey(String key) {
+        return key.equals(HealthCheckCatalog.INFRA_MYSQL.key())
+                || key.equals(HealthCheckCatalog.INFRA_REDIS.key())
+                || key.equals(HealthCheckCatalog.INFRA_KAFKA.key())
+                || key.equals(HealthCheckCatalog.INFRA_POSTGRES.key());
+    }
+
+    private InfraHealthProbe.Probe infraProbe(String key) {
+        if (key.equals(HealthCheckCatalog.INFRA_MYSQL.key())) return infraHealthProbe.mysql();
+        if (key.equals(HealthCheckCatalog.INFRA_REDIS.key())) return infraHealthProbe.redis();
+        if (key.equals(HealthCheckCatalog.INFRA_KAFKA.key())) return infraHealthProbe.kafka();
+        return infraHealthProbe.postgres();
     }
 
     private static String describeBeat(HealthHeartbeat.Beat beat) {
