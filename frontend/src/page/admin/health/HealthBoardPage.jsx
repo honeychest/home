@@ -231,6 +231,55 @@ function HandoffPanel() {
     );
 }
 
+// 하단 운영 체크리스트 · 장기 메모 — 후속 작업/점검용 참조 패널(기본 접힘, 정적 콘텐츠)
+function NotesPanel() {
+    const [open, setOpen] = useState(false);
+    return (
+        <div className={styles.card}>
+            <div className={styles.titleRow}>
+                <div className={styles.title}>운영 체크리스트 · 장기 메모</div>
+                <button
+                    type="button"
+                    className={`${styles.btn} ${styles.pushRight}`}
+                    onClick={() => setOpen((o) => !o)}
+                >
+                    {open ? '접기 ▲' : '펼치기 ▼'}
+                </button>
+            </div>
+            {open && (
+                <div className={b.handoff}>
+                    <div><strong>■ 남은 작업 (우선순위)</strong></div>
+                    <div>[높음] 임계값 실측 튜닝 — 전부 추정 기본값. 운영 baseline 관찰 후 조정
+                        (rawtable 3/6GB · ws 300/800 · ws-reconnect 3/6·60s · L4 gap 1/3봉·flat 10/30% · leader 15/30s)</div>
+                    <div>[중간] ext-llm 커버리지 — 로컬 <span className={styles.mono}>.call</span>만 계측, Codex external runner 실패는 미포함</div>
+                    <div>[낮음] L4 다심볼 확장(현재 BTCUSDT FUTURES 1심볼) · 공유키 provider/node별 분리 · DEGRADED 알림 확장</div>
+
+                    <div><strong>■ 주의점 (운영 시 인지)</strong></div>
+                    <div>1. 알림 전제 : 텔레그램(<span className={styles.mono}>telegram_token/chatid</span>) 설정돼야 알림 발송. prod 확인 필수</div>
+                    <div>2. DOWN만 알림 : DEGRADED(경고)는 텔레그램 미발송·보드만 표시</div>
+                    <div>3. leader 기준 : 리소스%·rawtable·ws·L4·weather 값은 leader 노드에서만 갱신
+                        (장애 이벤트는 공유DB라 어느 노드서든 동일, '현재값'만 리더 기준)</div>
+                    <div>4. 공유키 flap : security-scan(2 provider)·leader·ws-reconnect(다노드) 순간 뒤집힘 여지(실용상 무해)</div>
+                    <div>5. 자기참조 : <span className={styles.mono}>ext-telegram-send</span>는 알림 제외 → 텔레그램 장애는 보드/로그로 확인</div>
+                    <div>6. 리테이션 : 매일 04:30 leader가 30일 경과 이력 삭제(진행중 장애는 삭제 안 됨)</div>
+                    <div>7. 알림 비동기 : 대량 동시 DOWN 시 다수 텔레그램 호출 → 텔레그램 1분 도배차단이 완화</div>
+                    <div>8. 로컬 : <span className={styles.mono}>SCHEDULING_ENABLED=false</span>면 ext-weather-api는 이벤트 없이 정상 표시(정상)</div>
+
+                    <div><strong>■ 배포 전 체크리스트</strong></div>
+                    <div>☐ prod 텔레그램 토큰/챗ID 설정 확인(알림 전제)</div>
+                    <div>☐ <span className={styles.mono}>health_check_event</span>(V9) prod 존재 · <span className={styles.mono}>monitor.health.retention-days</span>(기본 30) 확인</div>
+                    <div>☐ 배포 후 이 보드 상단 33/33 · '전부 정상' 표시 확인</div>
+                    <div>☐ 정상 지속 시 <span className={styles.mono}>health_check_event</span> write 0 확인</div>
+                    <div>☐ 스테이징서 의도적 DOWN 1회 → 🔴 텔레그램 수신 + 복구 🟢 확인</div>
+                    <div>☐ 임계 baseline 관찰 시작(rawtable 실제 크기·ws 실제 세션수) → 값 튜닝</div>
+
+                    <div className={styles.muted}>※ 이 메모는 후속 작업 참조용입니다. 설계·체크리스트 원본은 <span className={styles.mono}>docs/health-check-board.md</span>, 진행현황은 위 인수인계·로드맵 패널이 단일 소스.</div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function HealthBoardPage() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -345,6 +394,7 @@ export default function HealthBoardPage() {
                 </div>
                 <RoadmapPanel checks={data?.checks ?? []} />
                 <HandoffPanel />
+                <NotesPanel />
                 </div>
             </div>
         </Layout>
