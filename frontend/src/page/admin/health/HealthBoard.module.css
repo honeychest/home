@@ -1,5 +1,6 @@
 /* [AGENT] 헬스 보드 전용 레이아웃 — 라이트(monitor-teal) 테마 기준.
-   계층 카드 3열 그리드 + 상태 점 + hover 팝오버. 흰 배경/어두운 글씨. */
+   계층 카드 3열 그리드 + 상태 점 + hover 팝오버. 흰 배경/어두운 글씨.
+   규칙: 폰트 11/12/13/14/16 5단계 · 간격 4/8/12/16/24 스케일 · 굵기 800은 statusHeadline 한 곳만 */
 
 /* 세로 스크롤 영역 (보드 + 로드맵을 한 화면 안에서 스크롤) */
 .scrollArea {
@@ -7,7 +8,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
     scrollbar-width: thin;
     scrollbar-color: rgba(17, 24, 39, 0.15) transparent;
 }
@@ -20,7 +21,7 @@
     background: rgba(17, 24, 39, 0.08);
     border-radius: 4px;
     overflow: hidden;
-    margin: 2px 0 10px;
+    margin: 4px 0 12px;
 }
 .roadmapBarFill {
     height: 100%;
@@ -28,32 +29,32 @@
     border-radius: 4px;
     transition: width 0.3s ease;
 }
-.roadmapDesc { margin-bottom: 10px; font-size: 12px; line-height: 1.5; }
+.roadmapDesc { margin-bottom: 12px; font-size: 12px; line-height: 1.5; }
 .roadmapLayer { margin-bottom: 8px; }
 .roadmapLayerTitle {
-    font-weight: 800;
+    font-weight: 600;
     font-size: 12px;
     color: var(--monitor-text-primary);
-    margin: 6px 0 4px;
+    margin: 8px 0 4px;
 }
 .roadmapItem {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: baseline;
     flex-wrap: wrap;
-    padding: 3px 4px;
-    font-size: 12.5px;
+    padding: 4px;
+    font-size: 12px;
 }
 .roadmapName { flex: 0 0 auto; min-width: 170px; color: var(--monitor-text-primary); }
-.roadmapPattern { flex: 0 0 auto; color: var(--monitor-primary); font-weight: 700; font-size: 11.5px; }
-.roadmapWhen { flex: 1 1 auto; color: var(--monitor-text-secondary); font-size: 11.5px; }
+.roadmapPattern { flex: 0 0 auto; color: var(--monitor-primary); font-weight: 600; font-size: 11px; }
+.roadmapWhen { flex: 1 1 auto; color: var(--monitor-text-secondary); font-size: 11px; }
 
 /* 작업 인수인계 패널 */
 .handoff {
     display: flex;
     flex-direction: column;
-    gap: 7px;
-    font-size: 12.5px;
+    gap: 8px;
+    font-size: 13px;
     line-height: 1.6;
     color: var(--monitor-text-primary);
 }
@@ -62,11 +63,11 @@
 .statusBar {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
     flex-wrap: wrap;
     padding: 12px 16px;
     border-radius: 10px;
-    margin: 6px 0 14px;
+    margin: 8px 0 16px;
     font-size: 14px;
     color: var(--monitor-text-primary);
     border: 1px solid var(--monitor-border);
@@ -81,13 +82,13 @@
     border-color: #FECACA;
 }
 .statusHeadline { font-size: 16px; font-weight: 800; }
-.count { font-weight: 700; }
+.count { font-weight: 600; }
 .spacer { flex: 1 1 auto; }
 .toggleBtn {
-    padding: 5px 12px;
+    padding: 4px 12px;
     border-radius: 8px;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
     cursor: pointer;
     border: 1px solid rgba(17, 24, 39, 0.15);
     background: #fff;
@@ -108,7 +109,7 @@
 .layerCard {
     border: 1px solid var(--monitor-border);
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: 12px;
     background: #fff;
     color: var(--monitor-text-primary);
     box-shadow: 0 6px 18px rgba(2, 6, 23, 0.04);
@@ -123,11 +124,11 @@
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 8px;
-    font-weight: 800;
+    font-weight: 600;
     font-size: 13px;
     color: var(--monitor-text-primary);
 }
-.miniCounts { display: flex; gap: 8px; font-size: 12px; font-weight: 700; }
+.miniCounts { display: flex; gap: 8px; font-size: 12px; font-weight: 600; }
 
 /* 체크 행 */
 .row {
@@ -135,13 +136,16 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 5px 6px;
+    padding: 4px 8px;
     border-radius: 6px;
     cursor: pointer;
 }
 .row:hover { background: rgba(13, 148, 136, 0.08); }
 .rowPinned { background: rgba(13, 148, 136, 0.10); }
 .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+/* 색약 대비: 경고=마름모, 다운=사각형 (색+모양 병행, 정상/미구현은 원) */
+.dotDegraded { width: 9px; height: 9px; border-radius: 2px; transform: rotate(45deg); }
+.dotDown { border-radius: 2px; }
 .rowLabel {
     flex: 1 1 auto;
     font-size: 13px;
@@ -156,11 +160,11 @@
 .popover {
     position: absolute;
     left: 0;
-    top: calc(100% + 2px);
+    top: calc(100% + 4px);
     z-index: 30;
     min-width: 250px;
     max-width: 340px;
-    padding: 9px 11px;
+    padding: 8px 12px;
     border-radius: 8px;
     background: #fff;
     color: var(--monitor-text-primary);
@@ -182,34 +186,34 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 6px;
-    padding-bottom: 6px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
     border-bottom: 1px solid rgba(17, 24, 39, 0.10);
-    font-weight: 700;
+    font-weight: 600;
     font-size: 13px;
 }
 .popBadge {
     flex: 0 0 auto;
-    padding: 1px 8px;
+    padding: 2px 8px;
     border-radius: 6px;
     font-size: 11px;
-    font-weight: 800;
+    font-weight: 700;
     color: #fff;
 }
 .popSection {
     margin: 8px 0 4px;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--monitor-text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 .failItem {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     padding: 2px 0;
-    font-size: 11.5px;
+    font-size: 12px;
 }
 .failTime { flex: 0 0 auto; font-family: monospace; color: var(--monitor-text-secondary); }
 .failBody { flex: 1 1 auto; word-break: break-word; }
-.failNone { color: var(--monitor-text-secondary); font-size: 11.5px; }
+.failNone { color: var(--monitor-text-secondary); font-size: 12px; }

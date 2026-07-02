@@ -12,12 +12,12 @@ import '@/styles/themes/monitor-teal.css';
 import b from './HealthBoard.module.css';
 import { getHealthChecks } from './healthApi.js';
 
-// monitor-teal(라이트) 테마에서 읽히는 상태 색
+// monitor-teal(라이트) 테마 토큰 참조. dot = 색약 대비용 점 모양 클래스(색+모양 병행)
 const STATUS_META = {
-    UP: { label: 'OK', color: '#16a34a' },
-    DEGRADED: { label: '경고', color: '#ca8a04' },
-    DOWN: { label: '다운', color: '#dc2626' },
-    UNKNOWN: { label: '미구현', color: '#6b7280' },
+    UP: { label: 'OK', color: 'var(--monitor-gauge-ok)' },
+    DEGRADED: { label: '경고', color: 'var(--monitor-severity-warn-text)', dot: 'dotDegraded' },
+    DOWN: { label: '다운', color: 'var(--monitor-severity-critical)', dot: 'dotDown' },
+    UNKNOWN: { label: '미구현', color: 'var(--monitor-text-secondary)' },
 };
 
 const isAlert = (status) => status === 'DOWN' || status === 'DEGRADED';
@@ -87,7 +87,7 @@ function CheckRow({ check, pinned, onToggle }) {
             className={`${b.row} ${pinned ? b.rowPinned : ''}`}
             onClick={() => onToggle(check.key)}
         >
-            <span className={b.dot} style={{ background: meta.color }} />
+            <span className={`${b.dot}${meta.dot ? ` ${b[meta.dot]}` : ''}`} style={{ background: meta.color }} />
             <span className={b.rowLabel}>{check.label}</span>
             <span className={b.prio}>{check.priority}</span>
             <div className={b.popover}>

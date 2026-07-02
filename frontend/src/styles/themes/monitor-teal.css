@@ -23,6 +23,8 @@
 
   /* 알림 심각도 */
   --monitor-severity-warn:     #ca8a04;
+  /* 흰 배경 위 12~14px 텍스트용 경고색 — #ca8a04는 대비 미달(약 3.6:1), 4.5:1 확보 */
+  --monitor-severity-warn-text: #A16207;
   --monitor-severity-critical: #dc2626;
 
   /* 연결 상태 배너 */
