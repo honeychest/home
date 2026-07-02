@@ -1,9 +1,8 @@
 // [AGENT] 헬스 체크 보드 집계 서비스
-// 카탈로그 33개를 전부 나열하고, 신호가 있는 체크(피드)는 실연동, 나머지는 UNKNOWN(미구현) 표시.
+// 카탈로그 33개를 전부 나열하고, 각 체크의 상태는 카탈로그가 선언한 소스(HealthSource)로 판정한다.
 // 팝오버 강화: 설명·판정근거·체크별 최근 실패 이력(3건) 포함.
 package com.chs.springboot.global.monitor.health;
 
-import com.chs.springboot.global.monitor.feed.FeedHealthConfig;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
 import com.chs.springboot.global.monitor.feed.FeedStatus;
 import com.chs.springboot.global.monitor.service.MetricCollectorService;
@@ -21,13 +20,6 @@ import java.util.Map;
 public class HealthCheckService {
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
-    // 카탈로그 key → FeedHealthRegistry feedId 매핑 (신호가 이미 있는 체크)
-    private static final Map<String, String> FEED_KEY_MAP = Map.of(
-            HealthCheckCatalog.FEED_BINANCE_TICKER.key(), FeedHealthConfig.BINANCE_TICKER,
-            HealthCheckCatalog.FEED_BINANCE_AGGTRADE.key(), FeedHealthConfig.BINANCE_AGG_TRADE,
-            HealthCheckCatalog.FEED_UPBIT.key(), FeedHealthConfig.UPBIT
-    );
 
     // 피드 판정 기준 (FeedHealthConfig 등록값과 동일: staleSeconds=10, downSeconds=30)
     private static final String FEED_THRESHOLD_TEXT = "경고 ≥10초 · 다운 ≥30초";
@@ -56,6 +48,9 @@ public class HealthCheckService {
     private final MetricCollectorService metricCollectorService;
     private final InfraHealthProbe infraHealthProbe;
 
+    /** 소스별 판정 결과(상태·판정근거·임계 설명) */
+    private record Judgement(HealthStatus status, String detail, String thresholdText) { }
+
     /** 보드에 표시할 전체 체크 목록 */
     public List<HealthCheckView> getChecks() {
         Map<String, FeedHealthRegistry.FeedHealth> feeds = new HashMap<>();
@@ -65,59 +60,15 @@ public class HealthCheckService {
 
         List<HealthCheckView> out = new ArrayList<>(HealthCheckCatalog.all().size());
         for (HealthCheckCatalog c : HealthCheckCatalog.all()) {
-            HealthStatus status;
-            String detail;
-            String thresholdText;
-
-            String feedId = FEED_KEY_MAP.get(c.key());
-            if (feedId != null) {
-                FeedHealthRegistry.FeedHealth fh = feeds.get(feedId);
-                status = mapFeedStatus(fh);
-                detail = describeFeed(fh);
-                thresholdText = FEED_THRESHOLD_TEXT;
-            } else if (healthHeartbeat.isRegistered(c.key())) {
-                HealthHeartbeat.Beat beat = healthHeartbeat.evaluate(c.key());
-                status = beat.status();
-                detail = describeBeat(beat);
-                thresholdText = null;
-            } else if (isResourceKey(c.key())) {
-                Double value = resourceValue(c.key());
-                status = mapResourceStatus(value);
-                detail = describeResource(value);
-                thresholdText = RES_THRESHOLD_TEXT;
-            } else if (isInfraKey(c.key())) {
-                InfraHealthProbe.Probe probe = infraProbe(c.key());
-                status = probe.status();
-                detail = probe.detail();
-                thresholdText = INFRA_THRESHOLD_TEXT;
-            } else if (c.key().equals(HealthCheckCatalog.RES_RAWTABLE_GROWTH.key())) {
-                long bytes = metricCollectorService.getLastRawAggTradeBytes();
-                status = rawTableStatus(bytes);
-                detail = describeRawTable(bytes);
-                thresholdText = RAWTABLE_THRESHOLD_TEXT;
-            } else if (c.key().equals(HealthCheckCatalog.RES_WS_CONNECTIONS.key())) {
-                int conns = metricCollectorService.getLastWsConnections();
-                status = wsConnStatus(conns);
-                detail = describeWsConn(conns);
-                thresholdText = WSCONN_THRESHOLD_TEXT;
-            } else if (isEventDerivedKey(c.key())) {
-                // 능동 평가기(예: DataIntegrityEvaluator)가 이벤트로 적립한 결과를 읽는다.
-                // 미복구(open) 이벤트 있으면 그 상태, 없으면 정상(UP). "알려진 실패 없음" 낙관 표시.
-                HealthCheckEvent open =
-                        eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(c.key());
-                if (open != null) {
-                    status = "DEGRADED".equals(open.getStatus()) ? HealthStatus.DEGRADED : HealthStatus.DOWN;
-                    detail = open.getCause() != null ? open.getCause() : "이상 감지";
-                } else {
-                    status = HealthStatus.UP;
-                    detail = "정상";
-                }
-                thresholdText = null;
-            } else {
-                status = HealthStatus.UNKNOWN;
-                detail = "미구현 — 추후 계측";
-                thresholdText = null;
-            }
+            Judgement j = switch (c.source()) {
+                case FEED -> judgeFeed(feeds.get(c.feedId()));
+                case HEARTBEAT -> judgeHeartbeat(c.key());
+                case RESOURCE_PCT -> judgeResource(c.key());
+                case RAWTABLE -> judgeRawTable();
+                case WSCONN -> judgeWsConn();
+                case INFRA -> judgeInfra(c.key());
+                case EVENT -> judgeEvent(c.key());
+            };
 
             List<HealthCheckView.Failure> recent = new ArrayList<>();
             for (HealthCheckEvent e : eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(c.key())) {
@@ -134,7 +85,7 @@ public class HealthCheckService {
             out.add(new HealthCheckView(
                     c.key(), c.label(), c.description(),
                     c.layer().label(), c.layer().name(), c.priority().label(),
-                    status, detail, thresholdText,
+                    j.status(), j.detail(), j.thresholdText(),
                     lastFailedAt, lastCause, recent
             ));
         }
@@ -145,6 +96,51 @@ public class HealthCheckService {
     public List<HealthCheckEvent> getRecentEvents() {
         return eventRepository.findTop100ByOrderByLastFailedAtDesc();
     }
+
+    // ── 소스별 판정 ─────────────────────────────────────────────────
+
+    private static Judgement judgeFeed(FeedHealthRegistry.FeedHealth fh) {
+        return new Judgement(mapFeedStatus(fh), describeFeed(fh), FEED_THRESHOLD_TEXT);
+    }
+
+    private Judgement judgeHeartbeat(String key) {
+        HealthHeartbeat.Beat beat = healthHeartbeat.evaluate(key);
+        return new Judgement(beat.status(), describeBeat(beat), null);
+    }
+
+    private Judgement judgeResource(String key) {
+        Double value = resourceValue(key);
+        return new Judgement(mapResourceStatus(value), describeResource(value), RES_THRESHOLD_TEXT);
+    }
+
+    private Judgement judgeRawTable() {
+        long bytes = metricCollectorService.getLastRawAggTradeBytes();
+        return new Judgement(rawTableStatus(bytes), describeRawTable(bytes), RAWTABLE_THRESHOLD_TEXT);
+    }
+
+    private Judgement judgeWsConn() {
+        int conns = metricCollectorService.getLastWsConnections();
+        return new Judgement(wsConnStatus(conns), describeWsConn(conns), WSCONN_THRESHOLD_TEXT);
+    }
+
+    private Judgement judgeInfra(String key) {
+        InfraHealthProbe.Probe probe = infraProbe(key);
+        return new Judgement(probe.status(), probe.detail(), INFRA_THRESHOLD_TEXT);
+    }
+
+    // 능동 평가기(예: DataIntegrityEvaluator)·호출지점 push 가 이벤트로 적립한 결과를 읽는다.
+    // 미복구(open) 이벤트 있으면 그 상태, 없으면 정상(UP). "알려진 실패 없음" 낙관 표시.
+    private Judgement judgeEvent(String key) {
+        HealthCheckEvent open =
+                eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(key);
+        if (open == null) {
+            return new Judgement(HealthStatus.UP, "정상", null);
+        }
+        HealthStatus status = "DEGRADED".equals(open.getStatus()) ? HealthStatus.DEGRADED : HealthStatus.DOWN;
+        return new Judgement(status, open.getCause() != null ? open.getCause() : "이상 감지", null);
+    }
+
+    // ── 소스별 세부 계산 ────────────────────────────────────────────
 
     private static HealthStatus mapFeedStatus(FeedHealthRegistry.FeedHealth fh) {
         if (fh == null) {
@@ -165,12 +161,6 @@ public class HealthCheckService {
             return "수신 기록 없음";
         }
         return fh.secondsSinceLastMessage() + "초 전 수신 (누적 " + fh.receivedCount() + ")";
-    }
-
-    private static boolean isResourceKey(String key) {
-        return key.equals(HealthCheckCatalog.RES_CPU.key())
-                || key.equals(HealthCheckCatalog.RES_RAM.key())
-                || key.equals(HealthCheckCatalog.RES_DISK.key());
     }
 
     private Double resourceValue(String key) {
@@ -223,26 +213,6 @@ public class HealthCheckService {
     public static String describeWsConn(int conns) {
         if (conns < 0) return "수집 기록 없음";
         return "WS 세션 " + conns + "개";
-    }
-
-    // 능동 평가기·호출지점 push 로 이벤트를 적립하는 체크(표시는 open 이벤트 유무로 판정).
-    // L4 무결성 2종 + L2 WS재연결 1종 + L6 외부연동 5종. open 이벤트 없으면 "알려진 실패 없음"으로 정상(UP) 표시.
-    private static boolean isEventDerivedKey(String key) {
-        return key.equals(HealthCheckCatalog.DATA_CANDLE_GAP.key())
-                || key.equals(HealthCheckCatalog.DATA_QUALITY.key())
-                || key.equals(HealthCheckCatalog.FEED_WS_RECONNECT.key())
-                || key.equals(HealthCheckCatalog.EXT_TELEGRAM_SEND.key())
-                || key.equals(HealthCheckCatalog.EXT_LLM.key())
-                || key.equals(HealthCheckCatalog.EXT_WEATHER_API.key())
-                || key.equals(HealthCheckCatalog.EXT_NEWS_RSS.key())
-                || key.equals(HealthCheckCatalog.EXT_SECURITY_SCAN.key());
-    }
-
-    private static boolean isInfraKey(String key) {
-        return key.equals(HealthCheckCatalog.INFRA_MYSQL.key())
-                || key.equals(HealthCheckCatalog.INFRA_REDIS.key())
-                || key.equals(HealthCheckCatalog.INFRA_KAFKA.key())
-                || key.equals(HealthCheckCatalog.INFRA_POSTGRES.key());
     }
 
     private InfraHealthProbe.Probe infraProbe(String key) {

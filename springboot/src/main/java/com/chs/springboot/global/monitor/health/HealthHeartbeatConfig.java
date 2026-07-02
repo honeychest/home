@@ -27,11 +27,26 @@ public class HealthHeartbeatConfig {
         register(heartbeat, HealthCheckCatalog.PIPE_S3_ARCHIVE, 1500, 2100);        // 10분
         register(heartbeat, HealthCheckCatalog.PIPE_KAFKA_CONSUMER, 60, 180);       // 유입 주기 가변 → 보수적(리더 전용)
         register(heartbeat, HealthCheckCatalog.SCHED_LEADER_ELECTION, 15, 30);      // 5초(전 노드 election 루프)
+        validateAgainstCatalog(heartbeat);
         return heartbeat;
     }
 
     private static void register(HealthHeartbeat heartbeat, HealthCheckCatalog check,
                                  long staleSeconds, long downSeconds) {
         heartbeat.register(check.key(), new HealthHeartbeat.Spec(staleSeconds, downSeconds));
+    }
+
+    // 카탈로그 선언(source=HEARTBEAT) ↔ 위 register 목록의 양방향 일치 검증. 어긋나면 기동 실패(fail-fast).
+    private static void validateAgainstCatalog(HealthHeartbeat heartbeat) {
+        for (HealthCheckCatalog c : HealthCheckCatalog.all()) {
+            boolean declared = c.source() == HealthSource.HEARTBEAT;
+            boolean registered = heartbeat.isRegistered(c.key());
+            if (declared && !registered) {
+                throw new IllegalStateException("카탈로그가 HEARTBEAT 로 선언했는데 임계 미등록: " + c.key());
+            }
+            if (!declared && registered) {
+                throw new IllegalStateException("카탈로그 선언이 HEARTBEAT 가 아닌데 임계 등록됨: " + c.key());
+            }
+        }
     }
 }

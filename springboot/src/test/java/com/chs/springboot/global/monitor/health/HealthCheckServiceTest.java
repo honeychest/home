@@ -26,6 +26,9 @@ class HealthCheckServiceTest {
         when(infraHealthProbe.redis()).thenReturn(up);
         when(infraHealthProbe.kafka()).thenReturn(up);
         when(infraHealthProbe.postgres()).thenReturn(up);
+        // HEARTBEAT 소스는 선언 기반으로 항상 evaluate 되므로 기본 대기(UNKNOWN) 응답을 준다.
+        when(healthHeartbeat.evaluate(anyKey()))
+                .thenReturn(new HealthHeartbeat.Beat("hb", HealthStatus.UNKNOWN, null, null));
     }
 
     @Test

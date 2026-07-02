@@ -3,25 +3,31 @@
 // 5초마다 3개 피드(ticker/aggTrade/upbit) 상태를 평가한다. 정상 지속 시에는 DB 쓰기 없음.
 package com.chs.springboot.global.monitor.health;
 
-import com.chs.springboot.global.monitor.feed.FeedHealthConfig;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
 import com.chs.springboot.global.monitor.feed.FeedStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
 public class FeedHealthEvaluator {
 
-    // FeedHealthRegistry feedId → 헬스 카탈로그 checkKey
-    private static final Map<String, String> FEED_TO_CHECK = Map.of(
-            FeedHealthConfig.BINANCE_TICKER, HealthCheckCatalog.FEED_BINANCE_TICKER.key(),
-            FeedHealthConfig.BINANCE_AGG_TRADE, HealthCheckCatalog.FEED_BINANCE_AGGTRADE.key(),
-            FeedHealthConfig.UPBIT, HealthCheckCatalog.FEED_UPBIT.key()
-    );
+    // FeedHealthRegistry feedId → 헬스 카탈로그 checkKey — 카탈로그의 feedId 선언에서 파생(단일 소스)
+    private static final Map<String, String> FEED_TO_CHECK = buildFeedToCheck();
+
+    private static Map<String, String> buildFeedToCheck() {
+        Map<String, String> map = new HashMap<>();
+        for (HealthCheckCatalog c : HealthCheckCatalog.all()) {
+            if (c.source() == HealthSource.FEED) {
+                map.put(c.feedId(), c.key());
+            }
+        }
+        return Map.copyOf(map);
+    }
 
     private final FeedHealthRegistry feedHealthRegistry;
     private final HealthCheckRecorder recorder;

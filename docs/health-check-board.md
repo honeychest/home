@@ -70,6 +70,8 @@
 
 ## 새 하트비트 체크 추가 방법 (3단계)
 
+0. 전제: `HealthCheckCatalog`에 항목을 `HealthSource.HEARTBEAT` 소스로 선언.
+   선언↔등록이 어긋나면 기동 실패(fail-fast, `HealthHeartbeatConfig` 검증)로 즉시 드러난다.
 1. `HealthHeartbeatConfig`에 `register(체크, staleSeconds, downSeconds)` (주기의 약 2.5×/5×).
 2. 대상 서비스: 성공 지점 `healthHeartbeat.beat(KEY)`, 실패 지점 `healthHeartbeat.fail(KEY, cause)`.
    - 리더 전용 잡은 리더에서만 beat → 비리더는 UNKNOWN(대기)로 남아 오탐 없음.
