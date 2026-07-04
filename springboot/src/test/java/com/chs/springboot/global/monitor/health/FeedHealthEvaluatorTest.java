@@ -2,7 +2,6 @@ package com.chs.springboot.global.monitor.health;
 
 import com.chs.springboot.global.monitor.feed.FeedHealthConfig;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
-import com.chs.springboot.global.monitor.feed.FeedStatus;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -22,47 +21,47 @@ class FeedHealthEvaluatorTest {
     private final HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
     private final FeedHealthEvaluator evaluator = new FeedHealthEvaluator(registry, recorder);
 
-    private static FeedHealthRegistry.FeedHealth feed(String feedId, FeedStatus status, Long sinceSec) {
+    private static FeedHealthRegistry.FeedHealth feed(String feedId, HealthStatus status, Long sinceSec) {
         return new FeedHealthRegistry.FeedHealth(feedId, status, sinceSec, null, 100L);
     }
 
     @Test
-    void upFeed_marksOk() {
-        when(registry.snapshot()).thenReturn(List.of(feed(FeedHealthConfig.BINANCE_TICKER, FeedStatus.UP, 1L)));
+    void upFeed_recordsUp() {
+        when(registry.snapshot()).thenReturn(List.of(feed(FeedHealthConfig.BINANCE_TICKER, HealthStatus.UP, 1L)));
 
         evaluator.evaluate();
 
-        verify(recorder).markOk(HealthCheckCatalog.FEED_BINANCE_TICKER.key());
+        verify(recorder).record(eq(HealthCheckCatalog.FEED_BINANCE_TICKER.key()),
+                eq(HealthStatus.UP), anyString());
     }
 
     @Test
-    void staleFeed_marksFailWarn() {
-        when(registry.snapshot()).thenReturn(List.of(feed(FeedHealthConfig.UPBIT, FeedStatus.STALE, 15L)));
+    void degradedFeed_recordsDegraded() {
+        when(registry.snapshot()).thenReturn(List.of(feed(FeedHealthConfig.UPBIT, HealthStatus.DEGRADED, 15L)));
 
         evaluator.evaluate();
 
-        verify(recorder).markFail(eq(HealthCheckCatalog.FEED_UPBIT.key()),
-                eq(HealthStatus.DEGRADED), eq("WARN"), contains("upbit"));
+        verify(recorder).record(eq(HealthCheckCatalog.FEED_UPBIT.key()),
+                eq(HealthStatus.DEGRADED), contains("upbit"));
     }
 
     @Test
-    void downFeed_marksFailCritical() {
+    void downFeed_recordsDown() {
         when(registry.snapshot()).thenReturn(
-                List.of(feed(FeedHealthConfig.BINANCE_AGG_TRADE, FeedStatus.DOWN, 40L)));
+                List.of(feed(FeedHealthConfig.BINANCE_AGG_TRADE, HealthStatus.DOWN, 40L)));
 
         evaluator.evaluate();
 
-        verify(recorder).markFail(eq(HealthCheckCatalog.FEED_BINANCE_AGGTRADE.key()),
-                eq(HealthStatus.DOWN), eq("CRITICAL"), anyString());
+        verify(recorder).record(eq(HealthCheckCatalog.FEED_BINANCE_AGGTRADE.key()),
+                eq(HealthStatus.DOWN), anyString());
     }
 
     @Test
     void unknownFeedId_skipped() {
-        when(registry.snapshot()).thenReturn(List.of(feed("feed-not-in-catalog", FeedStatus.DOWN, 40L)));
+        when(registry.snapshot()).thenReturn(List.of(feed("feed-not-in-catalog", HealthStatus.DOWN, 40L)));
 
         evaluator.evaluate();
 
-        verify(recorder, never()).markOk(anyString());
-        verify(recorder, never()).markFail(anyString(), any(), anyString(), anyString());
+        verify(recorder, never()).record(anyString(), any(), any());
     }
 }

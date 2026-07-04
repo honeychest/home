@@ -4,7 +4,8 @@ package com.chs.springboot.global.monitor.service;
 import com.chs.springboot.global.monitor.dto.MetricSnapshot;
 import com.chs.springboot.global.monitor.entity.AlertHistory;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
-import com.chs.springboot.global.monitor.feed.FeedStatus;
+import com.chs.springboot.global.monitor.health.HealthStatus;
+import com.chs.springboot.global.monitor.health.StatusLadder;
 import com.chs.springboot.global.monitor.repository.AlertHistoryRepository;
 import com.chs.springboot.global.telegram.TelegramProvider;
 import lombok.RequiredArgsConstructor;
@@ -113,8 +114,8 @@ public class AlertService {
             if (feed == null) {
                 continue;
             }
-            FeedStatus status = feed.status();
-            if (status != FeedStatus.STALE && status != FeedStatus.DOWN) {
+            HealthStatus status = feed.status();
+            if (status != HealthStatus.DEGRADED && status != HealthStatus.DOWN) {
                 continue;
             }
 
@@ -128,9 +129,10 @@ public class AlertService {
             AlertHistory history = new AlertHistory();
             history.setMetricType(feedMetricType(feedId));
             history.setValue(feed.secondsSinceLastMessage() == null ? 0d : feed.secondsSinceLastMessage().doubleValue());
-            history.setThreshold(status == FeedStatus.DOWN ? 30d : 10d);
+            history.setThreshold(status == HealthStatus.DOWN
+                    ? StatusLadder.FEED_SECONDS.downAt() : StatusLadder.FEED_SECONDS.degradedAt());
             history.setDurationSec(feed.secondsSinceLastMessage() == null ? 0 : Math.toIntExact(feed.secondsSinceLastMessage()));
-            history.setSeverity(status == FeedStatus.DOWN ? AlertHistory.Severity.CRITICAL : AlertHistory.Severity.WARN);
+            history.setSeverity(status == HealthStatus.DOWN ? AlertHistory.Severity.CRITICAL : AlertHistory.Severity.WARN);
             history.setSentAt(LocalDateTime.now());
             history.setSourceEnv(normalizedSourceEnv());
             history.setMemo("[%s] %s / lastMessageAt=%s / receivedCount=%d"

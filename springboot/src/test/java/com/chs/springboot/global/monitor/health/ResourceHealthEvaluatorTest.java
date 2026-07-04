@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -21,44 +20,45 @@ class ResourceHealthEvaluatorTest {
     private final ResourceHealthEvaluator evaluator = new ResourceHealthEvaluator(metric, recorder);
 
     @Test
-    void rawTableDown_marksFailCritical() {
+    void rawTableDown_recordsDown() {
         when(metric.getLastRawAggTradeBytes()).thenReturn(6 * GB);
-        when(metric.getLastWsConnections()).thenReturn(-1); // UNKNOWN → skip
+        when(metric.getLastWsConnections()).thenReturn(-1); // 미수집 → UNKNOWN
 
         evaluator.evaluate();
 
-        verify(recorder).markFail(eq(RAWTABLE), eq(HealthStatus.DOWN), eq("CRITICAL"), anyString());
+        verify(recorder).record(eq(RAWTABLE), eq(HealthStatus.DOWN), anyString());
     }
 
     @Test
-    void wsConnDegraded_marksFailWarn() {
-        when(metric.getLastRawAggTradeBytes()).thenReturn(-1L); // UNKNOWN → skip
+    void wsConnDegraded_recordsDegraded() {
+        when(metric.getLastRawAggTradeBytes()).thenReturn(-1L); // 미수집 → UNKNOWN
         when(metric.getLastWsConnections()).thenReturn(300);
 
         evaluator.evaluate();
 
-        verify(recorder).markFail(eq(WSCONN), eq(HealthStatus.DEGRADED), eq("WARN"), anyString());
+        verify(recorder).record(eq(WSCONN), eq(HealthStatus.DEGRADED), anyString());
     }
 
     @Test
-    void healthy_marksOk() {
+    void healthy_recordsUp() {
         when(metric.getLastRawAggTradeBytes()).thenReturn(1 * GB);
         when(metric.getLastWsConnections()).thenReturn(50);
 
         evaluator.evaluate();
 
-        verify(recorder).markOk(RAWTABLE);
-        verify(recorder).markOk(WSCONN);
+        verify(recorder).record(eq(RAWTABLE), eq(HealthStatus.UP), anyString());
+        verify(recorder).record(eq(WSCONN), eq(HealthStatus.UP), anyString());
     }
 
     @Test
-    void notCollected_recordsNothing() {
+    void notCollected_passesUnknownToRecorder() {
+        // 미수집(-1) 무시 정책은 recorder.record 가 담당 — 평가기는 UNKNOWN 을 그대로 전달한다
         when(metric.getLastRawAggTradeBytes()).thenReturn(-1L);
         when(metric.getLastWsConnections()).thenReturn(-1);
 
         evaluator.evaluate();
 
-        verify(recorder, never()).markFail(anyString(), org.mockito.ArgumentMatchers.any(), anyString(), anyString());
-        verify(recorder, never()).markOk(anyString());
+        verify(recorder).record(eq(RAWTABLE), eq(HealthStatus.UNKNOWN), anyString());
+        verify(recorder).record(eq(WSCONN), eq(HealthStatus.UNKNOWN), anyString());
     }
 }

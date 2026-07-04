@@ -84,10 +84,10 @@ public class NewsService {
         // ext-news-rss: 외부 RSS 서버 응답 건강도 (전부 실패=다운, 일부 실패=경고, 전부 성공=정상)
         int total = SOURCES.size();
         if (okCount == 0) {
-            healthCheckRecorder.markFail(EXT_KEY, HealthStatus.DOWN, "CRITICAL",
+            healthCheckRecorder.record(EXT_KEY, HealthStatus.DOWN,
                     "모든 RSS 소스 실패" + (lastError != null ? " · " + lastError : ""));
         } else if (okCount < total) {
-            healthCheckRecorder.markFail(EXT_KEY, HealthStatus.DEGRADED, "WARN",
+            healthCheckRecorder.record(EXT_KEY, HealthStatus.DEGRADED,
                     "일부 RSS 실패 (%d/%d)".formatted(okCount, total) + (lastError != null ? " · " + lastError : ""));
         } else {
             healthCheckRecorder.markOk(EXT_KEY);

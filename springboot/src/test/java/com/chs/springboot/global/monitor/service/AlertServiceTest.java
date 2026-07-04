@@ -3,7 +3,7 @@ package com.chs.springboot.global.monitor.service;
 import com.chs.springboot.global.monitor.dto.MetricSnapshot;
 import com.chs.springboot.global.monitor.entity.AlertHistory;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
-import com.chs.springboot.global.monitor.feed.FeedStatus;
+import com.chs.springboot.global.monitor.health.HealthStatus;
 import com.chs.springboot.global.monitor.repository.AlertHistoryRepository;
 import com.chs.springboot.global.telegram.TelegramProvider;
 import org.junit.jupiter.api.Test;
@@ -33,12 +33,12 @@ class AlertServiceTest {
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("monitor:silence")).thenReturn(null);
-        when(valueOperations.get("monitor:alert:cooldown:FEED:binance-ticker:STALE")).thenReturn(null);
+        when(valueOperations.get("monitor:alert:cooldown:FEED:binance-ticker:DEGRADED")).thenReturn(null);
 
         MetricSnapshot snapshot = new MetricSnapshot(
                 null, null, null, null, null, null, null, null, null, null,
                 List.of(), null, null, null, null, null, null,
-                List.of(new FeedHealthRegistry.FeedHealth("binance-ticker", FeedStatus.STALE, 12L, 1_717_171_717_000L, 42L)),
+                List.of(new FeedHealthRegistry.FeedHealth("binance-ticker", HealthStatus.DEGRADED, 12L, 1_717_171_717_000L, 42L)),
                 List.of(),
                 LocalDateTime.of(2026, 5, 30, 12, 0, 0),
                 "monitor-1"
@@ -55,9 +55,9 @@ class AlertServiceTest {
         assertThat(saved.getThreshold()).isEqualTo(10d);
         assertThat(saved.getDurationSec()).isEqualTo(12);
         assertThat(saved.getSourceEnv()).isEqualTo("local");
-        assertThat(saved.getMemo()).contains("binance-ticker").contains("STALE");
+        assertThat(saved.getMemo()).contains("binance-ticker").contains("DEGRADED");
 
-        verify(valueOperations).set("monitor:alert:cooldown:FEED:binance-ticker:STALE", "1", 3600, TimeUnit.SECONDS);
+        verify(valueOperations).set("monitor:alert:cooldown:FEED:binance-ticker:DEGRADED", "1", 3600, TimeUnit.SECONDS);
         verifyNoInteractions(telegramProvider);
     }
 
@@ -72,12 +72,12 @@ class AlertServiceTest {
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("monitor:silence")).thenReturn(null);
-        when(valueOperations.get("monitor:alert:cooldown:FEED:binance-ticker:STALE")).thenReturn("1");
+        when(valueOperations.get("monitor:alert:cooldown:FEED:binance-ticker:DEGRADED")).thenReturn("1");
 
         MetricSnapshot snapshot = new MetricSnapshot(
                 null, null, null, null, null, null, null, null, null, null,
                 List.of(), null, null, null, null, null, null,
-                List.of(new FeedHealthRegistry.FeedHealth("binance-ticker", FeedStatus.STALE, 12L, 1_717_171_717_000L, 42L)),
+                List.of(new FeedHealthRegistry.FeedHealth("binance-ticker", HealthStatus.DEGRADED, 12L, 1_717_171_717_000L, 42L)),
                 List.of(),
                 LocalDateTime.of(2026, 5, 30, 12, 0, 0),
                 "monitor-1"
@@ -86,7 +86,7 @@ class AlertServiceTest {
         alertService.evaluate(snapshot);
 
         verify(alertHistoryRepository, never()).save(any());
-        verify(valueOperations, never()).set(eq("monitor:alert:cooldown:FEED:binance-ticker:STALE"), any(), anyLong(), any());
+        verify(valueOperations, never()).set(eq("monitor:alert:cooldown:FEED:binance-ticker:DEGRADED"), any(), anyLong(), any());
         verifyNoInteractions(telegramProvider);
     }
 }

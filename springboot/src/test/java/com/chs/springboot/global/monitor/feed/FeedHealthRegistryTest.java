@@ -1,5 +1,7 @@
 package com.chs.springboot.global.monitor.feed;
 
+import com.chs.springboot.global.monitor.health.HealthStatus;
+import com.chs.springboot.global.monitor.health.StatusLadder;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -16,51 +18,51 @@ class FeedHealthRegistryTest {
     @Test
     void receivedJustNow_isUp() {
         FeedHealthRegistry registry = new FeedHealthRegistry(clock);
-        registry.register("binance-ticker", new FeedHealthRegistry.FeedThreshold(10, 30));
+        registry.register("binance-ticker", new StatusLadder(10, 30));
 
         registry.markReceived("binance-ticker");
 
         List<FeedHealthRegistry.FeedHealth> snapshot = registry.snapshot();
         assertThat(snapshot).hasSize(1);
         assertThat(snapshot.get(0).feedId()).isEqualTo("binance-ticker");
-        assertThat(snapshot.get(0).status()).isEqualTo(FeedStatus.UP);
+        assertThat(snapshot.get(0).status()).isEqualTo(HealthStatus.UP);
         assertThat(snapshot.get(0).secondsSinceLastMessage()).isEqualTo(0L);
     }
 
     @Test
     void elapsedCrossesThresholds_upThenStaleThenDown() {
         FeedHealthRegistry registry = new FeedHealthRegistry(clock);
-        registry.register("binance-ticker", new FeedHealthRegistry.FeedThreshold(10, 30));
+        registry.register("binance-ticker", new StatusLadder(10, 30));
         Instant base = clock.instant();
         registry.markReceived("binance-ticker");
 
         clock.setInstant(base.plusSeconds(9));
-        assertThat(statusOf(registry, "binance-ticker")).isEqualTo(FeedStatus.UP);
+        assertThat(statusOf(registry, "binance-ticker")).isEqualTo(HealthStatus.UP);
 
         clock.setInstant(base.plusSeconds(10));
-        assertThat(statusOf(registry, "binance-ticker")).isEqualTo(FeedStatus.STALE);
+        assertThat(statusOf(registry, "binance-ticker")).isEqualTo(HealthStatus.DEGRADED);
 
         clock.setInstant(base.plusSeconds(29));
-        assertThat(statusOf(registry, "binance-ticker")).isEqualTo(FeedStatus.STALE);
+        assertThat(statusOf(registry, "binance-ticker")).isEqualTo(HealthStatus.DEGRADED);
 
         clock.setInstant(base.plusSeconds(30));
-        assertThat(statusOf(registry, "binance-ticker")).isEqualTo(FeedStatus.DOWN);
+        assertThat(statusOf(registry, "binance-ticker")).isEqualTo(HealthStatus.DOWN);
     }
 
     @Test
     void neverReceived_isDown() {
         FeedHealthRegistry registry = new FeedHealthRegistry(clock);
-        registry.register("upbit", new FeedHealthRegistry.FeedThreshold(10, 30));
+        registry.register("upbit", new StatusLadder(10, 30));
 
         FeedHealthRegistry.FeedHealth health = registry.snapshot().get(0);
-        assertThat(health.status()).isEqualTo(FeedStatus.DOWN);
+        assertThat(health.status()).isEqualTo(HealthStatus.DOWN);
         assertThat(health.secondsSinceLastMessage()).isNull();
     }
 
     @Test
     void received_exposesLastMessageTimeAndCumulativeCount() {
         FeedHealthRegistry registry = new FeedHealthRegistry(clock);
-        registry.register("binance-aggTrade", new FeedHealthRegistry.FeedThreshold(10, 30));
+        registry.register("binance-aggTrade", new StatusLadder(10, 30));
 
         registry.markReceived("binance-aggTrade");
         registry.markReceived("binance-aggTrade");
@@ -74,14 +76,14 @@ class FeedHealthRegistryTest {
     @Test
     void neverReceived_countZeroAndLastMessageNull() {
         FeedHealthRegistry registry = new FeedHealthRegistry(clock);
-        registry.register("upbit", new FeedHealthRegistry.FeedThreshold(10, 30));
+        registry.register("upbit", new StatusLadder(10, 30));
 
         FeedHealthRegistry.FeedHealth health = registry.snapshot().get(0);
         assertThat(health.receivedCount()).isEqualTo(0L);
         assertThat(health.lastMessageAtEpochMs()).isNull();
     }
 
-    private static FeedStatus statusOf(FeedHealthRegistry registry, String feedId) {
+    private static HealthStatus statusOf(FeedHealthRegistry registry, String feedId) {
         return registry.snapshot().stream()
                 .filter(h -> h.feedId().equals(feedId))
                 .findFirst()

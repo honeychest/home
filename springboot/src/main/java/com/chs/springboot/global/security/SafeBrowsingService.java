@@ -90,12 +90,12 @@ public class SafeBrowsingService {
 
         } catch (HttpClientErrorException.TooManyRequests e) {
             // 일일 할당량(10,000회) 초과 → 통과 (사용자 차단 안 함)
-            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DEGRADED, "WARN", "SafeBrowsing 할당량 초과: " + e.getMessage());
+            healthCheckRecorder.record(HEALTH_KEY, HealthStatus.DEGRADED, "SafeBrowsing 할당량 초과: " + e.getMessage());
             log.error("Safe Browsing 할당량 초과 — URL 검사를 건너뜁니다. ({})", e.getMessage());
             return true;
         } catch (Exception e) {
             // 기타 API 호출 실패 → 통과 처리 (서비스 중단 방지)
-            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DOWN, "CRITICAL", "SafeBrowsing API 오류: " + e.getMessage());
+            healthCheckRecorder.record(HEALTH_KEY, HealthStatus.DOWN, "SafeBrowsing API 오류: " + e.getMessage());
             log.error("Safe Browsing API error: {}", e.getMessage());
             return true;
         }

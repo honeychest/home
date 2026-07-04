@@ -15,27 +15,27 @@ class WsReconnectMonitorTest {
     private final WsReconnectMonitor monitor = new WsReconnectMonitor(recorder);
 
     @Test
-    void noReconnect_marksOk() {
+    void noReconnect_recordsUp() {
         monitor.evaluate();
 
-        verify(recorder).markOk(KEY);
+        verify(recorder).record(eq(KEY), eq(HealthStatus.UP), anyString());
     }
 
     @Test
-    void fewReconnects_marksDegraded() {
+    void fewReconnects_recordsDegraded() {
         for (int i = 0; i < 3; i++) monitor.record("BinanceStream/ticker"); // ≥3 → 경고
 
         monitor.evaluate();
 
-        verify(recorder).markFail(eq(KEY), eq(HealthStatus.DEGRADED), eq("WARN"), anyString());
+        verify(recorder).record(eq(KEY), eq(HealthStatus.DEGRADED), anyString());
     }
 
     @Test
-    void manyReconnects_marksDown() {
+    void manyReconnects_recordsDown() {
         for (int i = 0; i < 6; i++) monitor.record("UpbitStream/ticker"); // ≥6 → 다운
 
         monitor.evaluate();
 
-        verify(recorder).markFail(eq(KEY), eq(HealthStatus.DOWN), eq("CRITICAL"), anyString());
+        verify(recorder).record(eq(KEY), eq(HealthStatus.DOWN), anyString());
     }
 }

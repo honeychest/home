@@ -66,7 +66,7 @@ public class TelegramProvider {
             healthCheckRecorder.markOk(HEALTH_KEY);
             log.info("Telegram message sent successfully");
         } catch (Exception e) {
-            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DOWN, "CRITICAL", "송신 실패: " + e.getMessage());
+            healthCheckRecorder.record(HEALTH_KEY, HealthStatus.DOWN, "송신 실패: " + e.getMessage());
             log.error("Failed to send telegram message: {}", e.getMessage());
         }
 
@@ -113,7 +113,7 @@ public class TelegramProvider {
             healthCheckRecorder.markOk(HEALTH_KEY);
             log.info("Telegram photo sent successfully");
         } catch (Exception e) {
-            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DOWN, "CRITICAL", "사진 송신 실패: " + e.getMessage());
+            healthCheckRecorder.record(HEALTH_KEY, HealthStatus.DOWN, "사진 송신 실패: " + e.getMessage());
             log.error("Failed to send telegram photo: {}", e.getMessage());
         }
 

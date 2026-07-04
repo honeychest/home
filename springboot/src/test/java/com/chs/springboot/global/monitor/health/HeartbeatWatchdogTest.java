@@ -8,9 +8,9 @@ import java.time.ZoneId;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 class HeartbeatWatchdogTest {
 
@@ -25,28 +25,29 @@ class HeartbeatWatchdogTest {
     }
 
     @Test
-    void unknown_recordsNothing() {
+    void unknown_passesUnknownToRecorder() {
+        // UNKNOWN(관측 전) 무시 정책은 recorder.record 가 담당 — watchdog 은 그대로 전달한다
         HealthHeartbeat hb = heartbeatWith();
         HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
 
         new HeartbeatWatchdog(hb, recorder).evaluate();
 
-        verifyNoInteractions(recorder);
+        verify(recorder).record(eq(KEY), eq(HealthStatus.UNKNOWN), isNull());
     }
 
     @Test
-    void up_marksOk() {
+    void up_recordsUp() {
         HealthHeartbeat hb = heartbeatWith();
         HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
         hb.beat(KEY);
 
         new HeartbeatWatchdog(hb, recorder).evaluate();
 
-        verify(recorder).markOk(KEY);
+        verify(recorder).record(eq(KEY), eq(HealthStatus.UP), isNull());
     }
 
     @Test
-    void stale_marksFailWarn() {
+    void stale_recordsDegraded() {
         HealthHeartbeat hb = heartbeatWith();
         HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
         Instant base = clock.instant();
@@ -55,11 +56,11 @@ class HeartbeatWatchdogTest {
 
         new HeartbeatWatchdog(hb, recorder).evaluate();
 
-        verify(recorder).markFail(eq(KEY), eq(HealthStatus.DEGRADED), eq("WARN"), anyString());
+        verify(recorder).record(eq(KEY), eq(HealthStatus.DEGRADED), anyString());
     }
 
     @Test
-    void down_marksFailCritical() {
+    void down_recordsDown() {
         HealthHeartbeat hb = heartbeatWith();
         HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
         Instant base = clock.instant();
@@ -68,18 +69,18 @@ class HeartbeatWatchdogTest {
 
         new HeartbeatWatchdog(hb, recorder).evaluate();
 
-        verify(recorder).markFail(eq(KEY), eq(HealthStatus.DOWN), eq("CRITICAL"), anyString());
+        verify(recorder).record(eq(KEY), eq(HealthStatus.DOWN), anyString());
     }
 
     @Test
-    void explicitFail_marksFailCriticalWithCause() {
+    void explicitFail_recordsDownWithCause() {
         HealthHeartbeat hb = heartbeatWith();
         HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
         hb.fail(KEY, "boom");
 
         new HeartbeatWatchdog(hb, recorder).evaluate();
 
-        verify(recorder).markFail(KEY, HealthStatus.DOWN, "CRITICAL", "boom");
+        verify(recorder).record(KEY, HealthStatus.DOWN, "boom");
     }
 
     private static final class MutableClock extends Clock {

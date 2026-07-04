@@ -34,34 +34,33 @@ class InfraHealthEvaluatorTest {
 
         evaluator.evaluate();
 
-        verify(recorder, never()).markOk(anyString());
-        verify(recorder, never()).markFail(anyString(), any(), anyString(), anyString());
+        verify(recorder, never()).record(anyString(), any(), any());
     }
 
     @Test
-    void allUp_marksOkForAllFour() {
+    void allUp_recordsUpForAllFour() {
         when(leaderElection.isLeader()).thenReturn(true);
         stubAllUp();
 
         evaluator.evaluate();
 
-        verify(recorder).markOk(HealthCheckCatalog.INFRA_MYSQL.key());
-        verify(recorder).markOk(HealthCheckCatalog.INFRA_REDIS.key());
-        verify(recorder).markOk(HealthCheckCatalog.INFRA_KAFKA.key());
-        verify(recorder).markOk(HealthCheckCatalog.INFRA_POSTGRES.key());
+        verify(recorder).record(eq(HealthCheckCatalog.INFRA_MYSQL.key()), eq(HealthStatus.UP), anyString());
+        verify(recorder).record(eq(HealthCheckCatalog.INFRA_REDIS.key()), eq(HealthStatus.UP), anyString());
+        verify(recorder).record(eq(HealthCheckCatalog.INFRA_KAFKA.key()), eq(HealthStatus.UP), anyString());
+        verify(recorder).record(eq(HealthCheckCatalog.INFRA_POSTGRES.key()), eq(HealthStatus.UP), anyString());
     }
 
     @Test
-    void down_marksFailCriticalWithDetail() {
+    void down_recordsDownWithDetail() {
         when(leaderElection.isLeader()).thenReturn(true);
         stubAllUp();
         when(probe.kafka()).thenReturn(new InfraHealthProbe.Probe(HealthStatus.DOWN, "브로커 노드 0개"));
 
         evaluator.evaluate();
 
-        verify(recorder).markFail(HealthCheckCatalog.INFRA_KAFKA.key(),
-                HealthStatus.DOWN, "CRITICAL", "브로커 노드 0개");
-        verify(recorder).markOk(HealthCheckCatalog.INFRA_MYSQL.key());
+        verify(recorder).record(HealthCheckCatalog.INFRA_KAFKA.key(),
+                HealthStatus.DOWN, "브로커 노드 0개");
+        verify(recorder).record(eq(HealthCheckCatalog.INFRA_MYSQL.key()), eq(HealthStatus.UP), anyString());
     }
 
     @Test
@@ -70,12 +69,12 @@ class InfraHealthEvaluatorTest {
         stubAllUp();
         // MySQL 다운 시나리오: 저장소(MySQL) 기록 자체가 실패해도 나머지 체크는 계속 평가된다.
         doThrow(new RuntimeException("DB 연결 실패"))
-                .when(recorder).markOk(eq(HealthCheckCatalog.INFRA_MYSQL.key()));
+                .when(recorder).record(eq(HealthCheckCatalog.INFRA_MYSQL.key()), any(), any());
 
         evaluator.evaluate();
 
-        verify(recorder).markOk(HealthCheckCatalog.INFRA_REDIS.key());
-        verify(recorder).markOk(HealthCheckCatalog.INFRA_KAFKA.key());
-        verify(recorder).markOk(HealthCheckCatalog.INFRA_POSTGRES.key());
+        verify(recorder).record(eq(HealthCheckCatalog.INFRA_REDIS.key()), eq(HealthStatus.UP), anyString());
+        verify(recorder).record(eq(HealthCheckCatalog.INFRA_KAFKA.key()), eq(HealthStatus.UP), anyString());
+        verify(recorder).record(eq(HealthCheckCatalog.INFRA_POSTGRES.key()), eq(HealthStatus.UP), anyString());
     }
 }

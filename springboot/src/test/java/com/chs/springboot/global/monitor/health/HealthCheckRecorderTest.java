@@ -31,7 +31,7 @@ class HealthCheckRecorderTest {
     void newFailure_publishesTransition() {
         when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY)).thenReturn(null);
 
-        recorder.markFail(KEY, HealthStatus.DOWN, "CRITICAL", "연결 실패");
+        recorder.record(KEY, HealthStatus.DOWN, "연결 실패");
 
         ArgumentCaptor<HealthCheckTransitionEvent> captor = ArgumentCaptor.forClass(HealthCheckTransitionEvent.class);
         verify(publisher).publishEvent(captor.capture());
@@ -40,11 +40,53 @@ class HealthCheckRecorderTest {
     }
 
     @Test
+    void down_derivesCriticalSeverity() {
+        when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY)).thenReturn(null);
+
+        recorder.record(KEY, HealthStatus.DOWN, "연결 실패");
+
+        ArgumentCaptor<HealthCheckEvent> captor = ArgumentCaptor.forClass(HealthCheckEvent.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getSeverity()).isEqualTo("CRITICAL");
+    }
+
+    @Test
+    void degraded_derivesWarnSeverity() {
+        when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY)).thenReturn(null);
+
+        recorder.record(KEY, HealthStatus.DEGRADED, "지연");
+
+        ArgumentCaptor<HealthCheckEvent> captor = ArgumentCaptor.forClass(HealthCheckEvent.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getSeverity()).isEqualTo("WARN");
+    }
+
+    @Test
+    void unknown_recordsNothing() {
+        recorder.record(KEY, HealthStatus.UNKNOWN, null);
+
+        verify(repository, never()).save(any());
+        verify(publisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void up_closesOpenEventLikeMarkOk() {
+        when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY))
+                .thenReturn(openWith("DOWN"));
+
+        recorder.record(KEY, HealthStatus.UP, null);
+
+        ArgumentCaptor<HealthCheckTransitionEvent> captor = ArgumentCaptor.forClass(HealthCheckTransitionEvent.class);
+        verify(publisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().recovery()).isTrue();
+    }
+
+    @Test
     void repeatedSameStatus_doesNotPublish() {
         when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY))
                 .thenReturn(openWith("DOWN")); // 이미 DOWN 진행 중
 
-        recorder.markFail(KEY, HealthStatus.DOWN, "CRITICAL", "연결 실패");
+        recorder.record(KEY, HealthStatus.DOWN, "연결 실패");
 
         verify(publisher, never()).publishEvent(any());
     }
@@ -54,7 +96,7 @@ class HealthCheckRecorderTest {
         when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY))
                 .thenReturn(openWith("DEGRADED")); // 경고 → 다운 악화
 
-        recorder.markFail(KEY, HealthStatus.DOWN, "CRITICAL", "악화");
+        recorder.record(KEY, HealthStatus.DOWN, "악화");
 
         verify(publisher).publishEvent(any(HealthCheckTransitionEvent.class));
     }

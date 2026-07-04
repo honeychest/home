@@ -4,7 +4,6 @@
 package com.chs.springboot.global.monitor.health;
 
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
-import com.chs.springboot.global.monitor.feed.FeedStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -39,14 +38,7 @@ public class FeedHealthEvaluator {
             if (checkKey == null) {
                 continue;
             }
-            FeedStatus status = fh.status();
-            if (status == FeedStatus.DOWN) {
-                recorder.markFail(checkKey, HealthStatus.DOWN, "CRITICAL", buildCause(fh));
-            } else if (status == FeedStatus.STALE) {
-                recorder.markFail(checkKey, HealthStatus.DEGRADED, "WARN", buildCause(fh));
-            } else {
-                recorder.markOk(checkKey);
-            }
+            recorder.record(checkKey, fh.status(), buildCause(fh));
         }
     }
 

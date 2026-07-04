@@ -1,7 +1,8 @@
 // [AGENT] 헬스 체크 실패/복구 기록 공용 API — 모든 카테고리가 이 recorder로 계측한다.
 // 원칙: 정상은 저장하지 않고, FAIL 전환/지속과 복구(RESOLVED)만 health_check_event 에 적립.
-//  - markFail: 진행 중(open) 이벤트가 없으면 새로 열고, 있으면 lastFailedAt/원인을 갱신
-//  - markOk  : 진행 중 이벤트가 있으면 resolvedAt 을 찍어 닫는다 (없으면 무동작)
+//  - record : 판정 상태를 그대로 넘기는 단일 입구. 심각도는 상태에서 파생(DOWN=CRITICAL, DEGRADED=WARN),
+//             UP=복구 처리, UNKNOWN(미수집/미관측)=무동작(오탐 방지).
+//  - markOk : 진행 중 이벤트가 있으면 resolvedAt 을 찍어 닫는다 (없으면 무동작)
 package com.chs.springboot.global.monitor.health;
 
 import lombok.RequiredArgsConstructor;
@@ -22,9 +23,21 @@ public class HealthCheckRecorder {
     @Value("${monitor.alert-history.source-env:${spring.profiles.active:local}}")
     private String sourceEnv;
 
-    /** 실패/경고 상태를 기록. status 는 DOWN 또는 DEGRADED. */
+    /** 판정 상태를 그대로 기록 — 심각도는 상태에서 파생. 모든 계측 지점의 단일 입구. */
     @Transactional
-    public void markFail(String checkKey, HealthStatus status, String severity, String cause) {
+    public void record(String checkKey, HealthStatus status, String cause) {
+        switch (status) {
+            case DOWN -> markFail(checkKey, HealthStatus.DOWN, "CRITICAL", cause);
+            case DEGRADED -> markFail(checkKey, HealthStatus.DEGRADED, "WARN", cause);
+            case UP -> markOk(checkKey);
+            case UNKNOWN -> {
+                // 미수집/미관측 — 이력 남기지 않음(오탐 방지)
+            }
+        }
+    }
+
+    /** 실패/경고 상태를 기록. status 는 DOWN 또는 DEGRADED. record 를 통해서만 진입한다. */
+    private void markFail(String checkKey, HealthStatus status, String severity, String cause) {
         LocalDateTime now = LocalDateTime.now();
         HealthCheckEvent open = repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(checkKey);
         String previousStatus = open == null ? null : open.getStatus();

@@ -4,7 +4,6 @@
 package com.chs.springboot.global.monitor.health;
 
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
-import com.chs.springboot.global.monitor.feed.FeedStatus;
 import com.chs.springboot.global.monitor.service.MetricCollectorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,26 +20,16 @@ public class HealthCheckService {
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    // 피드 판정 기준 (FeedHealthConfig 등록값과 동일: staleSeconds=10, downSeconds=30)
-    private static final String FEED_THRESHOLD_TEXT = "경고 ≥10초 · 다운 ≥30초";
+    // 임계 문구는 StatusLadder 사다리 상수에서 파생 — 판정값과 문구가 어긋날 수 없다
+    private static final String FEED_THRESHOLD_TEXT = StatusLadder.FEED_SECONDS.text("초");
+    private static final String RES_THRESHOLD_TEXT = StatusLadder.RESOURCE_PCT.text("%", "(AlertService 임계와 동일)");
+    private static final String RAWTABLE_THRESHOLD_TEXT = StatusLadder.RAWTABLE_GB.text("GB", " (data+index)");
+    private static final String WSCONN_THRESHOLD_TEXT = StatusLadder.WS_CONNS.text("", " (4개 핸들러 합)");
 
-    // 리소스(res-*) 판정 기준: 다운 임계는 AlertService의 기존 CPU/RAM/DISK 80% CRITICAL 라인과 동일값 재사용.
-    // 경고(70%)는 다운 전 조기 경보용 여유값.
-    private static final double RES_DEGRADED_PCT = 70d;
-    private static final double RES_DOWN_PCT = 80d;
-    private static final String RES_THRESHOLD_TEXT = "경고 ≥70% · 다운 ≥80%(AlertService 임계와 동일)";
-
-    // 인프라(res-*) 판정 기준: Actuator HealthIndicator / AdminClient 응답 그대로(경고 단계 없음, UP 아니면 DOWN)
+    // 인프라(infra-*) 판정 기준: Actuator HealthIndicator / AdminClient 응답 그대로(경고 단계 없음, UP 아니면 DOWN)
     private static final String INFRA_THRESHOLD_TEXT = "능동 프로브(연결 확인) — UP 아니면 DOWN";
 
-    // rawtable/ws 판정 기준: 퍼센트가 아닌 절대값 임계. 상수 1곳에서 관리(추후 튜닝 용이).
-    // 표시(HealthCheckService)와 이력 적립(ResourceHealthEvaluator)이 아래 static 판정을 공유 → 단일 소스.
-    private static final long RAWTABLE_DEGRADED_BYTES = 3L * 1024 * 1024 * 1024; // 3GB
-    private static final long RAWTABLE_DOWN_BYTES = 6L * 1024 * 1024 * 1024;     // 6GB
-    private static final String RAWTABLE_THRESHOLD_TEXT = "경고 ≥3GB · 다운 ≥6GB (data+index)";
-    private static final int WSCONN_DEGRADED = 300;
-    private static final int WSCONN_DOWN = 800;
-    private static final String WSCONN_THRESHOLD_TEXT = "경고 ≥300 · 다운 ≥800 (4개 핸들러 합)";
+    private static final double GB = 1024d * 1024 * 1024;
 
     private final FeedHealthRegistry feedHealthRegistry;
     private final HealthHeartbeat healthHeartbeat;
@@ -100,7 +89,8 @@ public class HealthCheckService {
     // ── 소스별 판정 ─────────────────────────────────────────────────
 
     private static Judgement judgeFeed(FeedHealthRegistry.FeedHealth fh) {
-        return new Judgement(mapFeedStatus(fh), describeFeed(fh), FEED_THRESHOLD_TEXT);
+        HealthStatus status = fh == null ? HealthStatus.UNKNOWN : fh.status();
+        return new Judgement(status, describeFeed(fh), FEED_THRESHOLD_TEXT);
     }
 
     private Judgement judgeHeartbeat(String key) {
@@ -110,17 +100,20 @@ public class HealthCheckService {
 
     private Judgement judgeResource(String key) {
         Double value = resourceValue(key);
-        return new Judgement(mapResourceStatus(value), describeResource(value), RES_THRESHOLD_TEXT);
+        HealthStatus status = value == null ? HealthStatus.UNKNOWN : StatusLadder.RESOURCE_PCT.judge(value);
+        return new Judgement(status, describeResource(value), RES_THRESHOLD_TEXT);
     }
 
     private Judgement judgeRawTable() {
         long bytes = metricCollectorService.getLastRawAggTradeBytes();
-        return new Judgement(rawTableStatus(bytes), describeRawTable(bytes), RAWTABLE_THRESHOLD_TEXT);
+        return new Judgement(StatusLadder.RAWTABLE_GB.judgeOrUnknown(bytes / GB),
+                describeRawTable(bytes), RAWTABLE_THRESHOLD_TEXT);
     }
 
     private Judgement judgeWsConn() {
         int conns = metricCollectorService.getLastWsConnections();
-        return new Judgement(wsConnStatus(conns), describeWsConn(conns), WSCONN_THRESHOLD_TEXT);
+        return new Judgement(StatusLadder.WS_CONNS.judgeOrUnknown(conns),
+                describeWsConn(conns), WSCONN_THRESHOLD_TEXT);
     }
 
     private Judgement judgeInfra(String key) {
@@ -142,20 +135,6 @@ public class HealthCheckService {
 
     // ── 소스별 세부 계산 ────────────────────────────────────────────
 
-    private static HealthStatus mapFeedStatus(FeedHealthRegistry.FeedHealth fh) {
-        if (fh == null) {
-            return HealthStatus.UNKNOWN;
-        }
-        FeedStatus s = fh.status();
-        if (s == FeedStatus.DOWN) {
-            return HealthStatus.DOWN;
-        }
-        if (s == FeedStatus.STALE) {
-            return HealthStatus.DEGRADED;
-        }
-        return HealthStatus.UP;
-    }
-
     private static String describeFeed(FeedHealthRegistry.FeedHealth fh) {
         if (fh == null || fh.secondsSinceLastMessage() == null) {
             return "수신 기록 없음";
@@ -175,39 +154,16 @@ public class HealthCheckService {
         return v < 0 ? null : v;
     }
 
-    private static HealthStatus mapResourceStatus(Double value) {
-        if (value == null) return HealthStatus.UNKNOWN;
-        if (value >= RES_DOWN_PCT) return HealthStatus.DOWN;
-        if (value >= RES_DEGRADED_PCT) return HealthStatus.DEGRADED;
-        return HealthStatus.UP;
-    }
-
     private static String describeResource(Double value) {
         if (value == null) return "수집 기록 없음";
         return "%.1f%%".formatted(value);
     }
 
-    // ── rawtable/ws 공용 판정 — 표시와 이력 적립(ResourceHealthEvaluator)이 공유 ──
-
-    /** raw_agg_trade 물리크기(바이트) → 상태. -1(미수집)=UNKNOWN. */
-    public static HealthStatus rawTableStatus(long bytes) {
-        if (bytes < 0) return HealthStatus.UNKNOWN;
-        if (bytes >= RAWTABLE_DOWN_BYTES) return HealthStatus.DOWN;
-        if (bytes >= RAWTABLE_DEGRADED_BYTES) return HealthStatus.DEGRADED;
-        return HealthStatus.UP;
-    }
+    // ── rawtable/ws 공용 판정근거 문구 — 표시와 이력 적립(ResourceHealthEvaluator)이 공유 ──
 
     public static String describeRawTable(long bytes) {
         if (bytes < 0) return "수집 기록 없음";
         return "raw_agg_trade %.1fGB".formatted(bytes / (1024d * 1024d * 1024d));
-    }
-
-    /** WS 세션 합계 → 상태. -1(미수집)=UNKNOWN. */
-    public static HealthStatus wsConnStatus(int conns) {
-        if (conns < 0) return HealthStatus.UNKNOWN;
-        if (conns >= WSCONN_DOWN) return HealthStatus.DOWN;
-        if (conns >= WSCONN_DEGRADED) return HealthStatus.DEGRADED;
-        return HealthStatus.UP;
     }
 
     public static String describeWsConn(int conns) {

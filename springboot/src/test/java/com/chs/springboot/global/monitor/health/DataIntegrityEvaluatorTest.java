@@ -46,52 +46,51 @@ class DataIntegrityEvaluatorTest {
     }
 
     @Test
-    void gapAboveDownThreshold_marksFailCritical() {
+    void gapAboveDownThreshold_recordsDown() {
         when(leader.isLeader()).thenReturn(true);
         stubGapPresent(55);          // 누락 5개 ≥ 3 → DOWN
         stubQuality(60, 0);          // quality 정상
 
         evaluator.evaluate();
 
-        verify(recorder).markFail(eq(GAP), eq(HealthStatus.DOWN), eq("CRITICAL"), anyString());
-        verify(recorder).markOk(QUALITY);
+        verify(recorder).record(eq(GAP), eq(HealthStatus.DOWN), anyString());
+        verify(recorder).record(eq(QUALITY), eq(HealthStatus.UP), anyString());
     }
 
     @Test
-    void flatRatioAboveDownThreshold_marksFailCritical() {
+    void flatRatioAboveDownThreshold_recordsDown() {
         when(leader.isLeader()).thenReturn(true);
         stubGapPresent(60);          // gap 정상
         stubQuality(100, 40);        // flat 40% ≥ 30 → DOWN
 
         evaluator.evaluate();
 
-        verify(recorder).markOk(GAP);
-        verify(recorder).markFail(eq(QUALITY), eq(HealthStatus.DOWN), eq("CRITICAL"), anyString());
+        verify(recorder).record(eq(GAP), eq(HealthStatus.UP), anyString());
+        verify(recorder).record(eq(QUALITY), eq(HealthStatus.DOWN), anyString());
     }
 
     @Test
-    void allHealthy_marksOk() {
+    void allHealthy_recordsUp() {
         when(leader.isLeader()).thenReturn(true);
         stubGapPresent(60);          // 누락 0 → UP
         stubQuality(60, 3);          // flat 5% → UP
 
         evaluator.evaluate();
 
-        verify(recorder).markOk(GAP);
-        verify(recorder).markOk(QUALITY);
+        verify(recorder).record(eq(GAP), eq(HealthStatus.UP), anyString());
+        verify(recorder).record(eq(QUALITY), eq(HealthStatus.UP), anyString());
     }
 
     @Test
     void noSample_qualityNotRecorded() {
         when(leader.isLeader()).thenReturn(true);
-        stubGapPresent(60);          // gap UP → markOk
+        stubGapPresent(60);          // gap UP
         stubQuality(0, 0);           // 표본 없음 → quality 판정 보류
 
         evaluator.evaluate();
 
-        verify(recorder).markOk(GAP);
-        // quality 는 어떤 기록도 하지 않음(markOk/markFail 모두 없음)
-        verify(recorder, never()).markOk(QUALITY);
-        verify(recorder, never()).markFail(eq(QUALITY), any(), anyString(), anyString());
+        verify(recorder).record(eq(GAP), eq(HealthStatus.UP), anyString());
+        // quality 는 어떤 기록도 하지 않음
+        verify(recorder, never()).record(eq(QUALITY), any(), any());
     }
 }

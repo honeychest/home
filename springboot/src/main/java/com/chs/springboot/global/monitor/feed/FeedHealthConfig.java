@@ -2,6 +2,7 @@
 // Purpose: 꾸준한 하트비트가 있는 업스트림 피드(ticker/aggTrade/upbit)만 freshness 감시 대상으로 등록한다.
 package com.chs.springboot.global.monitor.feed;
 
+import com.chs.springboot.global.monitor.health.StatusLadder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -17,9 +18,9 @@ public class FeedHealthConfig {
     @Bean
     public FeedHealthRegistry feedHealthRegistry(Clock clock) {
         FeedHealthRegistry registry = new FeedHealthRegistry(clock);
-        registry.register(BINANCE_TICKER, new FeedHealthRegistry.FeedThreshold(10, 30));
-        registry.register(BINANCE_AGG_TRADE, new FeedHealthRegistry.FeedThreshold(10, 30));
-        registry.register(UPBIT, new FeedHealthRegistry.FeedThreshold(10, 30));
+        registry.register(BINANCE_TICKER, StatusLadder.FEED_SECONDS);
+        registry.register(BINANCE_AGG_TRADE, StatusLadder.FEED_SECONDS);
+        registry.register(UPBIT, StatusLadder.FEED_SECONDS);
         return registry;
     }
 }

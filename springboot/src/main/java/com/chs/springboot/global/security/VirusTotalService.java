@@ -92,12 +92,12 @@ public class VirusTotalService {
             return true;
         } catch (HttpClientErrorException.TooManyRequests e) {
             // 일일 할당량(500회) 또는 분당 한도(4회) 초과 → 통과 (사용자 차단 안 함)
-            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DEGRADED, "WARN", "VirusTotal 할당량 초과: " + e.getMessage());
+            healthCheckRecorder.record(HEALTH_KEY, HealthStatus.DEGRADED, "VirusTotal 할당량 초과: " + e.getMessage());
             log.error("VirusTotal 할당량 초과 — 파일 검사를 건너뜁니다. ({})", e.getMessage());
             return true;
         } catch (Exception e) {
             // 기타 API 호출 실패 → 통과 처리 (서비스 중단 방지)
-            healthCheckRecorder.markFail(HEALTH_KEY, HealthStatus.DOWN, "CRITICAL", "VirusTotal API 오류: " + e.getMessage());
+            healthCheckRecorder.record(HEALTH_KEY, HealthStatus.DOWN, "VirusTotal API 오류: " + e.getMessage());
             log.error("VirusTotal API error: {}", e.getMessage());
             return true;
         }

@@ -16,14 +16,8 @@ public class HeartbeatWatchdog {
     @Scheduled(fixedDelay = 10_000)
     public void evaluate() {
         for (HealthHeartbeat.Beat beat : heartbeat.snapshot()) {
-            switch (beat.status()) {
-                case DOWN -> recorder.markFail(beat.checkKey(), HealthStatus.DOWN, "CRITICAL", beat.cause());
-                case DEGRADED -> recorder.markFail(beat.checkKey(), HealthStatus.DEGRADED, "WARN", beat.cause());
-                case UP -> recorder.markOk(beat.checkKey());
-                case UNKNOWN -> {
-                    // 아직 관측 없음(대기) — 이력 남기지 않음
-                }
-            }
+            // UNKNOWN(아직 관측 없음)의 무시 여부는 recorder 가 판단한다
+            recorder.record(beat.checkKey(), beat.status(), beat.cause());
         }
     }
 }

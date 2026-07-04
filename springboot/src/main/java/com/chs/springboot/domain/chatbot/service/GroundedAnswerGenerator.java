@@ -78,7 +78,7 @@ public class GroundedAnswerGenerator {
             healthCheckRecorder.markOk(EXT_LLM_KEY);
             return content;
         } catch (RuntimeException e) {
-            healthCheckRecorder.markFail(EXT_LLM_KEY, HealthStatus.DOWN, "CRITICAL",
+            healthCheckRecorder.record(EXT_LLM_KEY, HealthStatus.DOWN,
                     "LLM 채팅·임베딩 호출 실패: " + e.getMessage());
             throw e;
         }

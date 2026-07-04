@@ -122,7 +122,7 @@ public class WeatherScheduler {
         } catch (Exception e) {
             // 수집 실패 시 로그만 출력하고 다음 실행 주기를 기다림 (앱 종료 방지)
             healthHeartbeat.fail(HEALTH_KEY, e.getMessage());
-            healthCheckRecorder.markFail(EXT_KEY, HealthStatus.DOWN, "CRITICAL", "수집 실패: " + e.getMessage());
+            healthCheckRecorder.record(EXT_KEY, HealthStatus.DOWN, "수집 실패: " + e.getMessage());
             System.err.println("--- [스케줄러] 에러: " + e.getMessage() + " ---");
         }
     }

@@ -25,13 +25,6 @@ public class DataIntegrityEvaluator {
     // 1m 롤업 지연(cron 매분 +10초) 여유 — 최근 2분은 아직 안 굳었을 수 있어 제외
     private static final long LAG_MS = 2 * MINUTE_MS;
 
-    // gap 임계(누락봉 수)
-    private static final int GAP_DEGRADED = 1;
-    private static final int GAP_DOWN = 3;
-    // quality 임계(flat 비율 %)
-    private static final double FLAT_DEGRADED_PCT = 10d;
-    private static final double FLAT_DOWN_PCT = 30d;
-
     private final JdbcTemplate batchJdbcTemplate;
     private final HealthCheckRecorder recorder;
     private final LeaderElectionService leaderElection;
@@ -72,10 +65,8 @@ public class DataIntegrityEvaluator {
         int missing = Math.max(0, WINDOW_MINUTES - present);
         String cause = "[%s-%s] 최근%d분 누락봉 %d개(존재 %d/%d)"
                 .formatted(SYMBOL, MARKET, WINDOW_MINUTES, missing, present, WINDOW_MINUTES);
-        HealthStatus status = missing >= GAP_DOWN ? HealthStatus.DOWN
-                : missing >= GAP_DEGRADED ? HealthStatus.DEGRADED
-                : HealthStatus.UP;
-        record(HealthCheckCatalog.DATA_CANDLE_GAP.key(), status, cause);
+        recorder.record(HealthCheckCatalog.DATA_CANDLE_GAP.key(),
+                StatusLadder.CANDLE_GAP.judge(missing), cause);
     }
 
     private void evaluateQuality(long from, long end) {
@@ -96,18 +87,7 @@ public class DataIntegrityEvaluator {
         double flatPct = (flat * 100d) / total;
         String cause = "[%s-%s] 최근%d분 flat %.1f%%(%d/%d)"
                 .formatted(SYMBOL, MARKET, WINDOW_MINUTES, flatPct, flat, total);
-        HealthStatus status = flatPct >= FLAT_DOWN_PCT ? HealthStatus.DOWN
-                : flatPct >= FLAT_DEGRADED_PCT ? HealthStatus.DEGRADED
-                : HealthStatus.UP;
-        record(HealthCheckCatalog.DATA_QUALITY.key(), status, cause);
-    }
-
-    private void record(String checkKey, HealthStatus status, String cause) {
-        switch (status) {
-            case DOWN -> recorder.markFail(checkKey, HealthStatus.DOWN, "CRITICAL", cause);
-            case DEGRADED -> recorder.markFail(checkKey, HealthStatus.DEGRADED, "WARN", cause);
-            case UP -> recorder.markOk(checkKey);
-            case UNKNOWN -> { /* 미판정 — 기록 안 함 */ }
-        }
+        recorder.record(HealthCheckCatalog.DATA_QUALITY.key(),
+                StatusLadder.FLAT_PCT.judge(flatPct), cause);
     }
 }

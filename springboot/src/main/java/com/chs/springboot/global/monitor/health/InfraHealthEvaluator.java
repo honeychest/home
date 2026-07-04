@@ -36,11 +36,7 @@ public class InfraHealthEvaluator {
     private void record(String checkKey, Supplier<InfraHealthProbe.Probe> probeCall) {
         try {
             InfraHealthProbe.Probe result = probeCall.get();
-            if (result.status() == HealthStatus.UP) {
-                recorder.markOk(checkKey);
-            } else {
-                recorder.markFail(checkKey, HealthStatus.DOWN, "CRITICAL", result.detail());
-            }
+            recorder.record(checkKey, result.status(), result.detail());
         } catch (Exception e) {
             log.warn("[InfraHealth] {} 평가/기록 실패: {}", checkKey, e.getMessage());
         }

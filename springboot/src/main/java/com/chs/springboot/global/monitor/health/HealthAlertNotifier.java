@@ -16,7 +16,7 @@ public class HealthAlertNotifier {
 
     private final TelegramProvider telegramProvider;
 
-    // @Async: 텔레그램 HTTP 호출을 발행 스레드(평가기/요청 스레드)에서 분리 → markFail/markOk 지연 방지.
+    // @Async: 텔레그램 HTTP 호출을 발행 스레드(평가기/요청 스레드)에서 분리 → record/markOk 지연 방지.
     // (@EnableAsync 는 SpringbootApplication 에 활성화됨. 단위 테스트의 직접 호출은 프록시 미경유라 동기 실행)
     @Async
     @EventListener
