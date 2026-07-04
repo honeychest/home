@@ -20,8 +20,8 @@ public class WsReconnectMonitor {
     private final Deque<Long> events = new ConcurrentLinkedDeque<>();
     private final HealthCheckRecorder recorder;
 
-    /** 재연결/에러 이벤트 1건 기록(스트림 onError 훅에서 호출). */
-    public void record(String label) {
+    /** 재연결/에러 이벤트 1건 기록(스트림 onError 훅에서 호출). 어느 스트림인지는 호출자 알림/로그가 남긴다. */
+    public void record() {
         long now = System.currentTimeMillis();
         events.addLast(now);
         prune(now);

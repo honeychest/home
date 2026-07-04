@@ -73,7 +73,7 @@ public class UpbitStreamService {
                             return null;
                         }));
         stream.onError(error -> {
-            wsReconnectMonitor.record("UpbitStream/ticker");
+            wsReconnectMonitor.record();
             notificationService.sendAlert("[UpbitStream] error: " + error.getMessage());
         });
         stream.connect();

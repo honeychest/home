@@ -23,7 +23,7 @@ class WsReconnectMonitorTest {
 
     @Test
     void fewReconnects_recordsDegraded() {
-        for (int i = 0; i < 3; i++) monitor.record("BinanceStream/ticker"); // ≥3 → 경고
+        for (int i = 0; i < 3; i++) monitor.record(); // ≥3 → 경고
 
         monitor.evaluate();
 
@@ -32,7 +32,7 @@ class WsReconnectMonitorTest {
 
     @Test
     void manyReconnects_recordsDown() {
-        for (int i = 0; i < 6; i++) monitor.record("UpbitStream/ticker"); // ≥6 → 다운
+        for (int i = 0; i < 6; i++) monitor.record(); // ≥6 → 다운
 
         monitor.evaluate();
 

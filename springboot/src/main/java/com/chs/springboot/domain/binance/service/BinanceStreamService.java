@@ -72,7 +72,7 @@ public class BinanceStreamService {
         stream = streamFactory.create(url, "BinanceStream/ticker", this::onMessage,
                 scheduler, RECONNECT_DELAY_SEC);
         stream.onError(error -> {
-            wsReconnectMonitor.record("BinanceStream/ticker");
+            wsReconnectMonitor.record();
             notificationService.sendAlert("[BinanceStream] error: " + error.getMessage());
         });
         stream.connect();
