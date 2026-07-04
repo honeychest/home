@@ -1,5 +1,6 @@
-// [AGENT] HealthHeartbeat 빈 생성 + 하트비트 기반 체크의 임계 중앙 등록.
-// 새 하트비트 체크를 계측할 때 여기 register 한 줄만 추가하면 watchdog·보드가 자동 반영.
+// [AGENT] HealthHeartbeat 빈 생성 — 하트비트 임계는 카탈로그 각 항목이 자기 줄에 선언(단일 소스).
+// 등록이 카탈로그에서 파생되므로 선언↔등록 불일치가 구조적으로 불가능하다(별도 검증 불필요).
+// 새 하트비트 체크 추가 = 카탈로그 한 줄(임계 포함) + 대상 서비스의 beat/fail 계측.
 package com.chs.springboot.global.monitor.health;
 
 import org.springframework.context.annotation.Bean;
@@ -13,40 +14,11 @@ public class HealthHeartbeatConfig {
     @Bean
     public HealthHeartbeat healthHeartbeat(Clock clock) {
         HealthHeartbeat heartbeat = new HealthHeartbeat(clock);
-        // 임계는 대략 대상 주기의 2.5×(경고) / 5×(다운) grace 로 설정.
-        register(heartbeat, HealthCheckCatalog.SCHED_OPENINTEREST_POLL, 150, 300);   // 60초
-        register(heartbeat, HealthCheckCatalog.SCHED_TELEGRAM_POLL, 150, 300);       // 30초
-        register(heartbeat, HealthCheckCatalog.SCHED_ANALYSIS, 180, 360);            // 60초
-        register(heartbeat, HealthCheckCatalog.SCHED_WEATHER, 1500, 2100);           // 10분
-        register(heartbeat, HealthCheckCatalog.SCHED_NEWS, 720, 1200);              // 5분
-        register(heartbeat, HealthCheckCatalog.PIPE_ROLLUP_1S, 10, 30);             // 1초
-        register(heartbeat, HealthCheckCatalog.PIPE_EMPTY_CANDLE_FIX, 720, 1200);   // 5분
-        register(heartbeat, HealthCheckCatalog.PIPE_ROLLUP_1M, 180, 360);           // 1분
-        register(heartbeat, HealthCheckCatalog.PIPE_ROLLUP_5M, 720, 1200);          // 5분
-        register(heartbeat, HealthCheckCatalog.PIPE_AGGTRADE_FLUSH, 60, 180);       // 플러시 주기 가변 → 보수적
-        register(heartbeat, HealthCheckCatalog.PIPE_S3_ARCHIVE, 1500, 2100);        // 10분
-        register(heartbeat, HealthCheckCatalog.PIPE_KAFKA_CONSUMER, 60, 180);       // 유입 주기 가변 → 보수적(리더 전용)
-        register(heartbeat, HealthCheckCatalog.SCHED_LEADER_ELECTION, 15, 30);      // 5초(전 노드 election 루프)
-        validateAgainstCatalog(heartbeat);
-        return heartbeat;
-    }
-
-    private static void register(HealthHeartbeat heartbeat, HealthCheckCatalog check,
-                                 long staleSeconds, long downSeconds) {
-        heartbeat.register(check.key(), new HealthHeartbeat.Spec(staleSeconds, downSeconds));
-    }
-
-    // 카탈로그 선언(source=HEARTBEAT) ↔ 위 register 목록의 양방향 일치 검증. 어긋나면 기동 실패(fail-fast).
-    private static void validateAgainstCatalog(HealthHeartbeat heartbeat) {
         for (HealthCheckCatalog c : HealthCheckCatalog.all()) {
-            boolean declared = c.source() == HealthSource.HEARTBEAT;
-            boolean registered = heartbeat.isRegistered(c.key());
-            if (declared && !registered) {
-                throw new IllegalStateException("카탈로그가 HEARTBEAT 로 선언했는데 임계 미등록: " + c.key());
-            }
-            if (!declared && registered) {
-                throw new IllegalStateException("카탈로그 선언이 HEARTBEAT 가 아닌데 임계 등록됨: " + c.key());
+            if (c.source() == HealthSource.HEARTBEAT) {
+                heartbeat.register(c.key(), c.heartbeat());
             }
         }
+        return heartbeat;
     }
 }

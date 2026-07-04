@@ -19,7 +19,7 @@ public record HealthCheckView(
 ) {
     public record Failure(
             String at,
-            String status,     // DOWN / DEGRADED / RESOLVED
+            HealthEventStatus status,
             String cause,
             String resolvedAt  // 복구 시각, 미복구면 null
     ) {

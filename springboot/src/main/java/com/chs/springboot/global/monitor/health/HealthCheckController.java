@@ -20,7 +20,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class HealthCheckController {
 
-    private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter GENERATED_TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final HealthCheckService healthCheckService;
 
@@ -46,27 +46,14 @@ public class HealthCheckController {
         );
 
         return ResponseEntity.ok(Map.of(
-                "generatedAt", LocalDateTime.now().format(TS),
+                "generatedAt", LocalDateTime.now().format(GENERATED_TS),
                 "summary", summary,
                 "checks", checks
         ));
     }
 
     @GetMapping("/events")
-    public ResponseEntity<List<Map<String, Object>>> events() {
-        List<Map<String, Object>> result = healthCheckService.getRecentEvents().stream()
-                .map(e -> {
-                    Map<String, Object> m = new java.util.HashMap<>();
-                    m.put("checkKey", e.getCheckKey());
-                    m.put("status", e.getStatus());
-                    m.put("severity", e.getSeverity());
-                    m.put("cause", e.getCause());
-                    m.put("firstFailedAt", e.getFirstFailedAt() != null ? e.getFirstFailedAt().format(TS) : null);
-                    m.put("lastFailedAt", e.getLastFailedAt() != null ? e.getLastFailedAt().format(TS) : null);
-                    m.put("resolvedAt", e.getResolvedAt() != null ? e.getResolvedAt().format(TS) : null);
-                    return m;
-                })
-                .toList();
-        return ResponseEntity.ok(result);
+    public ResponseEntity<List<HealthEventView>> events() {
+        return ResponseEntity.ok(healthCheckService.getRecentEvents());
     }
 }

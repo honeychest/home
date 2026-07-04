@@ -36,7 +36,7 @@ public class SafeBrowsingService {
     @Value("${google.safebrowsing.api-key:}")
     private String apiKey;
 
-    private static final String HEALTH_KEY = HealthCheckCatalog.EXT_SECURITY_SCAN.key();
+    private static final String HEALTH_KEY = HealthCheckCatalog.EXT_SAFEBROWSING.key();
     private final HealthCheckRecorder healthCheckRecorder;
 
     public SafeBrowsingService(HealthCheckRecorder healthCheckRecorder) {

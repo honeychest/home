@@ -72,7 +72,7 @@ class HealthCheckServiceTest {
     @Test
     void infraOpenEventDownIsDown() {
         HealthCheckEvent open = new HealthCheckEvent();
-        open.setStatus("DOWN");
+        open.setStatus(HealthEventStatus.DOWN);
         open.setCause("브로커 노드 0개");
         when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
                 HealthCheckCatalog.INFRA_KAFKA.key())).thenReturn(open);
@@ -149,7 +149,7 @@ class HealthCheckServiceTest {
     @Test
     void eventDerivedOpenDegradedIsDegraded() {
         HealthCheckEvent open = new HealthCheckEvent();
-        open.setStatus("DEGRADED");
+        open.setStatus(HealthEventStatus.DEGRADED);
         open.setCause("gap 2개");
         when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
                 HealthCheckCatalog.DATA_CANDLE_GAP.key())).thenReturn(open);
@@ -160,7 +160,7 @@ class HealthCheckServiceTest {
     @Test
     void eventDerivedOpenDownIsDown() {
         HealthCheckEvent open = new HealthCheckEvent();
-        open.setStatus("DOWN");
+        open.setStatus(HealthEventStatus.DOWN);
         open.setCause("flat 40%");
         when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
                 HealthCheckCatalog.DATA_QUALITY.key())).thenReturn(open);
@@ -177,12 +177,35 @@ class HealthCheckServiceTest {
     @Test
     void externalOpenFailureIsDown() {
         HealthCheckEvent open = new HealthCheckEvent();
-        open.setStatus("DOWN");
+        open.setStatus(HealthEventStatus.DOWN);
         open.setCause("송신 실패");
         when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
                 HealthCheckCatalog.EXT_LLM.key())).thenReturn(open);
 
         assertThat(statusOf(HealthCheckCatalog.EXT_LLM.key())).isEqualTo(HealthStatus.DOWN);
+    }
+
+    // /events 응답 매핑: 엔티티 필드가 타입드 뷰로 옮겨지고 시각은 yyyy-MM-dd HH:mm:ss 로 포맷된다
+    @Test
+    void recentEventsMapToTypedView() {
+        HealthCheckEvent e = new HealthCheckEvent();
+        e.setCheckKey(HealthCheckCatalog.INFRA_MYSQL.key());
+        e.setStatus(HealthEventStatus.RESOLVED);
+        e.setSeverity("CRITICAL");
+        e.setCause("연결 실패");
+        e.setFirstFailedAt(java.time.LocalDateTime.of(2026, 7, 4, 10, 0, 0));
+        e.setLastFailedAt(java.time.LocalDateTime.of(2026, 7, 4, 10, 5, 0));
+        when(eventRepository.findTop100ByOrderByLastFailedAtDesc()).thenReturn(List.of(e));
+
+        List<HealthEventView> events = service.getRecentEvents();
+
+        assertThat(events).hasSize(1);
+        HealthEventView v = events.get(0);
+        assertThat(v.checkKey()).isEqualTo(HealthCheckCatalog.INFRA_MYSQL.key());
+        assertThat(v.status()).isEqualTo(HealthEventStatus.RESOLVED);
+        assertThat(v.severity()).isEqualTo("CRITICAL");
+        assertThat(v.lastFailedAt()).isEqualTo("2026-07-04 10:05:00");
+        assertThat(v.resolvedAt()).isNull();
     }
 
     private HealthStatus statusOf(String key) {

@@ -38,9 +38,10 @@ public class HealthCheckRecorder {
 
     /** 실패/경고 상태를 기록. status 는 DOWN 또는 DEGRADED. record 를 통해서만 진입한다. */
     private void markFail(String checkKey, HealthStatus status, String severity, String cause) {
+        HealthEventStatus eventStatus = HealthEventStatus.fromFailure(status);
         LocalDateTime now = LocalDateTime.now();
         HealthCheckEvent open = repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(checkKey);
-        String previousStatus = open == null ? null : open.getStatus();
+        HealthEventStatus previousStatus = open == null ? null : open.getStatus();
         if (open == null) {
             open = new HealthCheckEvent();
             open.setCheckKey(checkKey);
@@ -48,7 +49,7 @@ public class HealthCheckRecorder {
             open.setCreatedAt(now);
             open.setSourceEnv(normalizedSourceEnv());
         }
-        open.setStatus(status.name());
+        open.setStatus(eventStatus);
         open.setSeverity(severity);
         open.setCause(cause);
         open.setLastFailedAt(now);
@@ -56,7 +57,7 @@ public class HealthCheckRecorder {
         repository.save(open);
 
         // 전이(신규 open 또는 상태 변화) 순간에만 알림 이벤트 발행 → 반복 실패로 인한 도배 방지
-        if (previousStatus == null || !previousStatus.equals(status.name())) {
+        if (previousStatus != eventStatus) {
             eventPublisher.publishEvent(new HealthCheckTransitionEvent(checkKey, status, cause, false));
         }
     }
@@ -68,23 +69,15 @@ public class HealthCheckRecorder {
         if (open == null) {
             return;
         }
-        HealthStatus recovered = parseStatus(open.getStatus()); // 닫히기 직전 상태(DOWN/DEGRADED)
+        HealthStatus recovered = open.getStatus().asHealthStatus(); // 닫히기 직전 상태(DOWN/DEGRADED)
         LocalDateTime now = LocalDateTime.now();
-        open.setStatus("RESOLVED");
+        open.setStatus(HealthEventStatus.RESOLVED);
         open.setResolvedAt(now);
         open.setUpdatedAt(now);
         repository.save(open);
 
         // 복구 이벤트 발행(직전 상태를 담아 notifier가 DOWN 복구만 알리도록)
         eventPublisher.publishEvent(new HealthCheckTransitionEvent(checkKey, recovered, null, true));
-    }
-
-    private static HealthStatus parseStatus(String name) {
-        try {
-            return HealthStatus.valueOf(name);
-        } catch (IllegalArgumentException | NullPointerException e) {
-            return HealthStatus.UNKNOWN;
-        }
     }
 
     private String normalizedSourceEnv() {

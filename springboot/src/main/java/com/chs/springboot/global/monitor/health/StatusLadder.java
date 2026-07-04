@@ -46,6 +46,33 @@ public record StatusLadder(double degradedAt, double downAt) {
         return text(unit, "");
     }
 
+    // ── 측정값 판정+판정근거 문구 묶음 — 표시(HealthCheckService)와 기록(ResourceHealthEvaluator)이 같은 구현을 호출 ──
+
+    /** 측정값 판정 결과: 상태 + 판정근거 문구 */
+    public record Judged(HealthStatus status, String detail) { }
+
+    /** raw_agg_trade 물리 크기(bytes) 판정 — 미수집 음수는 UNKNOWN */
+    public static Judged judgeRawTable(long bytes) {
+        return new Judged(RAWTABLE_GB.judgeOrUnknown(bytes / GB), describeRawTable(bytes));
+    }
+
+    /** WS 세션 합계 판정 — 미수집 음수는 UNKNOWN */
+    public static Judged judgeWsConn(int conns) {
+        return new Judged(WS_CONNS.judgeOrUnknown(conns), describeWsConn(conns));
+    }
+
+    private static final double GB = 1024d * 1024 * 1024;
+
+    private static String describeRawTable(long bytes) {
+        if (bytes < 0) return "수집 기록 없음";
+        return "raw_agg_trade %.1fGB".formatted(bytes / GB);
+    }
+
+    private static String describeWsConn(int conns) {
+        if (conns < 0) return "수집 기록 없음";
+        return "WS 세션 " + conns + "개";
+    }
+
     private static String fmt(double v) {
         return v == Math.rint(v) ? String.valueOf((long) v) : String.valueOf(v);
     }

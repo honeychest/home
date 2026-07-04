@@ -12,21 +12,15 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ResourceHealthEvaluator {
 
-    private static final double GB = 1024d * 1024 * 1024;
-
     private final MetricCollectorService metricCollectorService;
     private final HealthCheckRecorder recorder;
 
     @Scheduled(fixedDelay = 5000)
     public void evaluate() {
-        long bytes = metricCollectorService.getLastRawAggTradeBytes();
-        recorder.record(HealthCheckCatalog.RES_RAWTABLE_GROWTH.key(),
-                StatusLadder.RAWTABLE_GB.judgeOrUnknown(bytes / GB),
-                HealthCheckService.describeRawTable(bytes));
+        StatusLadder.Judged raw = StatusLadder.judgeRawTable(metricCollectorService.getLastRawAggTradeBytes());
+        recorder.record(HealthCheckCatalog.RES_RAWTABLE_GROWTH.key(), raw.status(), raw.detail());
 
-        int conns = metricCollectorService.getLastWsConnections();
-        recorder.record(HealthCheckCatalog.RES_WS_CONNECTIONS.key(),
-                StatusLadder.WS_CONNS.judgeOrUnknown(conns),
-                HealthCheckService.describeWsConn(conns));
+        StatusLadder.Judged ws = StatusLadder.judgeWsConn(metricCollectorService.getLastWsConnections());
+        recorder.record(HealthCheckCatalog.RES_WS_CONNECTIONS.key(), ws.status(), ws.detail());
     }
 }

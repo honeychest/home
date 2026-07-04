@@ -20,7 +20,7 @@ class HealthCheckRecorderTest {
     private final ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
     private final HealthCheckRecorder recorder = new HealthCheckRecorder(repository, publisher);
 
-    private HealthCheckEvent openWith(String status) {
+    private HealthCheckEvent openWith(HealthEventStatus status) {
         HealthCheckEvent e = new HealthCheckEvent();
         e.setCheckKey(KEY);
         e.setStatus(status);
@@ -72,7 +72,7 @@ class HealthCheckRecorderTest {
     @Test
     void up_closesOpenEventLikeMarkOk() {
         when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY))
-                .thenReturn(openWith("DOWN"));
+                .thenReturn(openWith(HealthEventStatus.DOWN));
 
         recorder.record(KEY, HealthStatus.UP, null);
 
@@ -84,7 +84,7 @@ class HealthCheckRecorderTest {
     @Test
     void repeatedSameStatus_doesNotPublish() {
         when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY))
-                .thenReturn(openWith("DOWN")); // 이미 DOWN 진행 중
+                .thenReturn(openWith(HealthEventStatus.DOWN)); // 이미 DOWN 진행 중
 
         recorder.record(KEY, HealthStatus.DOWN, "연결 실패");
 
@@ -94,7 +94,7 @@ class HealthCheckRecorderTest {
     @Test
     void escalation_publishes() {
         when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY))
-                .thenReturn(openWith("DEGRADED")); // 경고 → 다운 악화
+                .thenReturn(openWith(HealthEventStatus.DEGRADED)); // 경고 → 다운 악화
 
         recorder.record(KEY, HealthStatus.DOWN, "악화");
 
@@ -104,7 +104,7 @@ class HealthCheckRecorderTest {
     @Test
     void recovery_publishesWithPreviousStatus() {
         when(repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(KEY))
-                .thenReturn(openWith("DOWN"));
+                .thenReturn(openWith(HealthEventStatus.DOWN));
 
         recorder.markOk(KEY);
 

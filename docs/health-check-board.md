@@ -55,7 +55,8 @@
 | ext-llm | L6 외부연동 | P1 | LLM 채팅·임베딩 응답 | ✕ |
 | ext-weather-api | L6 외부연동 | P2 | Weather API 호출 | ✕ |
 | ext-news-rss | L6 외부연동 | P2 | News 원본 RSS 응답 | ✕ |
-| ext-security-scan | L6 외부연동 | P2 | VirusTotal / SafeBrowsing | ✕ |
+| ext-virustotal | L6 외부연동 | P2 | VirusTotal 파일 검사 | ✕ |
+| ext-safebrowsing | L6 외부연동 | P2 | SafeBrowsing URL 검사 | ✕ |
 | res-cpu | L7 리소스 | P1 | CPU 임계 | ○ AlertService |
 | res-ram | L7 리소스 | P1 | RAM 임계 | ○ |
 | res-disk | L7 리소스 | P1 | DISK 임계 | ○ |
@@ -65,14 +66,14 @@
 ## 진행 현황
 
 > **최신 진행 현황(완료/남은 항목, 계측 상태)은 화면 `/admin/health` 하단
-> "작업 인수인계" 패널 + "구현 로드맵"이 단일 소스다.** 이 문서는 변하지 않는
-> 설계·체크리스트·패턴 참조용(챗봇용)이며, 진행 수치는 여기에 두지 않는다(드리프트 방지).
+> "작업 인수인계" 패널이 단일 소스다.** (전 항목 계측 완료로 "구현 로드맵" 패널은 제거됨.)
+> 이 문서는 변하지 않는 설계·체크리스트·패턴 참조용(챗봇용)이며, 진행 수치는 여기에 두지 않는다(드리프트 방지).
 
 ## 새 하트비트 체크 추가 방법 (3단계)
 
-0. 전제: `HealthCheckCatalog`에 항목을 `HealthSource.HEARTBEAT` 소스로 선언.
-   선언↔등록이 어긋나면 기동 실패(fail-fast, `HealthHeartbeatConfig` 검증)로 즉시 드러난다.
-1. `HealthHeartbeatConfig`에 `register(체크, staleSeconds, downSeconds)` (주기의 약 2.5×/5×).
+1. `HealthCheckCatalog`에 항목을 `HealthSource.HEARTBEAT` 소스로 한 줄 선언 —
+   경고/다운 임계 초(주기의 약 2.5×/5×)를 같은 줄에 함께 선언한다.
+   `HealthHeartbeatConfig`의 하트비트 등록과 보드 임계 문구는 카탈로그에서 자동 파생(별도 등록 없음).
 2. 대상 서비스: 성공 지점 `healthHeartbeat.beat(KEY)`, 실패 지점 `healthHeartbeat.fail(KEY, cause)`.
    - 리더 전용 잡은 리더에서만 beat → 비리더는 UNKNOWN(대기)로 남아 오탐 없음.
    - try/catch 추가가 침습적이면 fail 생략 가능(watchdog staleness가 다운 포착).
@@ -80,7 +81,7 @@
 
 ## 구현 순서 가이드 (패턴별)
 
-착수 후보(우선순위·잔여 목록은 화면 로드맵 참조): 인프라 프로브(L1),
+착수 후보(전 항목 계측 완료 — 이력 참조용): 인프라 프로브(L1),
 리소스 스냅샷 재사용(L7), 데이터 쿼리(L4), 외부연동(L6),
 그리고 별도 신중 처리 대상 `sched-leader-election`(HIGH).
 

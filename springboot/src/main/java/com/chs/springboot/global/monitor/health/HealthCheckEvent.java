@@ -27,8 +27,9 @@ public class HealthCheckEvent {
     @Column(name = "check_key", nullable = false, length = 64)
     private String checkKey;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
-    private String status; // DOWN / DEGRADED / RESOLVED
+    private HealthEventStatus status;
 
     @Column(name = "severity", length = 16)
     private String severity; // WARN / CRITICAL

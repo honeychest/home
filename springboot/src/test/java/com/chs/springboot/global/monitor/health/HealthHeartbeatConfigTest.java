@@ -8,8 +8,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class HealthHeartbeatConfigTest {
 
-    // 카탈로그 선언(source=HEARTBEAT) ↔ Config 임계 등록의 양방향 일치.
-    // 어긋나면 빈 생성 자체가 IllegalStateException — 이 테스트가 기동 실패를 먼저 잡는다.
+    // 하트비트 등록이 카탈로그 선언(source=HEARTBEAT + 임계)에서 그대로 파생되는지 회귀 고정.
+    // 임계 자체는 카탈로그 각 항목이 자기 줄에 선언 — 선언↔등록 불일치는 구조적으로 불가능.
     @Test
     void heartbeatDeclarationsMatchRegistrations() {
         HealthHeartbeat heartbeat = new HealthHeartbeatConfig().healthHeartbeat(Clock.systemUTC());
