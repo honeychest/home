@@ -16,16 +16,10 @@ class HealthCheckServiceTest {
     private final HealthHeartbeat healthHeartbeat = mock(HealthHeartbeat.class);
     private final HealthCheckEventRepository eventRepository = mock(HealthCheckEventRepository.class);
     private final MetricCollectorService metricCollectorService = mock(MetricCollectorService.class);
-    private final InfraHealthProbe infraHealthProbe = mock(InfraHealthProbe.class);
     private final HealthCheckService service =
-            new HealthCheckService(feedHealthRegistry, healthHeartbeat, eventRepository, metricCollectorService, infraHealthProbe);
+            new HealthCheckService(feedHealthRegistry, healthHeartbeat, eventRepository, metricCollectorService);
 
     {
-        InfraHealthProbe.Probe up = new InfraHealthProbe.Probe(HealthStatus.UP, "정상 응답");
-        when(infraHealthProbe.mysql()).thenReturn(up);
-        when(infraHealthProbe.redis()).thenReturn(up);
-        when(infraHealthProbe.kafka()).thenReturn(up);
-        when(infraHealthProbe.postgres()).thenReturn(up);
         // HEARTBEAT 소스는 선언 기반으로 항상 evaluate 되므로 기본 대기(UNKNOWN) 응답을 준다.
         when(healthHeartbeat.evaluate(anyKey()))
                 .thenReturn(new HealthHeartbeat.Beat("hb", HealthStatus.UNKNOWN, null, null));
@@ -68,17 +62,20 @@ class HealthCheckServiceTest {
     }
 
     @Test
-    void infraProbeUpIsUp() {
-        when(infraHealthProbe.mysql()).thenReturn(new InfraHealthProbe.Probe(HealthStatus.UP, "정상 응답"));
-
+    void infraNoOpenEventIsUp() {
+        // 인프라도 이벤트 기반 — 미해결 이벤트 없으면 정상(낙관 표시)
         HealthStatus status = statusOf(HealthCheckCatalog.INFRA_MYSQL.key());
 
         assertThat(status).isEqualTo(HealthStatus.UP);
     }
 
     @Test
-    void infraProbeDownIsDown() {
-        when(infraHealthProbe.kafka()).thenReturn(new InfraHealthProbe.Probe(HealthStatus.DOWN, "브로커 노드 0개"));
+    void infraOpenEventDownIsDown() {
+        HealthCheckEvent open = new HealthCheckEvent();
+        open.setStatus("DOWN");
+        open.setCause("브로커 노드 0개");
+        when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
+                HealthCheckCatalog.INFRA_KAFKA.key())).thenReturn(open);
 
         HealthStatus status = statusOf(HealthCheckCatalog.INFRA_KAFKA.key());
 

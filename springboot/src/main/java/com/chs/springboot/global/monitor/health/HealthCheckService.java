@@ -26,8 +26,9 @@ public class HealthCheckService {
     private static final String RAWTABLE_THRESHOLD_TEXT = StatusLadder.RAWTABLE_GB.text("GB", " (data+index)");
     private static final String WSCONN_THRESHOLD_TEXT = StatusLadder.WS_CONNS.text("", " (4개 핸들러 합)");
 
-    // 인프라(infra-*) 판정 기준: Actuator HealthIndicator / AdminClient 응답 그대로(경고 단계 없음, UP 아니면 DOWN)
-    private static final String INFRA_THRESHOLD_TEXT = "능동 프로브(연결 확인) — UP 아니면 DOWN";
+    // 인프라(infra-*) 판정 기준: InfraHealthEvaluator(20초 주기, 리더)가 적립한 이벤트 기반(경고 단계 없음, UP 아니면 DOWN).
+    // 보드 요청 경로에서 실접속 프로브를 제거 — 대상 장애 시 접속 시간초과로 보드 로딩이 지연되는 것을 방지.
+    private static final String INFRA_THRESHOLD_TEXT = "20초 주기 능동 프로브 기록 기반 — UP 아니면 DOWN";
 
     private static final double GB = 1024d * 1024 * 1024;
 
@@ -35,7 +36,6 @@ public class HealthCheckService {
     private final HealthHeartbeat healthHeartbeat;
     private final HealthCheckEventRepository eventRepository;
     private final MetricCollectorService metricCollectorService;
-    private final InfraHealthProbe infraHealthProbe;
 
     /** 소스별 판정 결과(상태·판정근거·임계 설명) */
     private record Judgement(HealthStatus status, String detail, String thresholdText) { }
@@ -117,20 +117,23 @@ public class HealthCheckService {
     }
 
     private Judgement judgeInfra(String key) {
-        InfraHealthProbe.Probe probe = infraProbe(key);
-        return new Judgement(probe.status(), probe.detail(), INFRA_THRESHOLD_TEXT);
+        return judgeFromEvents(key, INFRA_THRESHOLD_TEXT);
     }
 
-    // 능동 평가기(예: DataIntegrityEvaluator)·호출지점 push 가 이벤트로 적립한 결과를 읽는다.
-    // 미복구(open) 이벤트 있으면 그 상태, 없으면 정상(UP). "알려진 실패 없음" 낙관 표시.
     private Judgement judgeEvent(String key) {
+        return judgeFromEvents(key, null);
+    }
+
+    // 평가기·호출지점 push 가 이벤트로 적립한 결과를 읽는다.
+    // 미복구(open) 이벤트 있으면 그 상태, 없으면 정상(UP). "알려진 실패 없음" 낙관 표시.
+    private Judgement judgeFromEvents(String key, String thresholdText) {
         HealthCheckEvent open =
                 eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(key);
         if (open == null) {
-            return new Judgement(HealthStatus.UP, "정상", null);
+            return new Judgement(HealthStatus.UP, "정상", thresholdText);
         }
         HealthStatus status = "DEGRADED".equals(open.getStatus()) ? HealthStatus.DEGRADED : HealthStatus.DOWN;
-        return new Judgement(status, open.getCause() != null ? open.getCause() : "이상 감지", null);
+        return new Judgement(status, open.getCause() != null ? open.getCause() : "이상 감지", thresholdText);
     }
 
     // ── 소스별 세부 계산 ────────────────────────────────────────────
@@ -169,13 +172,6 @@ public class HealthCheckService {
     public static String describeWsConn(int conns) {
         if (conns < 0) return "수집 기록 없음";
         return "WS 세션 " + conns + "개";
-    }
-
-    private InfraHealthProbe.Probe infraProbe(String key) {
-        if (key.equals(HealthCheckCatalog.INFRA_MYSQL.key())) return infraHealthProbe.mysql();
-        if (key.equals(HealthCheckCatalog.INFRA_REDIS.key())) return infraHealthProbe.redis();
-        if (key.equals(HealthCheckCatalog.INFRA_KAFKA.key())) return infraHealthProbe.kafka();
-        return infraHealthProbe.postgres();
     }
 
     private static String describeBeat(HealthHeartbeat.Beat beat) {
