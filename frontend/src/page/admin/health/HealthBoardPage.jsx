@@ -17,7 +17,7 @@ const STATUS_META = {
     UP: { label: 'OK', color: 'var(--monitor-gauge-ok)' },
     DEGRADED: { label: '경고', color: 'var(--monitor-severity-warn-text)', dot: 'dotDegraded' },
     DOWN: { label: '다운', color: 'var(--monitor-severity-critical)', dot: 'dotDown' },
-    UNKNOWN: { label: '미구현', color: 'var(--monitor-text-secondary)' },
+    UNKNOWN: { label: '대기', color: 'var(--monitor-text-secondary)' },
 };
 
 const isAlert = (status) => status === 'DOWN' || status === 'DEGRADED';
@@ -137,7 +137,8 @@ function HandoffPanel() {
                     <div><strong>[완료] 후보1 · 상태 소스 판정 seam</strong> : <span className={styles.mono}>HealthSource</span> enum이 <span className={styles.mono}>judge(check, ports)</span>(표시 판정)와 <span className={styles.mono}>thresholdText(check)</span>(임계 문구)를 스스로 소유. <span className={styles.mono}>getChecks()</span>·<span className={styles.mono}>Catalog.thresholdText()</span>의 6분기 switch 2개(평행 중복) 제거.</div>
                     <div><strong>변경 4파일</strong> : <span className={styles.mono}>HealthSource</span> · <span className={styles.mono}>HealthCheckService</span> · <span className={styles.mono}>HealthCheckCatalog</span> · <span className={styles.mono}>springboot/CONTEXT.md</span>. 검증 <span className={styles.mono}>test --tests "*.health.*"</span> 90/90 통과, <span className={styles.mono}>detect_changes</span> risk low. <strong>아직 미커밋</strong>.</div>
                     <div><strong>[다음]</strong> 바로 : ① <span className={styles.mono}>HealthSourceTest</span> 신규(소스 단위 독립 테스트 · 선택) → ② 커밋(commit-check 선점검, 첫 줄 <span className={styles.mono}>[요청 요약]</span>).</div>
-                    <div><strong>[남은 후보]</strong> 2) 자원 임계 이중화 — <span className={styles.mono}>StatusLadder.RESOURCE_PCT</span>(70/80) vs <span className={styles.mono}>AlertService</span> 리터럴 <span className={styles.mono}>80d</span>, 주석 한 줄로만 연결(조용히 어긋날 위험) &nbsp; 3) 이 보드 내장 문서(HandoffPanel/NotesPanel) 분리</div>
+                    <div><strong>[완료] 후보2 · 자원 임계 단일화</strong> : <span className={styles.mono}>AlertService</span> 의 리터럴 <span className={styles.mono}>80d</span>(CPU/RAM/DISK) 3곳을 제거하고 <span className={styles.mono}>StatusLadder.RESOURCE_PCT.downAt()</span> 를 읽도록 변경. 보드 표시·판정과 알림 임계가 상수 한 곳(70/80)에서 함께 움직인다(조용한 어긋남 제거). 변경 <span className={styles.mono}>AlertService</span> · <span className={styles.mono}>StatusLadder</span> 주석 · <span className={styles.mono}>CONTEXT.md</span>.</div>
+                    <div><strong>[남은 후보]</strong> 3) 이 보드 내장 문서(HandoffPanel/NotesPanel) 분리</div>
                     <div><strong>함정</strong> : 편집 전 <span className={styles.mono}>gitnexus_impact</span> · 커밋 전 <span className={styles.mono}>detect_changes</span> 필수. GitNexus는 repo 인자 <span className={styles.mono}>"lab"</span> 지정 필수(미지정 시 에러). 쓰기·편집은 응답에 <span className={styles.mono}>'승인'</span> 포함 시에만.</div>
                 </div>
             )}
@@ -277,7 +278,7 @@ export default function HealthBoardPage() {
                             <span className={b.count} style={{ color: STATUS_META.UP.color }}>OK {summary.up}</span>
                             <span className={b.count} style={{ color: STATUS_META.DEGRADED.color }}>경고 {summary.degraded}</span>
                             <span className={b.count} style={{ color: STATUS_META.DOWN.color }}>다운 {summary.down}</span>
-                            <span className={styles.muted}>미구현 {summary.unknown}</span>
+                            <span className={styles.muted}>대기 {summary.unknown}</span>
                             {data?.generatedAt && <span className={styles.muted}>· {data.generatedAt}</span>}
                             <span className={b.spacer} />
                             <button

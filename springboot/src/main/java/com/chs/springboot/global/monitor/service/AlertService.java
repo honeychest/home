@@ -41,12 +41,16 @@ public class AlertService {
             return;
         }
 
-        // CPU/RAM: 80% 이상 30초 지속 시 알림
-        evaluateCritical(AlertHistory.MetricType.CPU, snapshot.cpu(), 80d, snapshot.containerId());
-        evaluateCritical(AlertHistory.MetricType.RAM, snapshot.ram(), 80d, snapshot.containerId());
+        // 자원 임계는 StatusLadder.RESOURCE_PCT(보드 표시·판정)의 다운선을 단일 소스로 읽는다 —
+        // 리터럴을 두면 표시와 알림이 조용히 어긋날 수 있어 상수 한 곳만 고치면 함께 움직이게 한다.
+        double resourceCritical = StatusLadder.RESOURCE_PCT.downAt();
 
-        // DISK: 80% 이상이면 하루에 한 번만 알림
-        evaluateDiskDaily(snapshot.disk(), 80d, snapshot.containerId());
+        // CPU/RAM: 임계 이상 30초 지속 시 알림
+        evaluateCritical(AlertHistory.MetricType.CPU, snapshot.cpu(), resourceCritical, snapshot.containerId());
+        evaluateCritical(AlertHistory.MetricType.RAM, snapshot.ram(), resourceCritical, snapshot.containerId());
+
+        // DISK: 임계 이상이면 하루에 한 번만 알림
+        evaluateDiskDaily(snapshot.disk(), resourceCritical, snapshot.containerId());
 
         evaluateFeedAlerts(snapshot.feeds());
     }

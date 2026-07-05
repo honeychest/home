@@ -2,13 +2,13 @@
 package com.chs.springboot.global.monitor.health;
 
 public enum HealthLayer {
-    L1_INFRA("L1 인프라 연결"),
-    L2_FEED("L2 데이터 유입(피드)"),
-    L3_PIPELINE("L3 파이프라인 처리"),
-    L4_DATA("L4 데이터 무결성"),
-    L5_SCHEDULER("L5 리더/스케줄러"),
-    L6_EXTERNAL("L6 외부 연동"),
-    L7_RESOURCE("L7 리소스/용량");
+    L1_INFRA("S1 인프라 연결"),
+    L2_FEED("S2 데이터 유입(피드)"),
+    L3_PIPELINE("S3 파이프라인 처리"),
+    L4_DATA("S4 데이터 무결성"),
+    L5_SCHEDULER("S5 리더/스케줄러"),
+    L6_EXTERNAL("S6 외부 연동"),
+    L7_RESOURCE("S7 리소스/용량");
 
     private final String label;
 
