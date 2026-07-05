@@ -1,5 +1,6 @@
 package com.chs.springboot.global.monitor.health;
 
+import com.chs.springboot.global.redis.LeaderElectionService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -24,13 +25,19 @@ class HeartbeatWatchdogTest {
         return hb;
     }
 
+    // 비리더(isLeader 기본 false)라 클러스터 발행은 호출되지 않음 — record 전달 동작에 집중
+    private HeartbeatWatchdog watchdog(HealthHeartbeat hb, HealthCheckRecorder recorder) {
+        return new HeartbeatWatchdog(hb, recorder,
+                mock(LeaderElectionService.class), mock(HealthClusterSnapshot.class));
+    }
+
     @Test
     void unknown_passesUnknownToRecorder() {
         // UNKNOWN(관측 전) 무시 정책은 recorder.record 가 담당 — watchdog 은 그대로 전달한다
         HealthHeartbeat hb = heartbeatWith();
         HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
 
-        new HeartbeatWatchdog(hb, recorder).evaluate();
+        watchdog(hb, recorder).evaluate();
 
         verify(recorder).record(eq(KEY), eq(HealthStatus.UNKNOWN), isNull());
     }
@@ -41,7 +48,7 @@ class HeartbeatWatchdogTest {
         HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
         hb.beat(KEY);
 
-        new HeartbeatWatchdog(hb, recorder).evaluate();
+        watchdog(hb, recorder).evaluate();
 
         verify(recorder).record(eq(KEY), eq(HealthStatus.UP), isNull());
     }
@@ -54,7 +61,7 @@ class HeartbeatWatchdogTest {
         hb.beat(KEY);
         clock.setInstant(base.plusSeconds(10)); // DEGRADED
 
-        new HeartbeatWatchdog(hb, recorder).evaluate();
+        watchdog(hb, recorder).evaluate();
 
         verify(recorder).record(eq(KEY), eq(HealthStatus.DEGRADED), anyString());
     }
@@ -67,7 +74,7 @@ class HeartbeatWatchdogTest {
         hb.beat(KEY);
         clock.setInstant(base.plusSeconds(30)); // DOWN
 
-        new HeartbeatWatchdog(hb, recorder).evaluate();
+        watchdog(hb, recorder).evaluate();
 
         verify(recorder).record(eq(KEY), eq(HealthStatus.DOWN), anyString());
     }
@@ -78,7 +85,7 @@ class HeartbeatWatchdogTest {
         HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
         hb.fail(KEY, "boom");
 
-        new HeartbeatWatchdog(hb, recorder).evaluate();
+        watchdog(hb, recorder).evaluate();
 
         verify(recorder).record(KEY, HealthStatus.DOWN, "boom");
     }

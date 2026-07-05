@@ -6,6 +6,7 @@ package com.chs.springboot.global.monitor.health;
 
 import com.chs.springboot.global.telegram.TelegramProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -16,11 +17,19 @@ public class HealthAlertNotifier {
 
     private final TelegramProvider telegramProvider;
 
+    // 발송 스위치 — 기본 true(운영). 로컬 프로필은 false 로 꺼서 개발 중 운영 채팅 오염 방지(이력 기록은 유지).
+    @Value("${monitor.health.alert-enabled:true}")
+    private boolean alertEnabled;
+
     // @Async: 텔레그램 HTTP 호출을 발행 스레드(평가기/요청 스레드)에서 분리 → record/markOk 지연 방지.
     // (@EnableAsync 는 SpringbootApplication 에 활성화됨. 단위 테스트의 직접 호출은 프록시 미경유라 동기 실행)
     @Async
     @EventListener
     public void onTransition(HealthCheckTransitionEvent event) {
+        // 발송 차단(로컬 등) — 이력은 recorder 가 이미 남겼고 여기서는 텔레그램만 생략
+        if (!alertEnabled) {
+            return;
+        }
         // 텔레그램 자체 상태는 텔레그램으로 알릴 수 없음 + 자기루프 방지
         if (HealthCheckCatalog.EXT_TELEGRAM_SEND.key().equals(event.checkKey())) {
             return;

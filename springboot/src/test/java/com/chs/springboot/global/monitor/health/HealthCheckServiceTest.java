@@ -5,6 +5,7 @@ import com.chs.springboot.global.monitor.service.MetricCollectorService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -16,13 +17,17 @@ class HealthCheckServiceTest {
     private final HealthHeartbeat healthHeartbeat = mock(HealthHeartbeat.class);
     private final HealthCheckEventRepository eventRepository = mock(HealthCheckEventRepository.class);
     private final MetricCollectorService metricCollectorService = mock(MetricCollectorService.class);
+    private final HealthClusterSnapshot healthClusterSnapshot = mock(HealthClusterSnapshot.class);
     private final HealthCheckService service =
-            new HealthCheckService(feedHealthRegistry, healthHeartbeat, eventRepository, metricCollectorService);
+            new HealthCheckService(feedHealthRegistry, healthHeartbeat, eventRepository,
+                    metricCollectorService, healthClusterSnapshot);
 
     {
         // HEARTBEAT 소스는 선언 기반으로 항상 evaluate 되므로 기본 대기(UNKNOWN) 응답을 준다.
         when(healthHeartbeat.evaluate(anyKey()))
                 .thenReturn(new HealthHeartbeat.Beat("hb", HealthStatus.UNKNOWN, null, null));
+        // 기본은 클러스터 스냅샷 없음(단일노드/리더 로컬값 경로) — 필요한 테스트가 개별 스텁.
+        when(healthClusterSnapshot.read()).thenReturn(Optional.empty());
     }
 
     @Test
@@ -206,6 +211,32 @@ class HealthCheckServiceTest {
         assertThat(v.severity()).isEqualTo("CRITICAL");
         assertThat(v.lastFailedAt()).isEqualTo("2026-07-04 10:05:00");
         assertThat(v.resolvedAt()).isNull();
+    }
+
+    // ── 이중화 폴백: 비리더(로컬 미관측)일 때 리더 발행 클러스터 스냅샷으로 판정 ──
+
+    @Test
+    void heartbeatFromClusterWhenLocalUnknown() {
+        // 비리더: 로컬 하트비트 UNKNOWN(대기)이어도 리더 스냅샷에 최근 성공이 있으면 UP
+        String key = HealthCheckCatalog.PIPE_ROLLUP_1S.key();
+        long now = System.currentTimeMillis();
+        HealthClusterSnapshot.HeartbeatEntry entry =
+                new HealthClusterSnapshot.HeartbeatEntry(key, 10, 30, now, null, null);
+        when(healthClusterSnapshot.read()).thenReturn(Optional.of(
+                new HealthClusterSnapshot.Dto(List.of(entry), null, null, null, null, now)));
+
+        assertThat(statusOf(key)).isEqualTo(HealthStatus.UP);
+    }
+
+    @Test
+    void resourceRamFromClusterWhenLocalUnobserved() {
+        // 비리더: 로컬 ram 미관측(-1) → 리더 발행 클러스터 ram(다운선 80%)으로 DOWN
+        when(metricCollectorService.getLastRam()).thenReturn(-1d);
+        // Dto(heartbeats, ram, disk, rawTableBytes, wsConnections, publishedAtEpochMs)
+        when(healthClusterSnapshot.read()).thenReturn(Optional.of(
+                new HealthClusterSnapshot.Dto(List.of(), 80d, null, null, null, 0L)));
+
+        assertThat(statusOf(HealthCheckCatalog.RES_RAM.key())).isEqualTo(HealthStatus.DOWN);
     }
 
     private HealthStatus statusOf(String key) {

@@ -8,6 +8,8 @@ package com.chs.springboot.global.monitor.health;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
 import com.chs.springboot.global.monitor.service.MetricCollectorService;
 
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 public enum HealthSource {
@@ -27,8 +29,20 @@ public enum HealthSource {
     HEARTBEAT {     // HealthHeartbeat 경과 판정 (HealthHeartbeatConfig 임계 등록 필수)
         @Override
         Judgement judge(HealthCheckCatalog check, Ports ports) {
-            HealthHeartbeat.Beat beat = ports.heartbeat().evaluate(check.key());
-            return new Judgement(beat.status(), describeBeat(beat));
+            // 이 노드가 관측했으면(리더) 로컬 판정이 가장 신선
+            HealthHeartbeat.Beat local = ports.heartbeat().evaluate(check.key());
+            if (local.status() != HealthStatus.UNKNOWN) {
+                return new Judgement(local.status(), describeBeat(local));
+            }
+            // 로컬 미관측(비리더) → 리더가 발행한 클러스터 스냅샷 원시상태로 재판정
+            HealthClusterSnapshot.HeartbeatEntry e = ports.cluster().heartbeat(check.key());
+            if (e == null) {
+                return new Judgement(HealthStatus.UNKNOWN, describeBeat(local)); // 대기
+            }
+            HealthHeartbeat.Beat b = HealthHeartbeat.judge(
+                    check.key(), new HealthHeartbeat.Spec(e.staleSeconds(), e.downSeconds()),
+                    epoch(e.lastBeatEpochMs()), epoch(e.lastFailEpochMs()), e.cause(), Instant.now());
+            return new Judgement(b.status(), describeBeat(b));
         }
 
         @Override
@@ -42,6 +56,9 @@ public enum HealthSource {
         @Override
         Judgement judge(HealthCheckCatalog check, Ports ports) {
             Double value = resourceValue(check, ports.metrics());
+            if (value == null) {
+                value = clusterResource(check, ports.cluster()); // 비리더 → 리더 발행값
+            }
             HealthStatus status = value == null ? HealthStatus.UNKNOWN : StatusLadder.RESOURCE_PCT.judge(value);
             return new Judgement(status, describeResource(value));
         }
@@ -54,7 +71,11 @@ public enum HealthSource {
     RAWTABLE {      // raw_agg_trade 물리 크기 절대값 임계
         @Override
         Judgement judge(HealthCheckCatalog check, Ports ports) {
-            StatusLadder.Judged j = StatusLadder.judgeRawTable(ports.metrics().getLastRawAggTradeBytes());
+            long bytes = ports.metrics().getLastRawAggTradeBytes();
+            if (bytes < 0 && ports.cluster().rawTableBytes() != null) {
+                bytes = ports.cluster().rawTableBytes(); // 비리더 → 리더 발행값
+            }
+            StatusLadder.Judged j = StatusLadder.judgeRawTable(bytes);
             return new Judgement(j.status(), j.detail());
         }
 
@@ -66,7 +87,11 @@ public enum HealthSource {
     WSCONN {        // WS 세션 수 절대값 임계
         @Override
         Judgement judge(HealthCheckCatalog check, Ports ports) {
-            StatusLadder.Judged j = StatusLadder.judgeWsConn(ports.metrics().getLastWsConnections());
+            int conns = ports.metrics().getLastWsConnections();
+            if (conns < 0 && ports.cluster().wsConnections() != null) {
+                conns = ports.cluster().wsConnections(); // 비리더 → 리더 발행값
+            }
+            StatusLadder.Judged j = StatusLadder.judgeWsConn(conns);
             return new Judgement(j.status(), j.detail());
         }
 
@@ -107,8 +132,37 @@ public enum HealthSource {
             Map<String, FeedHealthRegistry.FeedHealth> feeds,
             HealthHeartbeat heartbeat,
             MetricCollectorService metrics,
-            HealthCheckEventRepository events
+            HealthCheckEventRepository events,
+            ClusterView cluster
     ) { }
+
+    /**
+     * 리더가 발행한 클러스터 스냅샷의 요청당 조회 뷰 — 노드-로컬 값이 미관측(비리더)일 때 폴백에 쓴다.
+     * 스냅샷이 없으면 {@link #empty()} (전부 미관측처럼 동작).
+     */
+    public record ClusterView(
+            Map<String, HealthClusterSnapshot.HeartbeatEntry> heartbeats,
+            Double ram, Double disk, Long rawTableBytes, Integer wsConnections
+    ) {
+        public static ClusterView empty() {
+            return new ClusterView(Map.of(), null, null, null, null);
+        }
+
+        public static ClusterView from(HealthClusterSnapshot.Dto dto) {
+            if (dto == null) {
+                return empty();
+            }
+            Map<String, HealthClusterSnapshot.HeartbeatEntry> map = new HashMap<>();
+            for (HealthClusterSnapshot.HeartbeatEntry e : dto.heartbeats()) {
+                map.put(e.checkKey(), e);
+            }
+            return new ClusterView(map, dto.ram(), dto.disk(), dto.rawTableBytes(), dto.wsConnections());
+        }
+
+        HealthClusterSnapshot.HeartbeatEntry heartbeat(String checkKey) {
+            return heartbeats.get(checkKey);
+        }
+    }
 
     /** 보드 표시용 live 판정 (상태 + 판정근거). */
     abstract Judgement judge(HealthCheckCatalog check, Ports ports);
@@ -155,6 +209,21 @@ public enum HealthSource {
     private static String describeResource(Double value) {
         if (value == null) return "수집 기록 없음";
         return "%.1f%%".formatted(value);
+    }
+
+    // 비리더 폴백: 리더 발행 자원값(ram/disk). cpu 는 양 노드가 관측하므로 로컬에서 이미 값이 있음.
+    private static Double clusterResource(HealthCheckCatalog check, ClusterView cluster) {
+        if (check.key().equals(HealthCheckCatalog.RES_RAM.key())) {
+            return cluster.ram();
+        }
+        if (check.key().equals(HealthCheckCatalog.RES_DISK.key())) {
+            return cluster.disk();
+        }
+        return null;
+    }
+
+    private static Instant epoch(Long epochMs) {
+        return epochMs == null ? null : Instant.ofEpochMilli(epochMs);
     }
 
     private static String describeBeat(HealthHeartbeat.Beat beat) {

@@ -24,6 +24,7 @@ public class HealthCheckService {
     private final HealthHeartbeat healthHeartbeat;
     private final HealthCheckEventRepository eventRepository;
     private final MetricCollectorService metricCollectorService;
+    private final HealthClusterSnapshot healthClusterSnapshot;
 
     /** 보드에 표시할 전체 체크 목록 */
     public List<HealthCheckView> getChecks() {
@@ -31,8 +32,10 @@ public class HealthCheckService {
         for (FeedHealthRegistry.FeedHealth f : feedHealthRegistry.snapshot()) {
             feeds.put(f.feedId(), f);
         }
+        HealthSource.ClusterView cluster = HealthSource.ClusterView.from(
+                healthClusterSnapshot.read().orElse(null));
         HealthSource.Ports ports = new HealthSource.Ports(
-                feeds, healthHeartbeat, metricCollectorService, eventRepository);
+                feeds, healthHeartbeat, metricCollectorService, eventRepository, cluster);
 
         List<HealthCheckView> out = new ArrayList<>(HealthCheckCatalog.all().size());
         for (HealthCheckCatalog c : HealthCheckCatalog.all()) {
