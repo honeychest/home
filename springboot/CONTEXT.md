@@ -25,6 +25,12 @@
   호출자가 심각도를 고르는 인터페이스(markFail)는 비공개화됨.
 - **평가기(evaluator)**: 주기적으로 측정해 기록기에 넘기는 스케줄러들. 판정하지 않고
   측정과 배선만 담당한다(판정은 사다리, 기록 정책은 기록기).
+- **상태 소스(HealthSource)**: 항목이 "상태를 어디서 읽고 어떻게 판정하는지"와 팝오버
+  임계 문구를 **소스가 스스로 소유**한다 — `judge(check, ports)`(표시용 live 판정)와
+  `thresholdText(check)`를 소스 constant가 함께 구현. `HealthCheckService.getChecks()` 는
+  `c.source().judge(c, ports)` 만 호출하고 소스별 분기(switch)를 두지 않는다 — 판정과 임계
+  문구가 한 소스에 응집돼 서로 어긋날 수 없다. enum 은 스프링 빈을 못 받으므로 협력자는
+  `HealthSource.Ports`(feeds·heartbeat·metrics·events)로 요청마다 전달한다. (2026-07)
 
 ## 설계 결정과 이유
 

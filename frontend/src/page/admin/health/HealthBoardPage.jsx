@@ -130,6 +130,15 @@ function HandoffPanel() {
                     <div><strong>새 하트비트 체크 추가</strong> : 1) <span className={styles.mono}>HealthCheckCatalog</span>에 한 줄 추가(경고/다운 임계 초 포함 — 등록·임계 문구 자동 파생) &nbsp; 2) 대상 서비스 성공=<span className={styles.mono}>beat</span> / 실패=<span className={styles.mono}>fail</span> &nbsp; 3) 착수 전 <span className={styles.mono}>gitnexus_impact</span>로 영향도 확인</div>
                     <div><strong>주의</strong> : <span className={styles.mono}>sched-leader-election</span> 은 HIGH(15개 의존) — 별도 신중 배선</div>
                     <div><strong>작업 단일 소스</strong> : 이 화면(인수인계 + 로드맵)만으로 지속 가능. <span className={styles.mono}>docs/health-check-board.md</span>는 챗봇/설계 참조용.</div>
+
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--monitor-border, rgba(0,0,0,0.12))' }}>
+                        <strong>■ 아키텍처 개선 인계 (2026-07)</strong>
+                    </div>
+                    <div><strong>[완료] 후보1 · 상태 소스 판정 seam</strong> : <span className={styles.mono}>HealthSource</span> enum이 <span className={styles.mono}>judge(check, ports)</span>(표시 판정)와 <span className={styles.mono}>thresholdText(check)</span>(임계 문구)를 스스로 소유. <span className={styles.mono}>getChecks()</span>·<span className={styles.mono}>Catalog.thresholdText()</span>의 6분기 switch 2개(평행 중복) 제거.</div>
+                    <div><strong>변경 4파일</strong> : <span className={styles.mono}>HealthSource</span> · <span className={styles.mono}>HealthCheckService</span> · <span className={styles.mono}>HealthCheckCatalog</span> · <span className={styles.mono}>springboot/CONTEXT.md</span>. 검증 <span className={styles.mono}>test --tests "*.health.*"</span> 90/90 통과, <span className={styles.mono}>detect_changes</span> risk low. <strong>아직 미커밋</strong>.</div>
+                    <div><strong>[다음]</strong> 바로 : ① <span className={styles.mono}>HealthSourceTest</span> 신규(소스 단위 독립 테스트 · 선택) → ② 커밋(commit-check 선점검, 첫 줄 <span className={styles.mono}>[요청 요약]</span>).</div>
+                    <div><strong>[남은 후보]</strong> 2) 자원 임계 이중화 — <span className={styles.mono}>StatusLadder.RESOURCE_PCT</span>(70/80) vs <span className={styles.mono}>AlertService</span> 리터럴 <span className={styles.mono}>80d</span>, 주석 한 줄로만 연결(조용히 어긋날 위험) &nbsp; 3) 이 보드 내장 문서(HandoffPanel/NotesPanel) 분리</div>
+                    <div><strong>함정</strong> : 편집 전 <span className={styles.mono}>gitnexus_impact</span> · 커밋 전 <span className={styles.mono}>detect_changes</span> 필수. GitNexus는 repo 인자 <span className={styles.mono}>"lab"</span> 지정 필수(미지정 시 에러). 쓰기·편집은 응답에 <span className={styles.mono}>'승인'</span> 포함 시에만.</div>
                 </div>
             )}
         </div>

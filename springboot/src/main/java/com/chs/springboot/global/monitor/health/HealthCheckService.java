@@ -25,26 +25,18 @@ public class HealthCheckService {
     private final HealthCheckEventRepository eventRepository;
     private final MetricCollectorService metricCollectorService;
 
-    /** 소스별 판정 결과(상태·판정근거) — 임계 문구는 카탈로그 항목이 스스로 제공(thresholdText) */
-    private record Judgement(HealthStatus status, String detail) { }
-
     /** 보드에 표시할 전체 체크 목록 */
     public List<HealthCheckView> getChecks() {
         Map<String, FeedHealthRegistry.FeedHealth> feeds = new HashMap<>();
         for (FeedHealthRegistry.FeedHealth f : feedHealthRegistry.snapshot()) {
             feeds.put(f.feedId(), f);
         }
+        HealthSource.Ports ports = new HealthSource.Ports(
+                feeds, healthHeartbeat, metricCollectorService, eventRepository);
 
         List<HealthCheckView> out = new ArrayList<>(HealthCheckCatalog.all().size());
         for (HealthCheckCatalog c : HealthCheckCatalog.all()) {
-            Judgement j = switch (c.source()) {
-                case FEED -> judgeFeed(feeds.get(c.feedId()));
-                case HEARTBEAT -> judgeHeartbeat(c.key());
-                case RESOURCE_PCT -> judgeResource(c.key());
-                case RAWTABLE -> judgeRawTable();
-                case WSCONN -> judgeWsConn();
-                case INFRA, EVENT -> judgeFromEvents(c.key());
-            };
+            HealthSource.Judgement j = c.source().judge(c, ports);
 
             List<HealthCheckView.Failure> recent = new ArrayList<>();
             for (HealthCheckEvent e : eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(c.key())) {
@@ -77,81 +69,5 @@ public class HealthCheckService {
 
     private static String fmt(java.time.LocalDateTime t) {
         return t == null ? null : t.format(TS);
-    }
-
-    // ── 소스별 판정 ─────────────────────────────────────────────────
-
-    private static Judgement judgeFeed(FeedHealthRegistry.FeedHealth fh) {
-        HealthStatus status = fh == null ? HealthStatus.UNKNOWN : fh.status();
-        return new Judgement(status, describeFeed(fh));
-    }
-
-    private Judgement judgeHeartbeat(String key) {
-        HealthHeartbeat.Beat beat = healthHeartbeat.evaluate(key);
-        return new Judgement(beat.status(), describeBeat(beat));
-    }
-
-    private Judgement judgeResource(String key) {
-        Double value = resourceValue(key);
-        HealthStatus status = value == null ? HealthStatus.UNKNOWN : StatusLadder.RESOURCE_PCT.judge(value);
-        return new Judgement(status, describeResource(value));
-    }
-
-    private Judgement judgeRawTable() {
-        StatusLadder.Judged j = StatusLadder.judgeRawTable(metricCollectorService.getLastRawAggTradeBytes());
-        return new Judgement(j.status(), j.detail());
-    }
-
-    private Judgement judgeWsConn() {
-        StatusLadder.Judged j = StatusLadder.judgeWsConn(metricCollectorService.getLastWsConnections());
-        return new Judgement(j.status(), j.detail());
-    }
-
-    // 평가기·호출지점 push 가 이벤트로 적립한 결과를 읽는다(INFRA·EVENT 소스 공용).
-    // 미복구(open) 이벤트 있으면 그 상태, 없으면 정상(UP). "알려진 실패 없음" 낙관 표시.
-    private Judgement judgeFromEvents(String key) {
-        HealthCheckEvent open =
-                eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(key);
-        if (open == null) {
-            return new Judgement(HealthStatus.UP, "정상");
-        }
-        return new Judgement(open.getStatus().asHealthStatus(),
-                open.getCause() != null ? open.getCause() : "이상 감지");
-    }
-
-    // ── 소스별 세부 계산 ────────────────────────────────────────────
-
-    private static String describeFeed(FeedHealthRegistry.FeedHealth fh) {
-        if (fh == null || fh.secondsSinceLastMessage() == null) {
-            return "수신 기록 없음";
-        }
-        return fh.secondsSinceLastMessage() + "초 전 수신 (누적 " + fh.receivedCount() + ")";
-    }
-
-    private Double resourceValue(String key) {
-        double v;
-        if (key.equals(HealthCheckCatalog.RES_CPU.key())) {
-            v = metricCollectorService.getLastCpu();
-        } else if (key.equals(HealthCheckCatalog.RES_RAM.key())) {
-            v = metricCollectorService.getLastRam();
-        } else {
-            v = metricCollectorService.getLastDisk();
-        }
-        return v < 0 ? null : v;
-    }
-
-    private static String describeResource(Double value) {
-        if (value == null) return "수집 기록 없음";
-        return "%.1f%%".formatted(value);
-    }
-
-    private static String describeBeat(HealthHeartbeat.Beat beat) {
-        if (beat.status() == HealthStatus.UNKNOWN) {
-            return "대기 — 아직 실행 기록 없음";
-        }
-        if (beat.secondsSinceBeat() == null) {
-            return "최근 실행 실패";
-        }
-        return beat.secondsSinceBeat() + "초 전 마지막 성공";
     }
 }

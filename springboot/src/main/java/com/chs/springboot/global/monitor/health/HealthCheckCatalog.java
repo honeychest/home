@@ -136,21 +136,10 @@ public enum HealthCheckCatalog {
 
     /**
      * 보드 팝오버에 표시할 판정 기준 문구 — 항목이 자기 기준을 스스로 설명한다.
-     * 사다리 참조 소스는 StatusLadder 상수에서, HEARTBEAT 는 자기 줄의 임계에서 파생.
-     * EVENT(사용 시점 push)는 임계가 없어 null.
+     * 실제 문구 파생은 소스가 소유한다(판정과 문구를 한 소스에 응집). {@link HealthSource#thresholdText}
      */
     public String thresholdText() {
-        return switch (source) {
-            case FEED -> StatusLadder.FEED_SECONDS.text("초");
-            case HEARTBEAT -> new StatusLadder(heartbeat.staleSeconds(), heartbeat.downSeconds())
-                    .text("초", " (마지막 성공 경과, 실행 실패는 즉시 다운)");
-            case RESOURCE_PCT -> StatusLadder.RESOURCE_PCT.text("%", "(AlertService 임계와 동일)");
-            case RAWTABLE -> StatusLadder.RAWTABLE_GB.text("GB", " (data+index)");
-            case WSCONN -> StatusLadder.WS_CONNS.text("", " (4개 핸들러 합)");
-            // 보드 요청 경로에서 실접속 프로브 제거 — InfraHealthEvaluator 가 적립한 이벤트 기반(CONTEXT.md 설계 결정)
-            case INFRA -> "20초 주기 능동 프로브 기록 기반 — UP 아니면 DOWN";
-            case EVENT -> null;
-        };
+        return source.thresholdText(this);
     }
 
     public String label() {
