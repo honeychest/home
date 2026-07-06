@@ -24,7 +24,7 @@ param(
     [Parameter(Mandatory = $true)] [string]$OutFile,
     [string]$Title = "",
     [string]$BaseUrl = "http://100.69.229.3:2345",
-    [string]$Model = "gemma-4-26b-a4b-it-mlx",
+    [string]$Model = "Mac-mini-LLM",
     [string[]]$Ext = @(".java", ".jsx", ".js", ".ts", ".tsx"),
     [int]$TimeoutSec = 600,
     [double]$Temperature = 0.2,
