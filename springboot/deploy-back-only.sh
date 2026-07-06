@@ -4,14 +4,16 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
 LOG_DIR="$ROOT_DIR/dockerlogs"
-APP1_HEALTH_URL="http://localhost:8080/actuator/health"
-APP2_HEALTH_URL="http://localhost:8081/actuator/health"
+APP1_SERVICE="app1"
+APP2_SERVICE="app2"
+APP_INTERNAL_HEALTH_URL="http://127.0.0.1:8080/actuator/health"
 HEALTH_CHECK_RETRIES=50
 HEALTH_CHECK_INTERVAL=3
 
-health_code() {
-  local url="$1"
-  curl -s -o /dev/null -w "%{http_code}" "$url" || echo "000"
+health_body() {
+  local service="$1"
+  local health_url="$2"
+  docker compose exec -T "$service" sh -lc "wget -q -O - '$health_url' 2>/dev/null" 2>/dev/null || true
 }
 
 save_app_logs() {
@@ -21,20 +23,27 @@ save_app_logs() {
 }
 
 deploy_one() {
-  local app="$1"
+  local service="$1"
   local health_url="$2"
+  local attempt
+  local body
+  local preview
 
-  docker compose stop "$app"
-  docker compose up -d "$app"
+  docker compose stop "$service"
+  docker compose up -d "$service"
 
-  for _ in $(seq 1 $HEALTH_CHECK_RETRIES); do
-    if [ "$(health_code "$health_url")" = "200" ]; then
-      echo "$app is healthy."
+  for attempt in $(seq 1 $HEALTH_CHECK_RETRIES); do
+    body="$(health_body "$service" "$health_url")"
+    if printf '%s' "$body" | grep -q '"status":"UP"'; then
+      echo "[health][$service][$attempt/$HEALTH_CHECK_RETRIES] status=UP"
+      echo "$service is healthy."
       return 0
     fi
+    preview="$(printf '%s' "$body" | tr '\n' ' ' | cut -c1-160)"
+    echo "[health][$service][$attempt/$HEALTH_CHECK_RETRIES] status=WAIT body=${preview:-<empty>}"
     sleep "$HEALTH_CHECK_INTERVAL"
   done
-  echo "Error: $app failed health check."
+  echo "Error: $service failed health check."
   return 1
 }
 
@@ -46,8 +55,8 @@ main() {
   save_app_logs
 
   echo "[Step 3] Deploy..."
-  deploy_one "app1" "$APP1_HEALTH_URL"
-  deploy_one "app2" "$APP2_HEALTH_URL"
+  deploy_one "$APP1_SERVICE" "$APP_INTERNAL_HEALTH_URL"
+  deploy_one "$APP2_SERVICE" "$APP_INTERNAL_HEALTH_URL"
 
   echo "[Step 4] Cleanup dangling images..."
   docker image prune -f
