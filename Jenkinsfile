@@ -21,13 +21,24 @@ pipeline {
         stage('Detect Changes') {
             steps {
                 script {
-                    def changed = sh(script: '''
-                        if git rev-parse HEAD^2 > /dev/null 2>&1; then
-                            git diff --name-only HEAD^1 HEAD^2
-                        else
-                            git diff --name-only HEAD~1 HEAD
-                        fi
-                    ''', returnStdout: true).trim()
+                    def prev = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: ''
+                    // prev 커밋이 현재 히스토리에 실재하는지 검증 (force-push/rebase 대비)
+                    def prevOk = prev && sh(
+                        script: "git cat-file -e ${prev}^{commit} 2>/dev/null && echo ok || true",
+                        returnStdout: true).trim() == 'ok'
+
+                    def range
+                    if (prevOk) {
+                        range = "${prev} HEAD"              // 지난 성공배포 ~ 현재 전체
+                    } else if (sh(script: 'git rev-parse HEAD^2 > /dev/null 2>&1 && echo m || true',
+                                  returnStdout: true).trim() == 'm') {
+                        range = "HEAD^1 HEAD^2"             // 병합커밋 폴백
+                    } else {
+                        range = "HEAD~1 HEAD"               // 최초빌드/히스토리없음 폴백
+                    }
+                    echo "변경 감지 범위: ${range}"
+
+                    def changed = sh(script: "git diff --name-only ${range}", returnStdout: true).trim()
                     env.DEPLOY_BACK  = changed.contains('springboot/') ? 'true' : 'false'
                     env.DEPLOY_FRONT = changed.contains('frontend/')   ? 'true' : 'false'
                     env.DEPLOY_NEXUS = changed.contains('nexus/')      ? 'true' : 'false'
