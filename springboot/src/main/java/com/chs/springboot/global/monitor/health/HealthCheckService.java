@@ -6,8 +6,10 @@ package com.chs.springboot.global.monitor.health;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
 import com.chs.springboot.global.monitor.service.MetricCollectorService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,6 +28,10 @@ public class HealthCheckService {
     private final MetricCollectorService metricCollectorService;
     private final HealthClusterSnapshot healthClusterSnapshot;
 
+    // 현재 정상이어도 이 시간 안에 복구된 장애가 있으면 '최근이상' 흔적을 표시(클릭 없이 인지). 0 이하면 비활성.
+    @Value("${monitor.health.recent-window-hours:24}")
+    private int recentWindowHours;
+
     /** 보드에 표시할 전체 체크 목록 */
     public List<HealthCheckView> getChecks() {
         Map<String, FeedHealthRegistry.FeedHealth> feeds = new HashMap<>();
@@ -37,15 +43,29 @@ public class HealthCheckService {
         HealthSource.Ports ports = new HealthSource.Ports(
                 feeds, healthHeartbeat, metricCollectorService, eventRepository, cluster);
 
+        LocalDateTime recentCutoff = recentWindowHours > 0
+                ? LocalDateTime.now().minusHours(recentWindowHours) : null;
+
         List<HealthCheckView> out = new ArrayList<>(HealthCheckCatalog.all().size());
         for (HealthCheckCatalog c : HealthCheckCatalog.all()) {
             HealthSource.Judgement j = c.source().judge(c, ports);
 
             List<HealthCheckView.Failure> recent = new ArrayList<>();
+            String recoveredAt = null; // 창 안에서 복구된 가장 최근 시각(최신순 조회라 첫 매치가 최신)
             for (HealthCheckEvent e : eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(c.key())) {
                 recent.add(new HealthCheckView.Failure(
                         fmt(e.getLastFailedAt()), e.getStatus(), e.getCause(), fmt(e.getResolvedAt())
                 ));
+                if (recoveredAt == null && recentCutoff != null
+                        && e.getResolvedAt() != null && e.getLastFailedAt() != null
+                        && e.getLastFailedAt().isAfter(recentCutoff)) {
+                    recoveredAt = fmt(e.getResolvedAt());
+                }
+            }
+            // 흔적은 '현재 정상(UP)'일 때만 — DEGRADED/DOWN 은 라이브 색이 이미 알림
+            boolean recentlyRecovered = j.status() == HealthStatus.UP && recoveredAt != null;
+            if (!recentlyRecovered) {
+                recoveredAt = null;
             }
             String lastFailedAt = recent.isEmpty() ? null : recent.get(0).at();
             String lastCause = recent.isEmpty() ? null : recent.get(0).cause();
@@ -54,7 +74,7 @@ public class HealthCheckService {
                     c.key(), c.label(), c.description(),
                     c.layer().label(), c.layer().name(), c.priority().label(),
                     j.status(), j.detail(), c.thresholdText(),
-                    lastFailedAt, lastCause, recent
+                    lastFailedAt, lastCause, recentlyRecovered, recoveredAt, recent
             ));
         }
         return out;

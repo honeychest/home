@@ -122,6 +122,20 @@
 }
 .prio { font-size: 11px; color: var(--monitor-text-secondary); font-family: monospace; flex: 0 0 auto; }
 
+/* 최근이상 흔적: 현재 상태색(점)은 그대로, 주황 링+작은 뱃지로 '최근에 흔들렸음'만 덧입힘.
+   라이브 DEGRADED(솔리드 주황 마름모)와 달리 '링'이라 현재/과거 의미가 구분된다. */
+.dotRecent { box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(217, 119, 6, 0.55); }
+.recentBadge {
+    flex: 0 0 auto;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #b45309;
+    background: rgba(217, 119, 6, 0.12);
+    border: 1px solid rgba(217, 119, 6, 0.30);
+}
+
 /* hover / pin 시 상세 팝오버 (라이트 툴팁) */
 .popover {
     position: absolute;

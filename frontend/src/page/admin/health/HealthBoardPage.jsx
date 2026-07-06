@@ -40,13 +40,23 @@ function groupByLayer(checks) {
 
 function CheckRow({ check, pinned, onToggle }) {
     const meta = STATUS_META[check.status] ?? STATUS_META.UNKNOWN;
+    // 현재 정상이나 최근 창 내 복구된 장애 흔적 — 라이브 상태색은 그대로 두고 주황 링+뱃지만 덧입힘
+    const recent = check.recentlyRecovered;
+    const recentTitle = recent
+        ? `최근 이상 흔적 · 복구 ${check.recoveredAt ?? ''}`.trim()
+        : undefined;
     return (
         <div
             className={`${b.row} ${pinned ? b.rowPinned : ''}`}
             onClick={() => onToggle(check.key)}
         >
-            <span className={`${b.dot}${meta.dot ? ` ${b[meta.dot]}` : ''}`} style={{ background: meta.color }} />
+            <span
+                className={`${b.dot}${meta.dot ? ` ${b[meta.dot]}` : ''}${recent ? ` ${b.dotRecent}` : ''}`}
+                style={{ background: meta.color }}
+                title={recentTitle}
+            />
             <span className={b.rowLabel}>{check.label}</span>
+            {recent && <span className={b.recentBadge} title={recentTitle}>최근이상</span>}
             <span className={b.prio}>{check.priority}</span>
             <div className={b.popover}>
                 <div className={b.popHeader}>

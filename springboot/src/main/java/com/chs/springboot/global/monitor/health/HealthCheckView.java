@@ -15,6 +15,8 @@ public record HealthCheckView(
         String thresholdText, // 판정 기준 (예: "경고 ≥10초 · 다운 ≥30초"), 없으면 null
         String lastFailedAt,  // 마지막 실패 시각 ISO, 없으면 null
         String lastCause,     // 마지막 실패 원인, 없으면 null
+        boolean recentlyRecovered, // 현재 정상(UP)이나 최근 창(recent-window-hours) 내 복구된 장애가 있음 — 흔적 표시용
+        String recoveredAt,   // 그 복구 시각(최신), recentlyRecovered=false 면 null
         List<Failure> recentFailures // 최근 실패 이력(최신순)
 ) {
     public record Failure(

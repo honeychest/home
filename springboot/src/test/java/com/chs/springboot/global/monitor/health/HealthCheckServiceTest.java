@@ -3,11 +3,14 @@ package com.chs.springboot.global.monitor.health;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
 import com.chs.springboot.global.monitor.service.MetricCollectorService;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -250,6 +253,51 @@ class HealthCheckServiceTest {
                 new HealthClusterSnapshot.Dto(List.of(), List.of(feed), null, null, null, null, 0L)));
 
         assertThat(statusOf(HealthCheckCatalog.FEED_BINANCE_AGGTRADE.key())).isEqualTo(HealthStatus.UP);
+    }
+
+    // ── 최근이상 흔적: 현재 UP 이나 창(recent-window-hours) 내 복구된 장애가 있으면 표시 ──
+
+    @Test
+    void recentlyRecoveredFlaggedWhenResolvedWithinWindow() {
+        ReflectionTestUtils.setField(service, "recentWindowHours", 24);
+        String key = HealthCheckCatalog.RES_CPU.key();
+        when(metricCollectorService.getLastCpu()).thenReturn(10d); // 현재 정상(UP)
+        HealthCheckEvent recovered = new HealthCheckEvent();
+        recovered.setStatus(HealthEventStatus.DOWN);
+        recovered.setLastFailedAt(LocalDateTime.now().minusHours(1));
+        recovered.setResolvedAt(LocalDateTime.now().minusMinutes(50));
+        when(eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(eq(key)))
+                .thenReturn(List.of(recovered));
+
+        HealthCheckView v = viewOf(key);
+        assertThat(v.status()).isEqualTo(HealthStatus.UP);
+        assertThat(v.recentlyRecovered()).isTrue();
+        assertThat(v.recoveredAt()).isNotNull();
+    }
+
+    @Test
+    void notFlaggedWhenResolvedOutsideWindow() {
+        ReflectionTestUtils.setField(service, "recentWindowHours", 24);
+        String key = HealthCheckCatalog.RES_CPU.key();
+        when(metricCollectorService.getLastCpu()).thenReturn(10d);
+        HealthCheckEvent old = new HealthCheckEvent();
+        old.setStatus(HealthEventStatus.DOWN);
+        old.setLastFailedAt(LocalDateTime.now().minusDays(2)); // 창 밖
+        old.setResolvedAt(LocalDateTime.now().minusDays(2));
+        when(eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(eq(key)))
+                .thenReturn(List.of(old));
+
+        HealthCheckView v = viewOf(key);
+        assertThat(v.recentlyRecovered()).isFalse();
+        assertThat(v.recoveredAt()).isNull();
+    }
+
+    private HealthCheckView viewOf(String key) {
+        // 대상 키만 개별 스텁, 나머지는 Mockito 기본(빈 리스트)로 이력 없음
+        return service.getChecks().stream()
+                .filter(c -> c.key().equals(key))
+                .findFirst()
+                .orElseThrow();
     }
 
     private HealthStatus statusOf(String key) {

@@ -16,7 +16,7 @@ class HealthCheckControllerTest {
 
     private static HealthCheckView view(HealthStatus status) {
         return new HealthCheckView("k", "라벨", "설명", "L1 인프라", "L1_INFRA", "치명",
-                status, "상세", null, null, null, List.of());
+                status, "상세", null, null, null, false, null, List.of());
     }
 
     @SuppressWarnings("unchecked")
