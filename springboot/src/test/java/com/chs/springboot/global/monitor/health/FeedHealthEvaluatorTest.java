@@ -2,6 +2,8 @@ package com.chs.springboot.global.monitor.health;
 
 import com.chs.springboot.global.monitor.feed.FeedHealthConfig;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
+import com.chs.springboot.global.redis.LeaderElectionService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -13,13 +15,20 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class FeedHealthEvaluatorTest {
 
     private final FeedHealthRegistry registry = mock(FeedHealthRegistry.class);
     private final HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
-    private final FeedHealthEvaluator evaluator = new FeedHealthEvaluator(registry, recorder);
+    private final LeaderElectionService leaderElection = mock(LeaderElectionService.class);
+    private final FeedHealthEvaluator evaluator = new FeedHealthEvaluator(registry, recorder, leaderElection);
+
+    @BeforeEach
+    void leaderByDefault() {
+        when(leaderElection.isLeader()).thenReturn(true);
+    }
 
     private static FeedHealthRegistry.FeedHealth feed(String feedId, HealthStatus status, Long sinceSec) {
         return new FeedHealthRegistry.FeedHealth(feedId, status, sinceSec, null, 100L);
@@ -54,6 +63,16 @@ class FeedHealthEvaluatorTest {
 
         verify(recorder).record(eq(HealthCheckCatalog.FEED_BINANCE_AGGTRADE.key()),
                 eq(HealthStatus.DOWN), anyString());
+    }
+
+    @Test
+    void nonLeader_skipsEntirely() {
+        when(leaderElection.isLeader()).thenReturn(false);
+
+        evaluator.evaluate();
+
+        // 비리더는 피드를 소유하지 않으므로 스냅샷 조회/기록 자체를 하지 않는다(flapping 방지)
+        verifyNoInteractions(registry, recorder);
     }
 
     @Test

@@ -4,6 +4,7 @@
 package com.chs.springboot.global.monitor.health;
 
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
+import com.chs.springboot.global.redis.LeaderElectionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -30,9 +31,16 @@ public class FeedHealthEvaluator {
 
     private final FeedHealthRegistry feedHealthRegistry;
     private final HealthCheckRecorder recorder;
+    private final LeaderElectionService leaderElection;
 
     @Scheduled(fixedDelay = 5000)
     public void evaluate() {
+        // 피드 WS 연결은 리더 노드만 소유(예: AggTradeStreamService) → 비리더는 수신 카운트가 항상 0.
+        // 공유 DB 이벤트를 두고 리더(복구)와 비리더(DOWN)가 번갈아 열고 닫는 flapping을 막기 위해
+        // 피드 소유자인 리더에서만 평가/기록한다. (HeartbeatWatchdog 등 다른 평가기와 동일한 게이트 패턴)
+        if (!leaderElection.isLeader()) {
+            return;
+        }
         for (FeedHealthRegistry.FeedHealth fh : feedHealthRegistry.snapshot()) {
             String checkKey = FEED_TO_CHECK.get(fh.feedId());
             if (checkKey == null) {
