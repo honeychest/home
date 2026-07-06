@@ -83,6 +83,37 @@ class FeedHealthRegistryTest {
         assertThat(health.lastMessageAtEpochMs()).isNull();
     }
 
+    // ── 기동 유예: 등록 후 grace 안의 미수신은 대기(UNKNOWN), 지나면 DOWN ──
+
+    @Test
+    void withinGrace_neverReceived_isUnknownNotDown() {
+        FeedHealthRegistry registry = new FeedHealthRegistry(clock, 30);
+        Instant base = clock.instant();
+        registry.register("binance-aggTrade", new StatusLadder(10, 30));
+
+        clock.setInstant(base.plusSeconds(29)); // 유예 안
+        assertThat(statusOf(registry, "binance-aggTrade")).isEqualTo(HealthStatus.UNKNOWN);
+    }
+
+    @Test
+    void afterGrace_stillNeverReceived_isDown() {
+        FeedHealthRegistry registry = new FeedHealthRegistry(clock, 30);
+        Instant base = clock.instant();
+        registry.register("binance-aggTrade", new StatusLadder(10, 30));
+
+        clock.setInstant(base.plusSeconds(30)); // 유예 경과 → 죽은 채 기동한 피드는 DOWN
+        assertThat(statusOf(registry, "binance-aggTrade")).isEqualTo(HealthStatus.DOWN);
+    }
+
+    @Test
+    void withinGrace_firstMessageArrives_isUp() {
+        FeedHealthRegistry registry = new FeedHealthRegistry(clock, 30);
+        registry.register("binance-aggTrade", new StatusLadder(10, 30));
+
+        registry.markReceived("binance-aggTrade"); // 유예 중 첫 수신 → 정상, 유예 무관해짐
+        assertThat(statusOf(registry, "binance-aggTrade")).isEqualTo(HealthStatus.UP);
+    }
+
     private static HealthStatus statusOf(FeedHealthRegistry registry, String feedId) {
         return registry.snapshot().stream()
                 .filter(h -> h.feedId().equals(feedId))
