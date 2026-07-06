@@ -17,8 +17,21 @@ public enum HealthSource {
         @Override
         Judgement judge(HealthCheckCatalog check, Ports ports) {
             FeedHealthRegistry.FeedHealth fh = ports.feeds().get(check.feedId());
-            HealthStatus status = fh == null ? HealthStatus.UNKNOWN : fh.status();
-            return new Judgement(status, describeFeed(fh));
+            // 이 노드가 관측했으면(리더) 로컬 판정이 가장 신선
+            if (fh != null && fh.secondsSinceLastMessage() != null) {
+                return new Judgement(fh.status(), describeFeed(fh));
+            }
+            // 로컬 미관측(리더 전용 WS 라 비리더는 수신 기록 없음) → 리더 발행 스냅샷 원시상태로 재판정
+            HealthClusterSnapshot.FeedEntry e = ports.cluster().feed(check.feedId());
+            if (e == null || e.lastMessageAtEpochMs() == null) {
+                HealthStatus status = fh == null ? HealthStatus.UNKNOWN : fh.status();
+                return new Judgement(status, describeFeed(fh)); // 리더값도 없음 → 로컬 유지
+            }
+            long elapsed = Instant.now().getEpochSecond() - e.lastMessageAtEpochMs() / 1000;
+            FeedHealthRegistry.FeedHealth leader = new FeedHealthRegistry.FeedHealth(
+                    check.feedId(), StatusLadder.FEED_SECONDS.judge(elapsed),
+                    elapsed, e.lastMessageAtEpochMs(), e.receivedCount());
+            return new Judgement(leader.status(), describeFeed(leader));
         }
 
         @Override
@@ -142,10 +155,11 @@ public enum HealthSource {
      */
     public record ClusterView(
             Map<String, HealthClusterSnapshot.HeartbeatEntry> heartbeats,
+            Map<String, HealthClusterSnapshot.FeedEntry> feeds,
             Double ram, Double disk, Long rawTableBytes, Integer wsConnections
     ) {
         public static ClusterView empty() {
-            return new ClusterView(Map.of(), null, null, null, null);
+            return new ClusterView(Map.of(), Map.of(), null, null, null, null);
         }
 
         public static ClusterView from(HealthClusterSnapshot.Dto dto) {
@@ -156,11 +170,21 @@ public enum HealthSource {
             for (HealthClusterSnapshot.HeartbeatEntry e : dto.heartbeats()) {
                 map.put(e.checkKey(), e);
             }
-            return new ClusterView(map, dto.ram(), dto.disk(), dto.rawTableBytes(), dto.wsConnections());
+            Map<String, HealthClusterSnapshot.FeedEntry> feedMap = new HashMap<>();
+            if (dto.feeds() != null) {
+                for (HealthClusterSnapshot.FeedEntry e : dto.feeds()) {
+                    feedMap.put(e.feedId(), e);
+                }
+            }
+            return new ClusterView(map, feedMap, dto.ram(), dto.disk(), dto.rawTableBytes(), dto.wsConnections());
         }
 
         HealthClusterSnapshot.HeartbeatEntry heartbeat(String checkKey) {
             return heartbeats.get(checkKey);
+        }
+
+        HealthClusterSnapshot.FeedEntry feed(String feedId) {
+            return feeds.get(feedId);
         }
     }
 

@@ -223,7 +223,7 @@ class HealthCheckServiceTest {
         HealthClusterSnapshot.HeartbeatEntry entry =
                 new HealthClusterSnapshot.HeartbeatEntry(key, 10, 30, now, null, null);
         when(healthClusterSnapshot.read()).thenReturn(Optional.of(
-                new HealthClusterSnapshot.Dto(List.of(entry), null, null, null, null, now)));
+                new HealthClusterSnapshot.Dto(List.of(entry), List.of(), null, null, null, null, now)));
 
         assertThat(statusOf(key)).isEqualTo(HealthStatus.UP);
     }
@@ -232,11 +232,24 @@ class HealthCheckServiceTest {
     void resourceRamFromClusterWhenLocalUnobserved() {
         // 비리더: 로컬 ram 미관측(-1) → 리더 발행 클러스터 ram(다운선 80%)으로 DOWN
         when(metricCollectorService.getLastRam()).thenReturn(-1d);
-        // Dto(heartbeats, ram, disk, rawTableBytes, wsConnections, publishedAtEpochMs)
+        // Dto(heartbeats, feeds, ram, disk, rawTableBytes, wsConnections, publishedAtEpochMs)
         when(healthClusterSnapshot.read()).thenReturn(Optional.of(
-                new HealthClusterSnapshot.Dto(List.of(), 80d, null, null, null, 0L)));
+                new HealthClusterSnapshot.Dto(List.of(), List.of(), 80d, null, null, null, 0L)));
 
         assertThat(statusOf(HealthCheckCatalog.RES_RAM.key())).isEqualTo(HealthStatus.DOWN);
+    }
+
+    @Test
+    void feedFromClusterWhenLocalUnobserved() {
+        // 비리더: aggTrade WS 는 리더 전용이라 로컬 미수신(DOWN) → 리더 발행 스냅샷의
+        // 최근 수신시각으로 재판정하면 UP. 표시결함(영구 DOWN) 폴백 검증.
+        String feedId = com.chs.springboot.global.monitor.feed.FeedHealthConfig.BINANCE_AGG_TRADE;
+        long recent = System.currentTimeMillis() - 2_000; // 2초 전 수신 → FEED_SECONDS(10/30) 안쪽
+        HealthClusterSnapshot.FeedEntry feed = new HealthClusterSnapshot.FeedEntry(feedId, recent, 100);
+        when(healthClusterSnapshot.read()).thenReturn(Optional.of(
+                new HealthClusterSnapshot.Dto(List.of(), List.of(feed), null, null, null, null, 0L)));
+
+        assertThat(statusOf(HealthCheckCatalog.FEED_BINANCE_AGGTRADE.key())).isEqualTo(HealthStatus.UP);
     }
 
     private HealthStatus statusOf(String key) {

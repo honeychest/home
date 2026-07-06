@@ -5,6 +5,7 @@
 //       비리더 보드는 이 키를 읽어 판정한다. 상태가 아닌 '원시 타임스탬프'를 담아 읽는 쪽이 재계산 → 주기와 무관하게 정확.
 package com.chs.springboot.global.monitor.health;
 
+import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
 import com.chs.springboot.global.monitor.service.MetricCollectorService;
 import com.chs.springboot.global.redis.RedisKeys;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,21 +30,29 @@ public class HealthClusterSnapshot {
     private final ObjectMapper objectMapper;
     private final HealthHeartbeat heartbeat;
     private final MetricCollectorService metrics;
+    private final FeedHealthRegistry feeds;
 
-    /** 발행 페이로드 — 하트비트 원시상태 + 리더 관측 자원값(미관측은 null). */
-    public record Dto(List<HeartbeatEntry> heartbeats,
+    /** 발행 페이로드 — 하트비트·피드 원시상태 + 리더 관측 자원값(미관측은 null). */
+    public record Dto(List<HeartbeatEntry> heartbeats, List<FeedEntry> feeds,
                       Double ram, Double disk, Long rawTableBytes, Integer wsConnections,
                       long publishedAtEpochMs) { }
 
     public record HeartbeatEntry(String checkKey, long staleSeconds, long downSeconds,
                                  Long lastBeatEpochMs, Long lastFailEpochMs, String cause) { }
 
-    /** 리더만 호출 — 현재 하트비트 원시상태 + 자원값을 health:snapshot 한 키로 전체 발행. */
+    /** 피드 신선도 원시상태 — 마지막 수신시각(미수신 null)과 누적 수신수. 읽는 쪽이 경과초를 재계산해 재판정. */
+    public record FeedEntry(String feedId, Long lastMessageAtEpochMs, long receivedCount) { }
+
+    /** 리더만 호출 — 현재 하트비트·피드 원시상태 + 자원값을 health:snapshot 한 키로 전체 발행. */
     public void publish() {
         List<HeartbeatEntry> beats = new ArrayList<>();
         for (HealthHeartbeat.RawBeat r : heartbeat.rawSnapshot()) {
             beats.add(new HeartbeatEntry(r.checkKey(), r.staleSeconds(), r.downSeconds(),
                     r.lastBeatEpochMs(), r.lastFailEpochMs(), r.cause()));
+        }
+        List<FeedEntry> feedEntries = new ArrayList<>();
+        for (FeedHealthRegistry.FeedHealth f : feeds.snapshot()) {
+            feedEntries.add(new FeedEntry(f.feedId(), f.lastMessageAtEpochMs(), f.receivedCount()));
         }
         double ram = metrics.getLastRam();
         double disk = metrics.getLastDisk();
@@ -51,6 +60,7 @@ public class HealthClusterSnapshot {
         int wsConns = metrics.getLastWsConnections();
         Dto dto = new Dto(
                 beats,
+                feedEntries,
                 ram < 0 ? null : ram,
                 disk < 0 ? null : disk,
                 rawBytes < 0 ? null : rawBytes,
