@@ -18,6 +18,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -45,6 +46,9 @@ public class TelegramPollingService {
 
     /** 다음 조회 시작 offset (중복 처리 방지) */
     private final AtomicLong offset = new AtomicLong(0);
+
+    /** 연속 폴링 실패 횟수 — 3회 이상 연속 실패 시에만 헬스체크 DOWN 처리 */
+    private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
 
     /**
      * 서버 시작 시 가장 최근 update_id 를 읽어 offset 초기화.
@@ -85,6 +89,7 @@ public class TelegramPollingService {
                     Map.class
             );
             healthHeartbeat.beat(HEALTH_KEY);
+            consecutiveFailures.set(0);
             if (response == null) return;
 
             @SuppressWarnings("unchecked")
@@ -99,8 +104,21 @@ public class TelegramPollingService {
             }
 
         } catch (Exception e) {
-            healthHeartbeat.fail(HEALTH_KEY, e.getMessage());
-            log.error("Telegram polling error: {}", e.getMessage());
+            String cause = maskToken(e);
+            int n = consecutiveFailures.incrementAndGet();
+            if (n >= 3) {
+                healthHeartbeat.fail(HEALTH_KEY, cause);
+            }
+            log.warn("Telegram polling error (연속 {}회): {}", n, cause);
         }
+    }
+
+    /** 예외 메시지에서 봇 토큰 마스킹 (URL 노출 방지). 메시지가 null 이면 예외 클래스명 사용 */
+    private static String maskToken(Exception e) {
+        String message = e.getMessage();
+        if (message == null) {
+            return e.getClass().getSimpleName();
+        }
+        return message.replaceAll("bot[0-9]+:[A-Za-z0-9_-]+", "bot***");
     }
 }
