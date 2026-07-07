@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -37,7 +38,7 @@ public class TelegramPollingService {
     private String token;
 
     private final TelegramUpdateProcessor processor;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = createRestTemplate();
 
     private final LeaderElectionService leaderElection;
     private final HealthHeartbeat healthHeartbeat;
@@ -111,6 +112,14 @@ public class TelegramPollingService {
             }
             log.warn("Telegram polling error (연속 {}회): {}", n, cause);
         }
+    }
+
+    /** 타임아웃 지정 RestTemplate 생성 — 무한 대기(행)를 최대 10초 내 실패로 전환해 연속 실패 카운터가 감지하게 함 */
+    private static RestTemplate createRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);  // 연결 수립 5초 제한
+        factory.setReadTimeout(10_000);    // 응답 대기 10초 제한
+        return new RestTemplate(factory);
     }
 
     /** 예외 메시지에서 봇 토큰 마스킹 (URL 노출 방지). 메시지가 null 이면 예외 클래스명 사용 */
