@@ -2,7 +2,7 @@
 
 > 이 파일은 전체 문서 카탈로그 + 도메인 관계 맵 + 용어집 안내를 한곳에 모은다.
 > 각 페이지는 벡터 검색용이라 그 자체로 self-contained하게 쓰고, 페이지 간 연결은 여기서만 관리한다.
-> wiki-refresh 진행 상황은 `log.md` 참고. 최근 갱신: 2026-06-24 (전체 검증 완료 — 백엔드 5 + FE 도메인 4 + FE 공용 4 + FE 페이지 8 + 용어집 1; 중복 chatbot.md는 be-chatbot.md로 통합·삭제).
+> wiki-refresh 진행 상황은 `log.md` 참고. 최근 갱신: 2026-07-06 (헬스 체크 보드 신규 문서화 — `be-health.md` + `fe-page-health.md` 추가. 기존: 백엔드 5 + FE 도메인 4 + FE 공용 4 + FE 페이지 8 + 용어집 1). ⚠ 신규 2개 문서는 아직 벡터 미반영 — `POST /api/admin/chatbot/reindex/docs` 1회 필요.
 
 ## 카탈로그
 
@@ -12,6 +12,7 @@
 - `be-analysis.md` — 조건 트리(거래량/가격/델타/시간) 템플릿 저장·평가, 1분 주기 리더 노드 자동 탐지(SSE), 수동 탐색.
 - `be-chatbot.md` — 코드베이스 RAG 챗봇. pageId 가중검색·맥락보강·로그적재·3종 재색인(전체/문서/도메인).
 - `be-binance.md` — 체결·틱·청산·OI 수집 → 1s/1m/5m 롤업·백필 → S3 아카이빙 → 시그널 SSE/WS 브로드캐스트.
+- `be-health.md` — 시스템 헬스 체크 보드 백엔드. 7계층 34체크 상시 점검, FAIL/복구만 `health_check_event` 적립, DOWN 텔레그램 알림. `/api/admin/health/**`.
 
 ### 공통
 - `domain-glossary.md` — 프로젝트 공통 용어집. 용어 뜻을 물을 때 1차 참조.
@@ -38,6 +39,7 @@
 - `fe-page-monitor.md` — 리소스/Docker/Redis/피드 실시간 모니터링.
 - `fe-page-random.md` — Matter.js 물리 추첨(/winner)·랭킹·편집기.
 - `fe-page-admin.md` — 운영자 데이터 진단·수집·롤업·로그·테스트 도메인.
+- `fe-page-health.md` — 시스템 헬스 체크 보드 화면(`/admin/health`): 7계층 카드·상태 점·팝오버·이상 필터.
 
 ## 도메인 관계 맵
 
@@ -55,6 +57,7 @@
  logistics  →  (프론트 시뮬레이션 중심)
  random     →  (프론트 전용)
  admin      →  be-chatbot(로그/테스트) + 운영 API들
+ health     →  be-health (/api/admin/health/** — 34체크 판정·이력·알림)
 ```
 
 데이터 의존 방향(백엔드):
@@ -62,6 +65,8 @@
  be-binance ──(1m/5m봉, delta, SignalSseService)──▶ be-analysis
  be-binance ──(BinanceWebSocketStream 공용 인프라)──▶ be-upbit
  be-chatbot ──(docs/generated/*.md 를 doc 레이어로 색인)──▶ 이 문서들 전체
+ be-binance ──(피드/롤업/아카이브 잡이 healthHeartbeat.beat/fail 계측)──▶ be-health
+ be-health  ──(infra-postgres 프로브가 챗봇 RAG용 pgvector 연결 점검)──▶ be-chatbot
 ```
 
 FE 도메인 → 백엔드 대응:

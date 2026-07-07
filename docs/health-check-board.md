@@ -3,6 +3,10 @@
 시스템 유지·관리를 위한 독립 점검 페이지. 크리티컬 체크를 한 화면에 모아
 "전부 OK"를 확인하고, 실패 시 발생 시각·원인·로그를 저장/분석한다.
 
+> **이 문서는 개발자용 설계 원본**(코드 주석·화면 인수인계 패널이 참조)입니다.
+> **챗봇용 상세 문서는 `docs/generated/be-health.md`(백엔드)·`docs/generated/fe-page-health.md`(화면)** 로 분리되어 있습니다.
+> 소스와 대조된 최신 상세 설명이 필요하면 그쪽을 보세요(챗봇 doc 레이어 색인 대상은 `docs/generated/`뿐).
+
 - 페이지: `/admin/health` (로그인 필요, 독립 라우트)
 - 백엔드 API: `/api/admin/health/**` (`ADMIN_ACCESS` 권한 자동 보호)
 - 실패 이력 저장: `health_check_event` 테이블 (범용 checkKey 기반)
