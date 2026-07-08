@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>냉장고 레시피 — 진행 현황</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1c2430; --sub: #6b7684;
+    --line: #e4e8ee; --accent: #2f6fed; --ok: #1fa971; --warn: #d97706;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181f; --card: #1d232d; --text: #e8ecf2; --sub: #93a0b0;
+      --line: #2c3542; --accent: #6b9bff; --ok: #34c98e; --warn: #f0a04b;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text);
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    line-height: 1.55; padding: 16px; max-width: 720px; margin: 0 auto; }
+  header { margin: 8px 0 16px; }
+  h1 { font-size: 1.25rem; }
+  .updated { color: var(--sub); font-size: 0.85rem; }
+  .card { background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .card h2 { font-size: 0.95rem; margin-bottom: 8px; }
+  .phase-now { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .bar > div { height: 100%; background: var(--accent); border-radius: 4px; }
+  .alert h2 { color: var(--warn); }
+  .alert li { margin-left: 18px; }
+  ul.check { list-style: none; }
+  ul.check li { padding: 5px 0; border-bottom: 1px solid var(--line); }
+  ul.check li:last-child { border-bottom: none; }
+  ul.check ul { list-style: none; margin-left: 26px; }
+  ul.check ul li { border: none; padding: 2px 0; font-size: 0.9rem; color: var(--sub); }
+  .todo::before { content: "☐ "; color: var(--sub); }
+  .done::before { content: "☑ "; color: var(--ok); }
+  .doing::before { content: "▶ "; color: var(--accent); }
+  .next { border-left: 4px solid var(--accent); }
+  details summary { cursor: pointer; color: var(--sub); font-size: 0.9rem; }
+  details li { margin-left: 18px; font-size: 0.9rem; color: var(--sub); }
+</style>
+</head>
+<body>
+<header>
+  <h1>냉장고 레시피 — 진행 현황</h1>
+  <div class="updated">갱신: 2026-07-08 · 설계 확정, 구현 시작 전</div>
+</header>
+
+<div class="card">
+  <h2>현재 단계</h2>
+  <div class="phase-now"><span>준비 — 도메인 뼈대 생성 완료, 1차 착수 전</span><span>0%</span></div>
+  <div class="bar"><div style="width:0%"></div></div>
+</div>
+
+<div class="card alert">
+  <h2>지금 알아야 할 것</h2>
+  <ul>
+    <li>사용자 액션: Google AI Studio에서 Gemini API 키 발급 필요 (1차 완료 전까지 준비)</li>
+    <li>해당 구글 프로젝트에 결제 연결 금지 — 연결하면 무료 등급이 사라짐</li>
+    <li>유튜브 재생목록을 "일부공개"로 변경해두기 (3차 일괄 등록에서 사용)</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>작업 체크리스트</h2>
+  <ul class="check">
+    <li class="todo">1차: DB + 재료 사전 + 냉장고 화면
+      <ul>
+        <li class="todo">recipe 전용 PostgreSQL 데이터베이스 생성</li>
+        <li class="todo">재료 사전 테이블 (표준명 / 분류 / 추가횟수)</li>
+        <li class="todo">냉장고 테이블 (재료 / 등록일 / 임박)</li>
+        <li class="todo">냉장고 화면: 오래된 순 목록 + 추가 / 삭제 / 임박 / 수정</li>
+        <li class="todo">폰 홈화면 추가해서 실사용 시작</li>
+      </ul>
+    </li>
+    <li class="todo">2차: Gemini 추출 (영상 1개 등록) — 품질 검증 지점
+      <ul>
+        <li class="todo">Gemini URL 분석 연동 (인터페이스 뒤에 격리)</li>
+        <li class="todo">레시피 저장 (영상 ID가 고유 열쇠)</li>
+        <li class="todo">추출 품질 직접 검수 (몇 개 등록해보고 판단)</li>
+      </ul>
+    </li>
+    <li class="todo">3차: 재생목록 일괄 등록 (대기열 + 진행률 + 429 자동 재개)</li>
+    <li class="todo">4차: 추천 화면 (지금 가능 5개 + 하나만 사면 3개 + 상세)</li>
+    <li class="todo">5차: 다듬기 (자주 사는 재료 버튼, 새 재료 분류 질문)</li>
+  </ul>
+</div>
+
+<div class="card next">
+  <h2>다음 세션이 이어서 할 일</h2>
+  <ul>
+    <li>1차 시작: recipe 데이터베이스 생성 + Spring Boot recipe 도메인에 재료 사전 / 냉장고 테이블과 API 뼈대 작성</li>
+  </ul>
+</div>
+
+<div class="card">
+  <details>
+    <summary>완료 기록 (펼치기)</summary>
+    <ul>
+      <li>2026-07-08 설계 인터뷰 완료 — 결정 전체는 docs/recipe/CONTEXT.md 참고</li>
+      <li>2026-07-08 도메인 뼈대 생성 (docs/recipe, 백엔드 패키지, 프론트 폴더)</li>
+    </ul>
+  </details>
+</div>
+</body>
+</html>
