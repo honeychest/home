@@ -30,6 +30,7 @@
   .bar > div { height: 100%; background: var(--accent); border-radius: 4px; }
   .alert h2 { color: var(--warn); }
   .alert li { margin-left: 18px; }
+  .divider { text-align: center; color: var(--sub); font-size: 0.85rem; padding: 4px 0; }
   ul.check { list-style: none; }
   ul.check li { padding: 5px 0; border-bottom: 1px solid var(--line); }
   ul.check li:last-child { border-bottom: none; }
@@ -46,53 +47,56 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-08 · 설계 확정, 구현 시작 전</div>
+  <div class="updated">갱신: 2026-07-08 · 프론트 우선 방식으로 계획 확정, 1차 착수 전</div>
 </header>
 
 <div class="card">
   <h2>현재 단계</h2>
-  <div class="phase-now"><span>준비 — 도메인 뼈대 생성 완료, 1차 착수 전</span><span>0%</span></div>
+  <div class="phase-now"><span>프론트 단독 — 1차 착수 전</span><span>0%</span></div>
   <div class="bar"><div style="width:0%"></div></div>
 </div>
 
 <div class="card alert">
   <h2>지금 알아야 할 것</h2>
   <ul>
-    <li>사용자 액션: Google AI Studio에서 Gemini API 키 발급 필요 (1차 완료 전까지 준비)</li>
-    <li>해당 구글 프로젝트에 결제 연결 금지 — 연결하면 무료 등급이 사라짐</li>
-    <li>유튜브 재생목록을 "일부공개"로 변경해두기 (3차 일괄 등록에서 사용)</li>
+    <li>프론트 단독 기간은 서버 없이 폰 브라우저 저장(localStorage)으로 동작 — 데이터는 그 브라우저 안에만 있음</li>
+    <li>1~3차 동안은 사용자 준비물 없음. Gemini API 키·재생목록 일부공개는 4차 진입 전에 준비하면 됨</li>
   </ul>
 </div>
 
 <div class="card">
   <h2>작업 체크리스트</h2>
+  <div class="divider">프론트 단독 (localStorage · 모바일 전용)</div>
   <ul class="check">
-    <li class="todo">1차: DB + 재료 사전 + 냉장고 화면
+    <li class="todo">1차: 디자인 기반 + 냉장고 화면
       <ul>
-        <li class="todo">recipe 전용 PostgreSQL 데이터베이스 생성</li>
-        <li class="todo">재료 사전 테이블 (표준명 / 분류 / 추가횟수)</li>
-        <li class="todo">냉장고 테이블 (재료 / 등록일 / 임박)</li>
-        <li class="todo">냉장고 화면: 오래된 순 목록 + 추가 / 삭제 / 임박 / 수정</li>
+        <li class="todo">tokens.css (색·간격·글자 테마 세트, 라이트/다크)</li>
+        <li class="todo">recipe UI 킷 + /recipe/styleguide 페이지</li>
+        <li class="todo">저장소 인터페이스 + localStorage 구현체</li>
+        <li class="todo">냉장고 화면: 오래된 순 목록 / 추가 / 삭제 / 임박 / 수정</li>
         <li class="todo">폰 홈화면 추가해서 실사용 시작</li>
       </ul>
     </li>
-    <li class="todo">2차: Gemini 추출 (영상 1개 등록) — 품질 검증 지점
+    <li class="todo">2차: 레시피 목록·상세 + 추천 화면 (샘플 레시피로)</li>
+    <li class="todo">3차: 등록 화면 (URL 입력·진행률 — 동작은 흉내만)</li>
+  </ul>
+  <div class="divider">사용자 검수: 반복 수정 → "완전해지면" 아래 진행</div>
+  <ul class="check">
+    <li class="todo">4차: PostgreSQL recipe DB + API, 냉장고부터 저장소 교체</li>
+    <li class="todo">5차: Gemini 추출 + 재생목록 일괄 등록 연결 (품질 검증 지점)
       <ul>
-        <li class="todo">Gemini URL 분석 연동 (인터페이스 뒤에 격리)</li>
-        <li class="todo">레시피 저장 (영상 ID가 고유 열쇠)</li>
-        <li class="todo">추출 품질 직접 검수 (몇 개 등록해보고 판단)</li>
+        <li class="todo">사용자: Gemini API 키 발급 (결제 연결 금지 — 무료등급 소멸)</li>
+        <li class="todo">사용자: 유튜브 재생목록 "일부공개" 전환</li>
       </ul>
     </li>
-    <li class="todo">3차: 재생목록 일괄 등록 (대기열 + 진행률 + 429 자동 재개)</li>
-    <li class="todo">4차: 추천 화면 (지금 가능 5개 + 하나만 사면 3개 + 상세)</li>
-    <li class="todo">5차: 다듬기 (자주 사는 재료 버튼, 새 재료 분류 질문)</li>
+    <li class="todo">6차: 다듬기 (자주 사는 재료 버튼, 새 재료 분류 질문, 진행률 실동작)</li>
   </ul>
 </div>
 
 <div class="card next">
   <h2>다음 세션이 이어서 할 일</h2>
   <ul>
-    <li>1차 시작: recipe 데이터베이스 생성 + Spring Boot recipe 도메인에 재료 사전 / 냉장고 테이블과 API 뼈대 작성</li>
+    <li>1차 시작: PLAYBOOK 절차대로 grill-me 점검 → 디자인 인터뷰(색감·참고 링크) → tokens.css + UI 킷 + styleguide → 냉장고 화면 구현</li>
   </ul>
 </div>
 
@@ -100,8 +104,7 @@
   <details>
     <summary>완료 기록 (펼치기)</summary>
     <ul>
-      <li>2026-07-08 설계 인터뷰 완료 — 결정 전체는 docs/recipe/CONTEXT.md 참고</li>
-      <li>2026-07-08 도메인 뼈대 생성 (docs/recipe, 백엔드 패키지, 프론트 폴더)</li>
+      <li>2026-07-08 설계 확정 (결정 전체: docs/recipe/CONTEXT.md) · 도메인 뼈대 생성 · 프론트 우선 방식으로 재편</li>
     </ul>
   </details>
 </div>
