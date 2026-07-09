@@ -1,0 +1,175 @@
+/* [AGENT] recipe(기까) UI 킷 스타일 — tokens.css 변수만 사용 (임의 값 금지)
+   클래스 이름 규칙: rcp-<컴포넌트>[-<부위>][-<상태>]  (사용자가 지시할 때 이 이름을 그대로 사용)
+   목록: rcp-app, rcp-screen, rcp-screen-header, rcp-tab-bar, rcp-tab, rcp-btn,
+         rcp-chip, rcp-list-row, rcp-badge, rcp-input, rcp-sheet, rcp-section-label, rcp-empty */
+
+/* ── 앱 루트·화면 골격 ── */
+.rcp-app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--rcp-bg-gradient);
+  color: var(--rcp-text);
+  font-family: var(--rcp-font);
+  overflow-x: clip; /* 모바일 앱은 가로 스크롤이 존재하면 안 됨 — 최후 방어선 */
+}
+.rcp-screen {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--rcp-space-4) var(--rcp-space-4)
+           calc(var(--rcp-tab-height) + var(--rcp-space-6));
+}
+.rcp-screen-header { margin-bottom: var(--rcp-space-4); }
+.rcp-screen-title { font-size: var(--rcp-fs-xl); font-weight: var(--rcp-fw-heavy); }
+.rcp-screen-subtitle { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); margin-top: 2px; }
+
+/* ── 하단 탭 바: rcp-tab-bar > rcp-tab(.rcp-tab-active) ── */
+.rcp-tab-bar {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  height: var(--rcp-tab-height);
+  display: flex;
+  background: var(--rcp-surface);
+  border-top: 1px solid var(--rcp-line);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 40;
+}
+.rcp-tab {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px;
+  font-size: var(--rcp-fs-xs);
+  color: var(--rcp-text-faint);
+  background: none; border: none; font-family: inherit;
+  min-height: var(--rcp-touch);
+  /* 다국어 대비: 긴 탭 이름은 말줄임 처리 */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0; padding: 0 var(--rcp-space-1);
+}
+.rcp-tab-active { color: var(--rcp-accent); font-weight: var(--rcp-fw-heavy); }
+
+/* ── 버튼: rcp-btn (기본=그린), 변형 rcp-btn-ghost / rcp-btn-danger ── */
+.rcp-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--rcp-touch);
+  padding: 0 var(--rcp-space-4);
+  /* 다국어 대비: 글자가 세로로 꺾이거나 버튼이 짓눌리지 않게 (킷 공통 규칙) */
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-radius: var(--rcp-radius-md);
+  border: none;
+  background: var(--rcp-accent);
+  color: var(--rcp-on-accent);
+  font-family: inherit; font-size: var(--rcp-fs-md); font-weight: var(--rcp-fw-bold);
+}
+.rcp-btn:active { background: var(--rcp-accent-strong); }
+.rcp-btn-ghost { background: var(--rcp-accent-soft); color: var(--rcp-accent); }
+.rcp-btn-danger { background: transparent; color: var(--rcp-danger); }
+.rcp-btn:disabled { opacity: 0.45; }
+
+/* ── 자석 스티커 칩: rcp-chip + rcp-chip-on / rcp-chip-off ── */
+.rcp-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 38px;
+  padding: 0 var(--rcp-space-3);
+  white-space: nowrap; /* 다국어 대비: 스티커 글자 줄바꿈 금지, 칩이 내용만큼 넓어짐 */
+  border-radius: var(--rcp-radius-md);
+  font-family: inherit; font-size: var(--rcp-fs-sm); font-weight: var(--rcp-fw-bold);
+}
+.rcp-chip-on {
+  background: var(--rcp-surface);
+  color: var(--rcp-text);
+  border: 2px solid var(--rcp-accent);
+  font-weight: var(--rcp-fw-heavy);
+  box-shadow: var(--rcp-shadow-magnet);
+}
+.rcp-chip-off {
+  background: var(--rcp-surface-dim);
+  color: var(--rcp-text-faint);
+  border: 1px dashed var(--rcp-line-dashed);
+  box-shadow: none;
+}
+
+/* ── 목록 행: rcp-list-row > rcp-list-row-name / -meta / -actions ── */
+.rcp-list-row {
+  display: flex; align-items: center; gap: var(--rcp-space-2);
+  background: var(--rcp-surface);
+  border: 1px solid var(--rcp-line);
+  border-radius: var(--rcp-radius-lg);
+  box-shadow: var(--rcp-shadow-row);
+  padding: var(--rcp-space-3);
+  margin-bottom: var(--rcp-space-2);
+}
+.rcp-list-row-name {
+  flex: 1; font-size: var(--rcp-fs-md); font-weight: var(--rcp-fw-bold); min-width: 0;
+  overflow-wrap: anywhere; /* 다국어 대비: 띄어쓰기 없는 긴 단어도 행 안에서 줄바꿈 */
+}
+.rcp-list-row-meta { font-size: var(--rcp-fs-xs); color: var(--rcp-text-faint); white-space: nowrap; }
+.rcp-list-row-actions { display: flex; gap: var(--rcp-space-1); }
+.rcp-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  border: none; background: none; border-radius: var(--rcp-radius-sm);
+  color: var(--rcp-text-faint); font-family: inherit;
+}
+.rcp-icon-btn-accent { color: var(--rcp-accent); background: var(--rcp-accent-soft); }
+.rcp-icon-btn-danger { color: var(--rcp-danger); }
+
+/* ── 배지: rcp-badge (기본) / rcp-badge-expiring (임박 포스트잇) ── */
+.rcp-badge {
+  display: inline-flex; align-items: center;
+  font-size: var(--rcp-fs-xs); font-weight: var(--rcp-fw-bold);
+  padding: 2px 8px;
+  border-radius: var(--rcp-radius-sm);
+  background: var(--rcp-accent-soft); color: var(--rcp-accent);
+}
+.rcp-badge-expiring {
+  background: var(--rcp-warn-bg); color: var(--rcp-warn-text);
+  border-radius: 3px;
+  box-shadow: var(--rcp-shadow-postit);
+}
+
+/* ── 입력: rcp-input ── */
+.rcp-input {
+  min-height: var(--rcp-touch);
+  padding: 0 var(--rcp-space-3);
+  border-radius: var(--rcp-radius-md);
+  border: 1px solid var(--rcp-line);
+  background: var(--rcp-surface);
+  color: var(--rcp-text);
+  font-family: inherit; font-size: var(--rcp-fs-md);
+  width: 100%;
+  min-width: 0; /* flex 줄에서 브라우저 기본 최소폭을 풀어 입력창이 줄어들 수 있게 (가로 오버플로 방지) */
+}
+.rcp-input:focus { outline: 2px solid var(--rcp-accent); outline-offset: -1px; }
+
+/* ── 하단 시트: rcp-sheet-overlay > rcp-sheet > rcp-sheet-title ── */
+.rcp-sheet-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex; align-items: flex-end;
+}
+.rcp-sheet {
+  width: 100%;
+  background: var(--rcp-surface);
+  border-radius: var(--rcp-radius-xl) var(--rcp-radius-xl) 0 0;
+  box-shadow: var(--rcp-shadow-sheet);
+  padding: var(--rcp-space-5) var(--rcp-space-4)
+           calc(var(--rcp-space-6) + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: var(--rcp-space-3);
+}
+.rcp-sheet-title { font-size: var(--rcp-fs-lg); font-weight: var(--rcp-fw-heavy); }
+
+/* ── 섹션 라벨·빈 상태 ── */
+.rcp-section-label {
+  font-size: var(--rcp-fs-xs); font-weight: var(--rcp-fw-heavy);
+  color: var(--rcp-text-sub);
+  letter-spacing: 0.06em;
+  margin: var(--rcp-space-5) 0 var(--rcp-space-2);
+}
+.rcp-empty {
+  text-align: center;
+  color: var(--rcp-text-faint);
+  font-size: var(--rcp-fs-sm);
+  padding: var(--rcp-space-8) var(--rcp-space-4);
+}
+.rcp-chip-group { display: flex; flex-wrap: wrap; gap: var(--rcp-space-2); }

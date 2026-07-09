@@ -1,0 +1,95 @@
+/* [AGENT] recipe(기까) 디자인 토큰 — 디자인의 유일한 원본 (CONTEXT.md "디자인 체계")
+   방향: "냉장고 문 × 프레시" — 라이트: 아이스 화이트 + 그린 / 다크: 밤의 냉장고
+   규칙: 화면·컴포넌트는 반드시 이 변수만 사용. 임의 색상값 직접 입력 금지.
+   스코프: .rcp-app 루트 아래에서만 유효 (다른 도메인에 누출 방지) */
+
+.rcp-app {
+  /* ── 색: 바탕 ── */
+  --rcp-bg: #f7faf5;                 /* 앱 배경 (냉장고 문) */
+  --rcp-bg-gradient: linear-gradient(175deg, #f9fbf7 0%, #eef4ec 100%);
+  --rcp-surface: #ffffff;            /* 카드·목록 행 */
+  --rcp-surface-dim: #eef2ee;        /* 비활성 면 (OFF 스티커) */
+  --rcp-line: #dfe8df;               /* 테두리 */
+  --rcp-line-dashed: #c6d2c8;        /* OFF 스티커 점선 */
+
+  /* ── 색: 글자 ── */
+  --rcp-text: #253128;
+  --rcp-text-sub: #6e7d72;
+  --rcp-text-faint: #96a49a;
+
+  /* ── 색: 포인트(그린) ── */
+  --rcp-accent: #2aa257;             /* 검수 피드백(07-09): 더 밝은 그린으로 */
+  --rcp-accent-strong: #1f7a3d;      /* 눌림·강조 */
+  --rcp-accent-soft: #e3f4e8;        /* 연한 그린 면 */
+  --rcp-on-accent: #ffffff;          /* 그린 면 위의 글자 */
+
+  /* ── 색: 의미 ── */
+  --rcp-warn-bg: #fff3a8;            /* 임박 포스트잇 */
+  --rcp-warn-text: #7a6200;
+  --rcp-danger: #b3402e;             /* 삭제 */
+
+  /* ── 그림자 (자석 스티커 입체감) ── */
+  --rcp-shadow-magnet: 0 2px 3px rgba(45, 70, 50, 0.18);
+  --rcp-shadow-postit: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --rcp-shadow-row: 0 1px 0 #d6e0d6;
+  --rcp-shadow-sheet: 0 -8px 32px rgba(30, 50, 36, 0.18);
+
+  /* ── 모서리 ── */
+  --rcp-radius-sm: 6px;              /* 배지·포스트잇 */
+  --rcp-radius-md: 10px;             /* 스티커 칩·버튼 */
+  --rcp-radius-lg: 14px;             /* 카드·목록 행 */
+  --rcp-radius-xl: 22px;             /* 시트 상단 */
+
+  /* ── 간격 (4 단위) ── */
+  --rcp-space-1: 4px;
+  --rcp-space-2: 8px;
+  --rcp-space-3: 12px;
+  --rcp-space-4: 16px;
+  --rcp-space-5: 20px;
+  --rcp-space-6: 24px;
+  --rcp-space-8: 32px;
+
+  /* ── 글자 ── */
+  --rcp-font: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --rcp-fs-xs: 0.72rem;              /* 배지·날짜 */
+  --rcp-fs-sm: 0.84rem;              /* 보조 문구 */
+  --rcp-fs-md: 0.95rem;              /* 본문·재료명 */
+  --rcp-fs-lg: 1.1rem;               /* 섹션 제목 */
+  --rcp-fs-xl: 1.35rem;              /* 화면 제목 */
+  --rcp-fw-bold: 700;
+  --rcp-fw-heavy: 800;
+
+  /* ── 크기 ── */
+  --rcp-tab-height: 58px;            /* 하단 탭 바 */
+  --rcp-touch: 44px;                 /* 최소 터치 영역 */
+}
+
+/* 다크 = "밤의 냉장고": 시스템 설정 자동 전환 (2026-07-09 인터뷰 확정) */
+@media (prefers-color-scheme: dark) {
+  .rcp-app {
+    --rcp-bg: #14171a;
+    --rcp-bg-gradient: linear-gradient(175deg, #171a1d 0%, #121517 100%);
+    --rcp-surface: #1e2422;
+    --rcp-surface-dim: #1a1f1d;
+    --rcp-line: #2c332e;
+    --rcp-line-dashed: #3a443c;
+
+    --rcp-text: #e8ede8;
+    --rcp-text-sub: #9aa79d;
+    --rcp-text-faint: #6d7a70;
+
+    --rcp-accent: #4db670;
+    --rcp-accent-strong: #63c983;
+    --rcp-accent-soft: #1e2f24;
+    --rcp-on-accent: #0d1f13;
+
+    --rcp-warn-bg: #ffec8b;
+    --rcp-warn-text: #5c4d00;
+    --rcp-danger: #e06a56;
+
+    --rcp-shadow-magnet: 0 2px 4px rgba(0, 0, 0, 0.45);
+    --rcp-shadow-postit: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --rcp-shadow-row: 0 1px 0 #10130f;
+    --rcp-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.55);
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "기까",
+  "short_name": "기까",
+  "description": "기억해 뒀다가 까먹을 레시피, 기까가 기억할게요",
+  "start_url": "/recipe",
+  "scope": "/recipe",
+  "display": "standalone",
+  "background_color": "#f7faf5",
+  "theme_color": "#1f7a3d",
+  "icons": [
+    {
+      "src": "/recipe/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

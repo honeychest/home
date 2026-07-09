@@ -47,19 +47,23 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-08 · 프론트 우선 방식으로 계획 확정, 1차 착수 전</div>
+  <div class="updated">갱신: 2026-07-09 · 1차 구현 완료 (토큰·UI킷·4탭 골격·냉장고 화면·PWA), 폰 실사용 검수 대기</div>
 </header>
 
 <div class="card">
   <h2>현재 단계</h2>
-  <div class="phase-now"><span>프론트 단독 — 1차 착수 전</span><span>0%</span></div>
-  <div class="bar"><div style="width:0%"></div></div>
+  <div class="phase-now"><span>프론트 단독 — 1차 구현 완료, 검수 대기</span><span>30%</span></div>
+  <div class="bar"><div style="width:30%"></div></div>
 </div>
 
 <div class="card alert">
   <h2>지금 알아야 할 것</h2>
   <ul>
-    <li>프론트 단독 기간은 서버 없이 폰 브라우저 저장(localStorage)으로 동작 — 데이터는 그 브라우저 안에만 있음</li>
+    <li>사용자 액션: 폰(S25)을 같은 와이파이에 두고, PC에서 개발 서버를 켠 뒤(frontend에서 npm run dev)
+      크롬으로 <b>http://172.30.1.45:5173/recipe</b> 접속 → 냉장고 화면 실사용 검수.
+      스타일가이드는 /recipe/styleguide</li>
+    <li>프론트 단독 기간은 서버 없이 폰 브라우저 저장(localStorage)으로 동작 — 데이터는 그 브라우저 안에만 있음.
+      크롬으로 통일해서 사용할 것</li>
     <li>1~3차 동안은 사용자 준비물 없음. Gemini API 키·재생목록 일부공개는 4차 진입 전에 준비하면 됨</li>
   </ul>
 </div>
@@ -68,13 +72,16 @@
   <h2>작업 체크리스트</h2>
   <div class="divider">프론트 단독 (localStorage · 모바일 전용)</div>
   <ul class="check">
-    <li class="todo">1차: 디자인 기반 + 냉장고 화면
+    <li class="doing">1차: 디자인 기반 + 앱 골격 + 냉장고 화면
       <ul>
-        <li class="todo">tokens.css (색·간격·글자 테마 세트, 라이트/다크)</li>
-        <li class="todo">recipe UI 킷 + /recipe/styleguide 페이지</li>
-        <li class="todo">저장소 인터페이스 + localStorage 구현체</li>
-        <li class="todo">냉장고 화면: 오래된 순 목록 / 추가 / 삭제 / 임박 / 수정</li>
-        <li class="todo">폰 홈화면 추가해서 실사용 시작</li>
+        <li class="done">grill-me 점검 (4탭 골격·홈 컨셉·토글 추가·앱 이름 기까)</li>
+        <li class="done">디자인 인터뷰 — "냉장고 문 × 프레시" 확정 (그린+자석 스티커, 다크 자동전환)</li>
+        <li class="done">tokens.css (색·간격·글자 테마 세트, 라이트/다크)</li>
+        <li class="done">recipe UI 킷 + /recipe/styleguide 페이지</li>
+        <li class="done">앱 골격: 하단 탭 4개 (홈/추천/냉장고/레시피) + PWA manifest (이름 '기까')</li>
+        <li class="done">저장소 인터페이스 + localStorage 구현체</li>
+        <li class="done">냉장고 화면: 오래된 순 목록 / 토글 추가(시드 12개) / 삭제 / 임박 / 수정</li>
+        <li class="doing">폰에서 실사용 검수 → 피드백 반영 → 홈화면 추가 (크롬 기준)</li>
       </ul>
     </li>
     <li class="todo">2차: 레시피 목록·상세 + 추천 화면 (샘플 레시피로)</li>
@@ -96,7 +103,8 @@
 <div class="card next">
   <h2>다음 세션이 이어서 할 일</h2>
   <ul>
-    <li>1차 시작: PLAYBOOK 절차대로 grill-me 점검 → 디자인 인터뷰(색감·참고 링크) → tokens.css + UI 킷 + styleguide → 냉장고 화면 구현</li>
+    <li>사용자의 폰 실사용 피드백 받아 냉장고 화면 반복 수정 → 만족되면 mac-mini 배포 + 홈화면 추가로 1차 완료 → 2차(레시피·추천, 샘플 데이터) 착수</li>
+    <li>커밋은 아직 안 됨 — 검수 통과 후 gitnexus detect_changes 확인하고 커밋</li>
   </ul>
 </div>
 
@@ -104,6 +112,7 @@
   <details>
     <summary>완료 기록 (펼치기)</summary>
     <ul>
+      <li>2026-07-09 확장성 선반영 결정 추가 (platform·category·summaryVersion 필드, 재료 alias 구조, 영상 ID 파서) · 상용화 기획은 2단계 착수 시 별도 문서로 정리하기로 함</li>
       <li>2026-07-08 설계 확정 (결정 전체: docs/recipe/CONTEXT.md) · 도메인 뼈대 생성 · 프론트 우선 방식으로 재편</li>
     </ul>
   </details>

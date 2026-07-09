@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 기까 아이콘 — 그린 바탕에 냉장고 (임시 1차 버전, 브랜드 확정 시 교체) -->
+  <rect width="512" height="512" rx="112" fill="#1f7a3d"/>
+  <rect x="146" y="96" width="220" height="320" rx="28" fill="#f7faf5"/>
+  <line x1="146" y1="216" x2="366" y2="216" stroke="#1f7a3d" stroke-width="14"/>
+  <rect x="176" y="130" width="14" height="56" rx="7" fill="#1f7a3d"/>
+  <rect x="176" y="248" width="14" height="88" rx="7" fill="#1f7a3d"/>
+  <circle cx="322" cy="176" r="22" fill="#ffec8b"/>
+</svg>

@@ -2,7 +2,7 @@
 // [AGENT] 앱 라우팅 — BrowserRouter 기반
 // / → /binance 리다이렉트, /trade(TradePage), /binance(BinancePage), /analysis(AnalysisPage)
 // 연관: TradePage.jsx, BinancePage.jsx, AnalysisPage.jsx, ErrorPage.tsx
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import ErrorPage     from '../../page/error/ErrorPage.tsx';
@@ -22,6 +22,7 @@ import AdminTestDomainPlaceholder from '../../page/admin/test/AdminTestDomainPla
 import RawWriterTestPage from '../../page/admin/test/RawWriterTestPage.jsx';
 import ChatbotTestPage from '../../page/admin/test/ChatbotTestPage.jsx';
 import RandomPage    from '../../page/random/RandomPage.jsx';
+const RecipeApp = lazy(() => import('../../domain/recipe/page/RecipeApp.tsx'));
 import RandomLayoutEditorPage from '../../page/random/RandomLayoutEditorPage.jsx';
 import ForbiddenPage from '../../page/forbidden/ForbiddenPage.jsx';
 import { SignalPage } from './lazyPages.js';
@@ -99,6 +100,16 @@ function MainRouter() {
 
                 {/* Logistics 페이지 (전체화면, Layout 미사용) */}
                 <Route path="/logistics" element={<LogisticsPage />} />
+
+                {/* Recipe(기까) 페이지 — 모바일 전용, 전체화면, domain/recipe 격리 */}
+                <Route
+                    path="/recipe/*"
+                    element={(
+                        <Suspense fallback={<RouteFallback />}>
+                            <RecipeApp />
+                        </Suspense>
+                    )}
+                />
 
                 {/*Random Picker 페이지*/}
                 <Route path="/winner" element={<RandomPage />} />
