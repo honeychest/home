@@ -8,6 +8,7 @@ import RcpChip from '../ui/RcpChip';
 import RcpBadge from '../ui/RcpBadge';
 import RcpListRow from '../ui/RcpListRow';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
+import RcpShelf from '../ui/RcpShelf';
 
 const COLOR_TOKENS = [
     '--rcp-bg', '--rcp-surface', '--rcp-surface-dim', '--rcp-line',
@@ -84,6 +85,21 @@ export default function StyleguidePage() {
                 <RcpBadge variant="expiring">임박</RcpBadge>
             </div>
 
+            <h2 className="rcp-section-label">냉장고 선반 — RcpShelf (.rcp-shelf) + 재료 스티커 (.rcp-sticker)</h2>
+            <Label>{'<RcpShelf label> — 스냅 가로 스크롤, 넘칠 때만 오른쪽 페이드'}</Label>
+            <RcpShelf label="선반 예시 (옆으로 밀어보세요)">
+                <button type="button" className="rcp-sticker rcp-sticker-expiring">두부</button>
+                <button type="button" className="rcp-sticker rcp-sticker-old">대파</button>
+                <button type="button" className="rcp-sticker rcp-sticker-old">계란</button>
+                <button type="button" className="rcp-sticker">버섯</button>
+                <button type="button" className="rcp-sticker">김치</button>
+                <button type="button" className="rcp-sticker">우유</button>
+                <button type="button" className="rcp-sticker">애호박</button>
+                <button type="button" className="rcp-sticker">파프리카</button>
+                <button type="button" className="rcp-sticker">청양고추</button>
+            </RcpShelf>
+            <Label>{'.rcp-sticker(신선) / .rcp-sticker-old(14일+) / .rcp-sticker-expiring(임박 포스트잇)'}</Label>
+
             <h2 className="rcp-section-label">목록 행 — RcpListRow (.rcp-list-row)</h2>
             <RcpListRow
                 name="두부"
@@ -121,6 +137,13 @@ export default function StyleguidePage() {
                     badge={<RcpBadge variant="expiring">bald ablaufend</RcpBadge>}
                     meta="12월 31일"
                 />
+            </div>
+            <div style={{ marginTop: 'var(--rcp-space-2)' }}>
+                <RcpShelf label="긴 이름 스티커 선반 — 스티커가 내용만큼 넓어지고 선반이 옆으로 흘러야 정상">
+                    <button type="button" className="rcp-sticker rcp-sticker-expiring">Hähnchenbrustfilet mit Kräuterbutter</button>
+                    <button type="button" className="rcp-sticker">아주아주 길게 적어본 재료 이름</button>
+                    <button type="button" className="rcp-sticker rcp-sticker-old">무</button>
+                </RcpShelf>
             </div>
 
             <h2 className="rcp-section-label">하단 탭 바 — RcpTabBar (.rcp-tab-bar)</h2>

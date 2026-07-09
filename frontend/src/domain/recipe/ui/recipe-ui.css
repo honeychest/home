@@ -65,6 +65,7 @@
 .rcp-btn-ghost { background: var(--rcp-accent-soft); color: var(--rcp-accent); }
 .rcp-btn-danger { background: transparent; color: var(--rcp-danger); }
 .rcp-btn:disabled { opacity: 0.45; }
+.rcp-btn-full { width: 100%; } /* 화면 폭 전체 버튼 (예: 냉장고의 [+ 재료 추가]) */
 
 /* ── 자석 스티커 칩: rcp-chip + rcp-chip-on / rcp-chip-off ── */
 .rcp-chip {
@@ -158,6 +159,99 @@
   display: flex; flex-direction: column; gap: var(--rcp-space-3);
 }
 .rcp-sheet-title { font-size: var(--rcp-fs-lg); font-weight: var(--rcp-fw-heavy); }
+
+/* ── 냉장고 선반: rcp-shelf-label > rcp-shelf-wrap > rcp-shelf > rcp-sticker ──
+   (2026-07-09 확정: 선반 3칸 + 스냅 가로 스크롤, 데모 8번 방식) */
+.rcp-shelf-label {
+  font-size: var(--rcp-fs-xs); font-weight: var(--rcp-fw-heavy);
+  color: var(--rcp-text-sub);
+  letter-spacing: 0.04em;
+  margin: var(--rcp-space-3) 0 var(--rcp-space-2);
+}
+.rcp-shelf-wrap { position: relative; margin-bottom: var(--rcp-space-2); }
+/* 오른쪽 페이드 = "뒤에 더 있음" 힌트. 스크롤 남았을 때만 (data-fade) */
+.rcp-shelf-wrap[data-fade="true"]::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 9px; width: 36px;
+  background: linear-gradient(to right, transparent, var(--rcp-bg));
+  pointer-events: none;
+}
+.rcp-shelf {
+  display: flex; gap: var(--rcp-space-2);
+  overflow-x: auto;
+  padding: 2px 28px 6px 2px;
+  scroll-snap-type: x proximity;      /* 살살 밀면 스티커 경계에 안착 */
+  border-bottom: 3px solid var(--rcp-line); /* 선반 판 */
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.rcp-shelf::-webkit-scrollbar { display: none; }
+.rcp-shelf > * { flex: 0 0 auto; scroll-snap-align: start; }
+
+/* 냉장고 안 재료 스티커 (자석 메타포 — 칩과 같은 언어, 토글이 아닌 항목) */
+.rcp-sticker {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 38px;
+  padding: 0 var(--rcp-space-3);
+  border-radius: var(--rcp-radius-md);
+  background: var(--rcp-surface);
+  color: var(--rcp-text);
+  border: 2px solid var(--rcp-accent);
+  font-family: inherit; font-size: var(--rcp-fs-sm); font-weight: var(--rcp-fw-heavy);
+  box-shadow: var(--rcp-shadow-magnet);
+  white-space: nowrap;
+}
+.rcp-sticker-old { border-color: var(--rcp-accent-strong); }   /* 오래됨(14일+): 진한 테두리 */
+.rcp-sticker-expiring {                                        /* 임박: 포스트잇 */
+  background: var(--rcp-warn-bg); color: var(--rcp-warn-text);
+  border-color: var(--rcp-warn-bg);
+  box-shadow: var(--rcp-shadow-postit);
+}
+
+/* ── 추가 피드백 (2026-07-09 확정, UI 테스트 12번) ──
+   rcp-just-added: 추가 시트 상단 "방금 넣음" 확인줄
+   rcp-sticker-pulse: 시트 닫힌 뒤 새 스티커 위치 강조 (0.75초 × 2회) */
+.rcp-just-added {
+  display: flex; flex-wrap: wrap; gap: var(--rcp-space-1);
+  align-items: center; min-height: 30px;
+}
+.rcp-just-added-tag {
+  background: var(--rcp-accent-soft); color: var(--rcp-accent-strong);
+  font-size: var(--rcp-fs-xs); font-weight: var(--rcp-fw-heavy);
+  padding: 5px 10px; border-radius: 999px;
+  animation: rcp-tag-in 0.25s ease;
+}
+.rcp-just-added-hint { color: var(--rcp-text-faint); font-size: var(--rcp-fs-xs); }
+@keyframes rcp-tag-in {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+/* 아래에서 올라와 쾅 — 새 스티커 등장 연출 (시트가 아래에 있으므로 아래에서 출발) */
+.rcp-sticker-arrive {
+  position: relative;
+  animation: rcp-sticker-arrive 0.6s cubic-bezier(0.22, 1, 0.36, 1) 1 both;
+}
+@keyframes rcp-sticker-arrive {
+  0% { transform: translateY(150px) scale(1.4); opacity: 0; }
+  50% { transform: translateY(0) scale(1); opacity: 1; }
+  65% { transform: scaleX(1.28) scaleY(0.72); }   /* 착지 스쿼시 */
+  82% { transform: scaleX(0.92) scaleY(1.07); }
+  100% { transform: scale(1); }
+}
+.rcp-sticker-arrive::after { /* 착지 충격파 링 */
+  content: ""; position: absolute; inset: -3px;
+  border-radius: var(--rcp-radius-md);
+  border: 2px solid var(--rcp-accent);
+  opacity: 0; pointer-events: none;
+  animation: rcp-shockwave 0.45s ease-out 0.3s 1 forwards;
+}
+@keyframes rcp-shockwave {
+  0% { opacity: 0.85; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rcp-sticker-arrive, .rcp-sticker-arrive::after, .rcp-just-added-tag { animation: none; }
+  .rcp-sticker-arrive { opacity: 1; }
+}
 
 /* ── 섹션 라벨·빈 상태 ── */
 .rcp-section-label {

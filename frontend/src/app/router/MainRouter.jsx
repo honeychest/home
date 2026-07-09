@@ -3,7 +3,8 @@
 // / → /binance 리다이렉트, /trade(TradePage), /binance(BinancePage), /analysis(AnalysisPage)
 // 연관: TradePage.jsx, BinancePage.jsx, AnalysisPage.jsx, ErrorPage.tsx
 import { Suspense, lazy, useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import FloatingChatbot from '@/components/chatbot/FloatingChatbot.jsx';
 
 import ErrorPage     from '../../page/error/ErrorPage.tsx';
 import ErrorTest     from '../../page/error/ErrorTest.tsx';
@@ -47,6 +48,17 @@ function RouteFallback() {
             </div>
         </div>
     );
+}
+
+// 전역 챗봇 — 자체 UI를 가진 전체화면 경로에서는 숨김 (recipe: 모바일 전용 하단 탭과 겹침)
+const CHATBOT_HIDDEN_PREFIXES = ['/recipe'];
+
+function GlobalChatbot() {
+    const { pathname } = useLocation();
+    if (CHATBOT_HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+        return null;
+    }
+    return <FloatingChatbot />;
 }
 
 function MainRouter() {
@@ -129,6 +141,7 @@ function MainRouter() {
 
                 <Route path="*" element={<ErrorPage code="404" />} />
             </Routes>
+            <GlobalChatbot />
         </Router>
     );
 }
