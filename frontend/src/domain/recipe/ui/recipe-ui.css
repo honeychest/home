@@ -267,3 +267,90 @@
   padding: var(--rcp-space-8) var(--rcp-space-4);
 }
 .rcp-chip-group { display: flex; flex-wrap: wrap; gap: var(--rcp-space-2); }
+
+/* ── 로그인 화면 (2차) ── */
+.rcp-login {
+  min-height: 100dvh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: var(--rcp-space-4);
+  padding: var(--rcp-space-6);
+  background: var(--rcp-bg-gradient);
+}
+.rcp-login-brand {
+  font-size: 2.2rem; font-weight: var(--rcp-fw-heavy);
+  color: var(--rcp-accent-strong);
+}
+.rcp-login-tagline {
+  color: var(--rcp-text-sub);
+  font-size: var(--rcp-fs-md);
+  text-align: center;
+  white-space: pre-line;
+  margin-bottom: var(--rcp-space-4);
+}
+.rcp-login-button { min-height: var(--rcp-touch); }
+.rcp-login-error {
+  color: var(--rcp-danger);
+  font-size: var(--rcp-fs-sm);
+  text-align: center;
+}
+
+/* ── 시트 내부 공통 레이아웃 (화면 인라인 style 금지 규칙 준수 — 화면은 클래스만 조립) ── */
+.rcp-sheet-heading-row { display: flex; align-items: center; justify-content: space-between; }
+.rcp-sheet-heading-row > .rcp-section-label { margin: 0; }
+.rcp-icon-btn-label { /* 아이콘 자리 버튼을 짧은 글자 버튼으로 (예: 편집/완료 토글) */
+  width: auto;
+  padding: 0 var(--rcp-space-2);
+  font-size: var(--rcp-fs-xs);
+  font-weight: var(--rcp-fw-bold);
+}
+.rcp-input-row { display: flex; gap: var(--rcp-space-2); }
+.rcp-sheet-meta { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); }
+.rcp-stepper {
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--rcp-space-3);
+}
+.rcp-stepper-value { font-weight: var(--rcp-fw-heavy); }
+
+/* ── 조작 실패 안내 (runMutation seam 의 문구 자리) ── */
+.rcp-inline-error {
+  color: var(--rcp-danger);
+  font-size: var(--rcp-fs-sm);
+  text-align: center;
+}
+
+/* ── 홈 계정 줄 (2차 — 로그인 상태를 눈에 보이게) ── */
+.rcp-account {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; /* 긴 이메일·긴 번역 문구에도 안 깨지게 — 버튼이 아래 줄로 내려감 */
+  gap: var(--rcp-space-2) var(--rcp-space-3);
+  min-height: var(--rcp-touch);
+  padding: var(--rcp-space-3) var(--rcp-space-4);
+  background: var(--rcp-surface);
+  border: 1px solid var(--rcp-line);
+  border-radius: var(--rcp-radius-md);
+  margin-bottom: var(--rcp-space-4);
+}
+.rcp-account-info {
+  display: flex; flex-direction: column; gap: var(--rcp-space-1);
+  min-width: 0; /* flex 자식이 넘칠 때 줄바꿈 허용 */
+}
+.rcp-account-email {
+  font-size: var(--rcp-fs-md);
+  font-weight: var(--rcp-fw-bold);
+  word-break: break-all; /* 이메일은 행 안에서 줄바꿈 (다국어·긴 글자 규칙) */
+}
+.rcp-account-dev { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); }
+
+/* ── 앱 셸 로딩/에러 (2차 — API 전환으로 지연·실패가 실제로 생김) ── */
+.rcp-shell-status {
+  min-height: 100dvh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: var(--rcp-space-3);
+  padding: var(--rcp-space-6);
+  color: var(--rcp-text-sub);
+  font-size: var(--rcp-fs-md);
+  text-align: center;
+  background: var(--rcp-bg-gradient);
+}

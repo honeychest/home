@@ -47,32 +47,35 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-10 · 분리 규율 강화 + 인증(Google 로그인, 4차 도입) 확정. 폰 검수 완료 — 다음은 mac-mini 배포</div>
+  <div class="updated">갱신: 2026-07-10 · 2차 구현 + 인증 어댑터 분리(dev 폴백 prod 차단) + 홈 탭 계정 줄(이메일·로그아웃) 완료 — 남은 것: 사용자 커밋/푸시 → 폰 https 로그인 실검증</div>
 </header>
 
 <div class="card">
   <h2>현재 단계</h2>
-  <div class="phase-now"><span>프론트 단독 — 1차 구현 완료, 검수 대기</span><span>30%</span></div>
-  <div class="bar"><div style="width:30%"></div></div>
+  <div class="phase-now"><span>1차 완료 — 2차(백엔드 기반) 착수 준비</span><span>35%</span></div>
+  <div class="bar"><div style="width:35%"></div></div>
 </div>
 
 <div class="card alert">
   <h2>지금 알아야 할 것</h2>
   <ul>
-    <li>사용자 액션: 폰(S25)을 같은 와이파이에 두고, PC에서 개발 서버를 켠 뒤(frontend에서 npm run dev)
-      크롬으로 <b>http://172.30.1.45:5173/recipe</b> 접속 → 냉장고 화면 실사용 검수.
-      스타일가이드는 /recipe/styleguide</li>
-    <li>프론트 단독 기간은 서버 없이 폰 브라우저 저장(localStorage)으로 동작 — 데이터는 그 브라우저 안에만 있음.
-      크롬으로 통일해서 사용할 것</li>
-    <li>1~3차 동안은 사용자 준비물 없음. Gemini API 키·재생목록 일부공개는 4차 진입 전에 준비하면 됨</li>
+    <li>사용자 액션(지금): <b>커밋 → 푸시 → 폰 크롬 https://devcontext.net/recipe 에서
+      구글 로그인 + 냉장고 실사용 확인</b> — 확인되면 2차 완료.
+      (서버 .env GIKKA 2줄, OAuth 클라이언트 생성은 완료됨)</li>
+    <li>사용자 액션(3차 진입 전): Gemini API 키 발급 — OAuth 만든 그 구글 프로젝트에서.
+      <b>결제 연결 금지</b> (무료 등급 소멸). + 유튜브 재생목록 "일부공개" 전환</li>
+    <li>참고: 데이터가 서버 DB(gikka)로 바뀜 — 어느 기기로 접속해도 같은 냉장고.
+      기존 폰 localStorage 데이터는 이관 안 함(확정) — 재료 새로 입력</li>
+    <li>홈화면 '기까' 앱으로 냉장고 실사용 계속 (localStorage 데이터는 2차에서 DB로 이관 여부를 물어봄).
+      개발 중 확인은 PC 개발 서버(npm run dev) + 폰 크롬 http://172.30.1.45:5173/recipe</li>
   </ul>
 </div>
 
 <div class="card">
   <h2>작업 체크리스트</h2>
-  <div class="divider">프론트 단독 (localStorage · 모바일 전용)</div>
+  <div class="divider">완료</div>
   <ul class="check">
-    <li class="doing">1차: 디자인 기반 + 앱 골격 + 냉장고 화면
+    <li class="done">1차: 디자인 기반 + 앱 골격 + 냉장고 화면
       <ul>
         <li class="done">grill-me 점검 (4탭 골격·홈 컨셉·토글 추가·앱 이름 기까)</li>
         <li class="done">디자인 인터뷰 — "냉장고 문 × 프레시" 확정 (그린+자석 스티커, 다크 자동전환)</li>
@@ -81,29 +84,70 @@
         <li class="done">앱 골격: 하단 탭 4개 (홈/추천/냉장고/레시피) + PWA manifest (이름 '기까')</li>
         <li class="done">저장소 인터페이스 + localStorage 구현체</li>
         <li class="done">냉장고 화면: 선반 3칸(임박/오래됨 14일/신선, 스냅 가로 스크롤) / 스티커 탭→시트 / 토글 추가(시드 12개)</li>
-        <li class="doing">폰에서 실사용 검수 → 피드백 반영 → 홈화면 추가 (크롬 기준)</li>
+        <li class="done">폰에서 실사용 검수 → 피드백 반영 → 홈화면 추가·앱 설치 확인 (2026-07-10)</li>
       </ul>
     </li>
-    <li class="todo">2차: 레시피 목록·상세 + 추천 화면 (샘플 레시피로)</li>
-    <li class="todo">3차: 등록 화면 (URL 입력·진행률 — 동작은 흉내만)</li>
   </ul>
-  <div class="divider">사용자 검수: 반복 수정 → "완전해지면" 아래 진행</div>
+  <div class="divider">백엔드 우선 (2026-07-10 재편 — 샘플 UI 단계 폐지)</div>
   <ul class="check">
-    <li class="todo">4차: PostgreSQL recipe DB + API, 냉장고부터 저장소 교체</li>
-    <li class="todo">5차: Gemini 추출 + 재생목록 일괄 등록 연결 (품질 검증 지점)
+    <li class="doing">2차: 백엔드 기반 — gikka DB(기존 pgvector 컨테이너 내)·전용 DataSource + ArchUnit 격리 감시 + Google 로그인 + /api/recipe + 냉장고 저장소 교체(화면 무수정)
+      <ul>
+        <li class="done">grill-me 점검 (gikka DB·이관 없음·다중 사용자+허용 목록 스위치·JWT 쿠키)</li>
+        <li class="done">ArchUnit 격리 테스트 (양방향 import 차단 — 위반 주입으로 동작 검증됨)</li>
+        <li class="done">gikka 전용 DataSource(풀 2)·Flyway(db/migration/gikka)·TxManager + V1 스키마(user/fridge_item/ingredient_stat)</li>
+        <li class="done">냉장고 API /api/recipe/fridge (프론트 저장소 인터페이스와 1:1, 테스트 6개 + 전체 249개 통과)</li>
+        <li class="done">gikka DB·계정 생성 (전용 계정, 챗봇 DB 접근 차단 검증) + Flyway V1 적용 + API 실동작 검증 (추가·재등록·임박·날짜·숨김·삭제 전부 확인)</li>
+        <li class="done">사용자: Google OAuth 클라이언트 생성 (결제 미연결 프로젝트, 원본 4개 등록)</li>
+        <li class="done">Google 로그인 백엔드 (GIS 토큰 검증→JWT 쿠키 30일, 서명 키는 DB 자동 생성 V2,
+          허용 목록 스위치, /api/recipe/** 전용 필터체인, dev 폴백 유지 — 위조 토큰 401 검증됨)</li>
+        <li class="done">프론트: 저장소 API 구현체 교체 (FridgePage 무수정 성공) + 로그인 게이트/화면(GIS 버튼)
+          + 셸 로딩·에러 상태. 빌드 통과</li>
+        <li class="done">인증 어댑터 분리 (CurrentUser 인터페이스 ← JwtCurrentUser / DevCurrentUser,
+          dev 폴백은 prod 프로파일이면 기동 실패 — 테스트 3개로 고정) + 낡은 주석·limit 이중 정의 정리</li>
+        <li class="done">홈 탭 계정 줄: 로그인 이메일 + 로그아웃 버튼(https 에서만 — 개발 모드에서는
+          "자동 접속 중" 안내로 대체). 빌드 통과, 폰 화면 확인은 배포 검증 때 함께</li>
+        <li class="done">아키텍처 정리 3건: 선반 분류를 순수 모듈로(fridgeShelves.ts + vitest 6개 —
+          프론트 첫 테스트 기반), 냉장고 화면 인라인 style 6곳 → 킷 클래스, 조작 실행기 runMutation
+          (실패 문구·연타 방지·재동기화 한 곳 + 에러 계약 CONTEXT.md 확정). Secure 쿠키 반영</li>
+        <li class="doing">배포 후 실검증: 폰 https(devcontext.net)에서 구글 로그인 → 냉장고 실사용 확인</li>
+      </ul>
+    </li>
+    <li class="todo">3차: Gemini 추출 + 등록 화면 (URL 개별·재생목록 일괄·대기열 — 품질 검증 지점)
       <ul>
         <li class="todo">사용자: Gemini API 키 발급 (결제 연결 금지 — 무료등급 소멸)</li>
         <li class="todo">사용자: 유튜브 재생목록 "일부공개" 전환</li>
       </ul>
     </li>
-    <li class="todo">6차: 다듬기 (자주 사는 재료 버튼, 새 재료 분류 질문, 진행률 실동작)</li>
+    <li class="todo">4차: 레시피 목록·상세 + 추천 화면 (실제 추출 데이터로)</li>
+    <li class="todo">5차: 다듬기 (자주 사는 재료 버튼, 새 재료 분류 질문, 앱 아이콘 색·모양 개선)</li>
   </ul>
 </div>
 
 <div class="card next">
   <h2>다음 세션이 이어서 할 일</h2>
   <ul>
-    <li>mac-mini 배포 + 폰 홈화면 추가로 1차 완료 → 2차(레시피·추천, 샘플 데이터) grill-me 점검부터 착수</li>
+    <li>커밋/푸시는 사용자가 직접 하기로 함. 미커밋 변경: springboot(recipe 백엔드+인증 전체,
+      build.gradle 의존성, application*.properties gikka 절) + frontend(recipe 저장소 교체·로그인)
+      + docs/recipe 문서 3종 + server-profile.md. 서버 .env(GIKKA 2줄)는 사용자가 추가 완료함</li>
+    <li>푸시 → 배포 후 사용자 실검증: 폰 크롬 https://devcontext.net/recipe 접속 →
+      구글 로그인 버튼 → 로그인 → 냉장고 사용(재료 추가·삭제). 이게 확인되면 2차 완료.
+      실패 시 확인 순서: ① OAuth 원본 4개 등록 여부 ② 동의 화면 테스트 사용자 등록 여부
+      ③ 허용 목록(application-prod의 gikka.auth.allowed-emails) 이메일 일치 여부</li>
+    <li>남은 다듬기(다음 세션): styleguide에 로그인 화면·홈 계정 줄·rcp-inline-error 미등록.
+      FridgePage 조작 에러 처리는 runMutation 으로 완료(로딩 표시는 조작이 빨라 의도적 생략).
+      로그아웃 버튼은 홈 탭 계정 줄로 구현 완료 — 배포 검증 때 홈 탭에서 이메일·로그아웃 확인</li>
+    <li>프론트 테스트 기반 생김: npm run test (vitest, .test.ts만 수집 — 옛 .test.mjs 스크립트 제외).
+      도메인 판정은 순수 모듈로 빼서 테스트 (PLAYBOOK 관례 5·6번 신설)</li>
+    <li>보류 후보(아키텍처 점검에서 합의): 백엔드 FridgeRepository SQL 동작 자동 테스트
+      (Testcontainers — 배포 검증 후 적기), RcpBadge·RcpListRow 는 styleguide 외 사용처 0 (4차 재사용 후보로 유지)</li>
+    <li>아키텍처 관례 4가지는 PLAYBOOK.md 2차 절로 이동 (규칙은 PLAYBOOK, 상태는 여기 — 문서 규율)</li>
+    <li>주의(이번에 실측된 함정): recipe 쪽에서 TransactionManager 를 스프링 빈으로 등록하면
+      기본 transactionManager 자동 구성이 꺼져 기존 도메인 @Transactional 전체가 깨짐.
+      반드시 GikkaDataSourceConfig 의 TransactionTemplate(gikkaTxTemplate) 방식 유지</li>
+    <li>로컬 검증 방법: springboot 에서 ./gradlew bootRun (gikka DB는 Tailscale 로 원격 접속,
+      dev 사용자 폴백 동작) → http://localhost:8080/api/recipe/fridge/items.
+      한글 body 는 셸에서 직접 넣으면 CP949 로 깨짐 — UTF-8 파일로 --data-binary 사용</li>
+    <li>보류(사용자 요청): 앱 아이콘 그린이 너무 어두움 — 밝은 그린(#2aa257)으로 재생성 + 모양 다듬기 (5차에 포함)</li>
     <li>배포 시 확인: PWA 아이콘이 SVG 하나뿐 — 홈화면 추가 시 아이콘이 안 나오면 PNG(192/512px) 추가 필요</li>
     <li>개발 서버 실행법: frontend 폴더에서 npm run dev → 폰(같은 와이파이)에서 http://172.30.1.45:5173/recipe</li>
   </ul>
@@ -113,6 +157,23 @@
   <details>
     <summary>완료 기록 (펼치기)</summary>
     <ul>
+      <li>2026-07-10 아키텍처 점검(high) 5건 반영 — @GikkaUserId 리졸버(인증을 시그니처로),
+        세션 만료 401 공용 시임(http.ts→셸 게이트, 미표시 오류 결함 제거), FridgeService 를
+        FridgeRepository 로 흡수(순위 로직은 순수 함수+테스트), GoogleTokenVerifier 에
+        RestClient.Builder 시임+보안 판정 테스트 4건, 프론트 공용 request 헬퍼. 테스트 10개 통과·API 스모크 확인</li>
+      <li>2026-07-10 2차 후반부 — Google 로그인 전체 구현: GIS 토큰 검증(tokeninfo)→허용 목록→
+        JWT HttpOnly 쿠키(30일, 서명 키는 gikka DB 자동 생성 V2), /api/recipe 전용 필터체인
+        (기존 SecurityConfig 무접촉), 프론트 로그인 게이트+GIS 버튼, 냉장고 저장소를 API 구현체로
+        교체(FridgePage 무수정 성공 — 인터페이스 설계 검증), 프론트 시드 목록 삭제(서버로 이관).
+        검증: V2 적용·dev 폴백 세션·위조 토큰 401·빌드 통과. 실 로그인은 배포 후 폰 https 확인 남음</li>
+      <li>2026-07-10 2차 전반부 — ArchUnit 격리 테스트(위반 주입으로 동작 검증), gikka DB·전용 계정 생성
+        (챗봇 DB 접근 차단 확인), 전용 DataSource(풀2)·Flyway V1·TransactionTemplate, 냉장고 API
+        /api/recipe/fridge 실동작 검증(추가·재등록·임박·날짜·숨김·삭제). TransactionManager 빈 등록이
+        기존 도메인 @Transactional 을 깨는 회귀를 발견·수정. 인증 결정: Google 로그인(다중 사용자 기본
+        + 허용 목록 스위치 + JWT 쿠키), localStorage 이관 안 함</li>
+      <li>2026-07-10 1차 완료 (mac-mini 배포, 홈화면 추가·앱 설치 확인) · PWA PNG 아이콘 추가 ·
+        분리 규율 강화(ArchUnit·공용 코드 금지·전용 DataSource)와 인증(Google 로그인) 확정 ·
+        구현 순서를 백엔드 우선으로 재편 (샘플 레시피 UI 단계 폐지)</li>
       <li>2026-07-09 검수 2라운드 — 추가 도구를 [+ 재료 추가] 시트로 분리(방금 넣음 확인줄), 새 스티커 "아래에서 쾅" 등장 연출, 신선 선반 최신순 + 크롬 스냅 기억으로 되감기가 막히던 버그 수정(자동화 재현으로 검증), 날짜 수정을 달력에서 −1/+1 스테퍼(즉시 저장)로 교체</li>
       <li>2026-07-09 냉장고 화면을 선반 방식으로 교체 — UI 테스트 13종 비교(아티팩트, URL은 CONTEXT.md) 후 확정. RcpShelf·rcp-sticker 킷 추가, 캐러셀 패턴은 2차 추천 화면 후보로 보류</li>
       <li>2026-07-09 전역 챗봇 버튼을 /recipe에서 숨김 (MainRouter의 GlobalChatbot 래퍼, 다른 페이지는 유지·검증 완료)</li>

@@ -59,6 +59,7 @@ dependencies {
     implementation 'io.github.binance:binance-connector-java:3.3.0' // binance
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'
+    implementation 'org.flywaydb:flyway-database-postgresql'                           // gikka(recipe) DB 마이그레이션 — Flyway 10+는 PG 모듈 분리
     implementation 'com.rometools:rome:2.1.0' // XML로 된 RSS 피드를 Java 객체로 변환해줌
     implementation 'org.springframework.boot:spring-boot-starter-amqp' // RabbitMQ 연결을 위한 기본 스타터
     // NOTE: spring-boot-starter-amqp에 spring-rabbit이 포함되어 있어 별도 의존성 불필요
@@ -89,6 +90,7 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'                    // recipe 도메인 격리 감시 (docs/recipe/CONTEXT.md 분리 규율 6)
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

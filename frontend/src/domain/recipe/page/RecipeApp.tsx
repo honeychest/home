@@ -1,10 +1,15 @@
 // [AGENT] recipe(기까) 앱 골격 — /recipe/* 전체를 감싸는 셸
-// 하단 탭 4개(홈/추천/냉장고/레시피) + PWA manifest('기까') 주입. CONTEXT.md "앱 골격" 확정.
-// 1차에서는 냉장고만 실동작, 나머지 탭은 자리만 (2~3차에서 구현).
-import { useEffect } from 'react';
+// 하단 탭 4개(홈/추천/냉장고/레시피) + PWA manifest('기까') 주입 + 로그인 게이트(2차).
+// 로컬 개발은 백엔드 dev 폴백으로 로그인 화면 없이 통과, 배포(https)에서만 GIS 버튼이 보인다.
+import { useCallback, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import RcpTabBar from '../ui/RcpTabBar';
+import RcpButton from '../ui/RcpButton';
+import { authRepository } from '../data/authRepository';
+import { setSessionExpiredHandler } from '../data/http';
 import FridgePage from './FridgePage';
+import HomePage from './HomePage';
+import LoginPage from './LoginPage';
 import PlaceholderPage from './PlaceholderPage';
 import StyleguidePage from './StyleguidePage';
 import '../style/tokens.css';
@@ -34,23 +39,70 @@ function useGikkaDocumentMeta() {
     }, []);
 }
 
+type AuthState =
+    | { phase: 'loading' }
+    | { phase: 'in'; email: string }
+    | { phase: 'out' }
+    | { phase: 'error'; message: string };
+
 export default function RecipeApp() {
     useGikkaDocumentMeta();
+    const [auth, setAuth] = useState<AuthState>({ phase: 'loading' });
+
+    const checkSession = useCallback(() => {
+        setAuth({ phase: 'loading' });
+        authRepository.me()
+            .then((email) => setAuth(email ? { phase: 'in', email } : { phase: 'out' }))
+            .catch((e: Error) => setAuth({ phase: 'error', message: e.message }));
+    }, []);
+
+    useEffect(() => {
+        checkSession();
+    }, [checkSession]);
+
+    // 로그아웃 = 쿠키 삭제 후 세션 재확인 (배포에서는 401 → 로그인 화면으로)
+    const logout = useCallback(() => {
+        authRepository.logout().finally(checkSession);
+    }, [checkSession]);
+
+    // 세션 만료(쿠키 30일) 시 어떤 화면에서 조작하다가도 로그인 화면으로 전환 —
+    // 401 처리를 이 한 곳에 집중 (화면·저장소는 인증을 모름)
+    useEffect(() => {
+        setSessionExpiredHandler(() => setAuth({ phase: 'out' }));
+        return () => setSessionExpiredHandler(null);
+    }, []);
+
+    if (auth.phase === 'loading') {
+        return (
+            <div className="rcp-app" id="rcp-app">
+                <div className="rcp-shell-status" id="rcp-shell-loading">확인 중…</div>
+            </div>
+        );
+    }
+    if (auth.phase === 'error') {
+        return (
+            <div className="rcp-app" id="rcp-app">
+                <div className="rcp-shell-status" id="rcp-shell-error" role="alert">
+                    <span>서버에 연결하지 못했어요</span>
+                    <span>{auth.message}</span>
+                    <RcpButton onClick={checkSession}>다시 시도</RcpButton>
+                </div>
+            </div>
+        );
+    }
+    if (auth.phase === 'out') {
+        return (
+            <div className="rcp-app" id="rcp-app">
+                <LoginPage onLogin={(email) => setAuth({ phase: 'in', email })} />
+            </div>
+        );
+    }
 
     return (
         <div className="rcp-app" id="rcp-app">
             <Routes>
                 <Route index element={<Navigate to="fridge" replace />} />
-                <Route
-                    path="home"
-                    element={(
-                        <PlaceholderPage
-                            pageId="rcp-home-page"
-                            title="홈"
-                            description="복사한 쇼츠 링크 붙여넣기와 최근 분석 목록이 여기에 생겨요 (3차 예정)"
-                        />
-                    )}
-                />
+                <Route path="home" element={<HomePage email={auth.email} onLogout={logout} />} />
                 <Route
                     path="recommend"
                     element={(

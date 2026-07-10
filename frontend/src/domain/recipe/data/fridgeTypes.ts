@@ -11,9 +11,3 @@ export interface FridgeItem {
     /** 임박 여부 — 사용자가 수동 토글 */
     expiring: boolean;
 }
-
-/** 재료별 추가 횟수 — "자주 사는 재료" 상위 12개 버튼의 근거 */
-export interface IngredientStat {
-    name: string;
-    addCount: number;
-}
