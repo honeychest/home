@@ -130,9 +130,13 @@
       build.gradle 의존성, application*.properties gikka 절) + frontend(recipe 저장소 교체·로그인)
       + docs/recipe 문서 3종 + server-profile.md. 서버 .env(GIKKA 2줄)는 사용자가 추가 완료함</li>
     <li>푸시 → 배포 후 사용자 실검증: 폰 크롬 https://devcontext.net/recipe 접속 →
-      구글 로그인 버튼 → 로그인 → 냉장고 사용(재료 추가·삭제). 이게 확인되면 2차 완료.
-      실패 시 확인 순서: ① OAuth 원본 4개 등록 여부 ② 동의 화면 테스트 사용자 등록 여부
-      ③ 허용 목록(application-prod의 gikka.auth.allowed-emails) 이메일 일치 여부</li>
+      구글 로그인 버튼 → 로그인 → 냉장고 사용(재료 추가·삭제) + 홈 탭 이메일·로그아웃 확인.
+      이게 확인되면 2차 완료.
+      실패 시 확인 순서: 1) OAuth 원본 4개 등록 여부 2) 동의 화면 테스트 사용자 등록 여부
+      3) 허용 목록(application-prod의 gikka.auth.allowed-emails) 이메일 일치 여부</li>
+    <li>배포 검증 추가 항목 — 서버 시간대: 등록일을 서버가 LocalDate.now()로 기록하므로
+      컨테이너가 UTC면 한국시간 자정~오전 9시 등록이 "어제"로 찍힘 (14일 오래됨 판정에도 영향).
+      재료 하나 넣고 시트의 등록 날짜가 오늘인지 확인, 어긋나면 앱 컨테이너 TZ=Asia/Seoul 설정</li>
     <li>남은 다듬기(다음 세션): styleguide에 로그인 화면·홈 계정 줄·rcp-inline-error 미등록.
       FridgePage 조작 에러 처리는 runMutation 으로 완료(로딩 표시는 조작이 빨라 의도적 생략).
       로그아웃 버튼은 홈 탭 계정 줄로 구현 완료 — 배포 검증 때 홈 탭에서 이메일·로그아웃 확인</li>
