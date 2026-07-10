@@ -1,7 +1,7 @@
 {
   "name": "기까",
   "short_name": "기까",
-  "description": "기억해 뒀다가 까먹을 레시피, 기까가 기억할게요",
+  "description": "\"기억해놨다가 필요할때 까먹어야지\"는 그만, 기까가 꺼내드려요",
   "start_url": "/recipe",
   "scope": "/recipe",
   "display": "standalone",

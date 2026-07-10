@@ -63,7 +63,7 @@ export default function LoginPage({ onLogin }: { onLogin: (email: string) => voi
     return (
         <div className="rcp-login" id="rcp-login-page">
             <div className="rcp-login-brand">기까</div>
-            <p className="rcp-login-tagline">기억해 뒀다가 까먹을 레시피,{'\n'}기까가 기억할게요</p>
+            <p className="rcp-login-tagline">"기억해놨다가 필요할때 까먹어야지"는 그만,{'\n'}기까가 꺼내드려요</p>
             <div ref={buttonHost} className="rcp-login-button" id="rcp-login-google-button" />
             {error && <p className="rcp-login-error" role="alert">{error}</p>}
         </div>
