@@ -41,3 +41,4 @@ docs/.cache/
 .serena/
 /package.json
 /package-lock.json
+codex-runner/
