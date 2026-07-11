@@ -47,7 +47,9 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-10 · 2차 구현 + 인증 어댑터 분리(dev 폴백 prod 차단) + 홈 탭 계정 줄(이메일·로그아웃) 완료 — 남은 것: 사용자 커밋/푸시 → 폰 https 로그인 실검증</div>
+  <div class="updated">갱신: 2026-07-11 · 설계 세션(텔레그램) — Share Target 확정(3차 포함),
+    릴스·틱톡 6차 신설(확정 기능), 인스타 쿠키 운영 방식 확정 (전부 CONTEXT.md 반영, 구현 없음).
+    2차 남은 것: 폰 https 로그인 실검증 (커밋/푸시는 완료됨)</div>
 </header>
 
 <div class="card">
@@ -113,13 +115,17 @@
       </ul>
     </li>
     <li class="todo">3차: Gemini 추출 + 등록 화면 (URL 개별·재생목록 일괄·대기열 — 품질 검증 지점)
+      + PWA Share Target (2026-07-11 확정 — 공유 메뉴에서 기까 선택 → 즉시 분석)
       <ul>
         <li class="todo">사용자: Gemini API 키 발급 (결제 연결 금지 — 무료등급 소멸)</li>
         <li class="todo">사용자: 유튜브 재생목록 "일부공개" 전환</li>
+        <li class="todo">사용자: 설치 후 공유 시트에서 기까 길게 눌러 고정(pin)</li>
       </ul>
     </li>
     <li class="todo">4차: 레시피 목록·상세 + 추천 화면 (실제 추출 데이터로)</li>
     <li class="todo">5차: 다듬기 (자주 사는 재료 버튼, 새 재료 분류 질문, 앱 아이콘 색·모양 개선)</li>
+    <li class="todo">6차: 릴스·틱톡 확장 (2026-07-11 신설·확정 기능 — 유튜브 추출 품질 합격 후 착수.
+      yt-dlp→Gemini 파일 업로드, 인스타 쿠키 운영 방식 포함 상세는 CONTEXT.md 구현 순서 참고)</li>
   </ul>
 </div>
 
@@ -161,6 +167,10 @@
   <details>
     <summary>완료 기록 (펼치기)</summary>
     <ul>
+      <li>2026-07-11 설계 세션(텔레그램) — Share Target 후보→확정(3차), 릴스·틱톡을 아이디어→확정
+        기능으로 승격해 6차 신설(yt-dlp→Gemini 파일 업로드, 크롬 프로필 쿠키+launchd 주1회 터치,
+        로그인 자동화 금지), 큐 구현 수준(DB 테이블+단일 워커) 명시, 최신 조사 반영
+        (media_resolution 저해상도 시작, 1영상 1요청 원칙, 참고: social_recipes)</li>
       <li>2026-07-10 아키텍처 점검(high) 5건 반영 — @GikkaUserId 리졸버(인증을 시그니처로),
         세션 만료 401 공용 시임(http.ts→셸 게이트, 미표시 오류 결함 제거), FridgeService 를
         FridgeRepository 로 흡수(순위 로직은 순수 함수+테스트), GoogleTokenVerifier 에
