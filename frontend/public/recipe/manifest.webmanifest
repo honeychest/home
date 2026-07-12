@@ -7,6 +7,15 @@
   "display": "standalone",
   "background_color": "#f7faf5",
   "theme_color": "#1f7a3d",
+  "share_target": {
+    "action": "/recipe/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/recipe/icon-192.png",

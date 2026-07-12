@@ -9,6 +9,7 @@ import RcpBadge from '../ui/RcpBadge';
 import RcpListRow from '../ui/RcpListRow';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpShelf from '../ui/RcpShelf';
+import RcpVideoRow from '../ui/RcpVideoRow';
 
 const COLOR_TOKENS = [
     '--rcp-bg', '--rcp-surface', '--rcp-surface-dim', '--rcp-line',
@@ -79,10 +80,38 @@ export default function StyleguidePage() {
             </div>
 
             <h2 className="rcp-section-label">배지 — RcpBadge</h2>
-            <Label>{'<RcpBadge> (.rcp-badge) / <RcpBadge variant="expiring"> (.rcp-badge-expiring)'}</Label>
-            <div className="rcp-chip-group">
-                <RcpBadge>기본</RcpBadge>
-                <RcpBadge variant="expiring">임박</RcpBadge>
+            <Label>{'<RcpBadge> (.rcp-badge) / variant: expiring / dim / excluded / danger / analyzing'}</Label>
+            <Label>규칙: 채움 = 정상 흐름 / 테두리만 = 제외·문제 (요약줄은 .rcp-summary-row 로 감싸기)</Label>
+            <div className="rcp-summary-row">
+                <RcpBadge>완료</RcpBadge>
+                <RcpBadge variant="analyzing">분석 중</RcpBadge>
+                <RcpBadge variant="dim">대기 중</RcpBadge>
+                <RcpBadge variant="excluded">유틸</RcpBadge>
+                <RcpBadge variant="excluded">기타</RcpBadge>
+                <RcpBadge variant="excluded">긴 영상</RcpBadge>
+                <RcpBadge variant="danger">실패</RcpBadge>
+                <RcpBadge variant="expiring">임박 (냉장고용)</RcpBadge>
+            </div>
+
+            <h2 className="rcp-section-label">영상 행 — RcpVideoRow (.rcp-video-row)</h2>
+            <Label>{'<RcpVideoRow title thumbnailUrl badge meta onClick> — 대기열(3차)·레시피 목록(4차)'}</Label>
+            <RcpVideoRow
+                title="두부조림 초간단 버전"
+                thumbnailUrl={null}
+                badge={<RcpBadge>완료</RcpBadge>}
+                meta="7월 12일 등록"
+                onClick={() => {}}
+            />
+
+            <h2 className="rcp-section-label">홈 섬네일 줄 — .rcp-thumb-strip / .rcp-thumb</h2>
+            <Label>{'최근 분석 완료 영상 — 쇼츠 비율(9:16) 카드, 스냅 가로 스크롤'}</Label>
+            <div className="rcp-thumb-strip">
+                {['두부조림', '김치볶음밥', '아주아주 길게 적어본 요리 이름도 두 줄까지만'].map((name) => (
+                    <span key={name} className="rcp-thumb">
+                        <span className="rcp-thumb-img" aria-hidden="true" />
+                        <span className="rcp-thumb-name">{name}</span>
+                    </span>
+                ))}
             </div>
 
             <h2 className="rcp-section-label">냉장고 선반 — RcpShelf (.rcp-shelf) + 재료 스티커 (.rcp-sticker)</h2>
@@ -136,6 +165,15 @@ export default function StyleguidePage() {
                     name="Extra virgin olive oil from the Mediterranean coast 아주 긴 재료명"
                     badge={<RcpBadge variant="expiring">bald ablaufend</RcpBadge>}
                     meta="12월 31일"
+                />
+            </div>
+            <div style={{ marginTop: 'var(--rcp-space-2)' }}>
+                <RcpVideoRow
+                    title="Extra long video title that keeps going 띄어쓰기없이아주길게이어지는영상제목도행안에서줄바꿈되어야정상"
+                    thumbnailUrl={null}
+                    badge={<RcpBadge variant="excluded">bald zu lang</RcpBadge>}
+                    meta="12월 31일 등록"
+                    onClick={() => {}}
                 />
             </div>
             <div style={{ marginTop: 'var(--rcp-space-2)' }}>

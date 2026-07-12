@@ -50,8 +50,9 @@ export default function LoginPage({ onLogin }: { onLogin: (email: string) => voi
                             .catch((e: Error) => setError(e.message));
                     },
                 });
+                // 알약(pill) + 짧은 문구 — 길쭉한 직사각형 느낌 완화 (2026-07-12 사용자 확정)
                 google.accounts.id.renderButton(buttonHost.current, {
-                    theme: 'outline', size: 'large', text: 'continue_with', width: 260,
+                    theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 240,
                 });
             })
             .catch((e: Error) => setError(e.message));

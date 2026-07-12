@@ -47,29 +47,25 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-11 · 설계 세션(텔레그램) — Share Target 확정(3차 포함),
-    릴스·틱톡 6차 신설(확정 기능), 인스타 쿠키 운영 방식 확정 (전부 CONTEXT.md 반영, 구현 없음).
-    2차 남은 것: 폰 https 로그인 실검증 (커밋/푸시는 완료됨)</div>
+  <div class="updated">갱신: 2026-07-12 · 모델 페일오버 구현(404→latest 자동 전환+텔레그램) +
+    dev 대기열 음악 영상 4건 정리 완료. 다음: 채점 계속 → 서버 .env 2줄 → 커밋·배포</div>
 </header>
 
 <div class="card">
   <h2>현재 단계</h2>
-  <div class="phase-now"><span>1차 완료 — 2차(백엔드 기반) 착수 준비</span><span>35%</span></div>
-  <div class="bar"><div style="width:35%"></div></div>
+  <div class="phase-now"><span>3차 파이프라인 검증 완료 — 실레시피 추출·배포 남음</span><span>68%</span></div>
+  <div class="bar"><div style="width:68%"></div></div>
 </div>
 
 <div class="card alert">
   <h2>지금 알아야 할 것</h2>
   <ul>
-    <li>사용자 액션(지금): <b>커밋 → 푸시 → 폰 크롬 https://devcontext.net/recipe 에서
-      구글 로그인 + 냉장고 실사용 확인</b> — 확인되면 2차 완료.
-      (서버 .env GIKKA 2줄, OAuth 클라이언트 생성은 완료됨)</li>
-    <li>사용자 액션(3차 진입 전): Gemini API 키 발급 — OAuth 만든 그 구글 프로젝트에서.
-      <b>결제 연결 금지</b> (무료 등급 소멸). + 유튜브 재생목록 "일부공개" 전환</li>
-    <li>참고: 데이터가 서버 DB(gikka)로 바뀜 — 어느 기기로 접속해도 같은 냉장고.
-      기존 폰 localStorage 데이터는 이관 안 함(확정) — 재료 새로 입력</li>
-    <li>홈화면 '기까' 앱으로 냉장고 실사용 계속 (localStorage 데이터는 2차에서 DB로 이관 여부를 물어봄).
-      개발 중 확인은 PC 개발 서버(npm run dev) + 폰 크롬 http://172.30.1.45:5173/recipe</li>
+    <li>사용자 액션 1: <b>추출 결과 채점</b> — 레시피 탭에서 결과 시트 vs 원본 대조
+      (5개 완료, 5개 더 등록해 10개. 로컬 확인 = bootRun + npm run dev + 폰 http://172.30.1.45:5173/recipe)</li>
+    <li>사용자 액션 2: <b>서버 .env 에 2줄</b> — GIKKA_GEMINI_API_KEY·GIKKA_YOUTUBE_API_KEY
+      (로컬 springboot/.env 값 그대로 복사) → 그다음 커밋·푸시·배포</li>
+    <li>결제 연결 금지 원칙 유지 (두 키 모두 무료). 미확인 1건: 재료 등록일이 "오늘"인지
+      (서버 시간대 — 어긋나면 컨테이너 TZ=Asia/Seoul)</li>
   </ul>
 </div>
 
@@ -92,7 +88,7 @@
   </ul>
   <div class="divider">백엔드 우선 (2026-07-10 재편 — 샘플 UI 단계 폐지)</div>
   <ul class="check">
-    <li class="doing">2차: 백엔드 기반 — gikka DB(기존 pgvector 컨테이너 내)·전용 DataSource + ArchUnit 격리 감시 + Google 로그인 + /api/recipe + 냉장고 저장소 교체(화면 무수정)
+    <li class="done">2차: 백엔드 기반 — gikka DB(기존 pgvector 컨테이너 내)·전용 DataSource + ArchUnit 격리 감시 + Google 로그인 + /api/recipe + 냉장고 저장소 교체(화면 무수정) — 완료 (2026-07-12 폰 실검증)
       <ul>
         <li class="done">grill-me 점검 (gikka DB·이관 없음·다중 사용자+허용 목록 스위치·JWT 쿠키)</li>
         <li class="done">ArchUnit 격리 테스트 (양방향 import 차단 — 위반 주입으로 동작 검증됨)</li>
@@ -111,15 +107,26 @@
         <li class="done">아키텍처 정리 3건: 선반 분류를 순수 모듈로(fridgeShelves.ts + vitest 6개 —
           프론트 첫 테스트 기반), 냉장고 화면 인라인 style 6곳 → 킷 클래스, 조작 실행기 runMutation
           (실패 문구·연타 방지·재동기화 한 곳 + 에러 계약 CONTEXT.md 확정). Secure 쿠키 반영</li>
-        <li class="doing">배포 후 실검증: 폰 https(devcontext.net)에서 구글 로그인 → 냉장고 실사용 확인</li>
+        <li class="done">배포 후 실검증: 폰 https(devcontext.net)에서 구글 로그인 → 냉장고 실사용 확인 (2026-07-12)</li>
+        <li class="done">로그인 버튼 다듬기: 구글 렌더 옵션 pill·signin_with·240px (2026-07-12 승인 — 미커밋)</li>
       </ul>
     </li>
-    <li class="todo">3차: Gemini 추출 + 등록 화면 (URL 개별·재생목록 일괄·대기열 — 품질 검증 지점)
-      + PWA Share Target (2026-07-11 확정 — 공유 메뉴에서 기까 선택 → 즉시 분석)
+    <li class="doing">3차: Gemini 추출 + 등록 화면 + Share Target + 홈 섬네일 — 구현·실검증 완료, 채점·배포 남음
       <ul>
-        <li class="todo">사용자: Gemini API 키 발급 (결제 연결 금지 — 무료등급 소멸)</li>
-        <li class="todo">사용자: 유튜브 재생목록 "일부공개" 전환</li>
-        <li class="todo">사용자: 설치 후 공유 시트에서 기까 길게 눌러 고정(pin)</li>
+        <li class="done">grill-me·UI(목 저장소)·폰 검수·검수 반영(배지 톤·분류 요리/유틸/기타·7분 즉시 안내)</li>
+        <li class="done">백엔드 전체: V3(registration+gemini_rate)·메타 조회·Gemini 분류+추출 1회 호출·
+          대기열 워커(2인스턴스 안전·429 자동 재개·3회 실패)·API 6종·저장소 교체(화면 무수정)·Share Target</li>
+        <li class="done">API 키 2개 체제 (구글이 분리: Gemini=AQ 신형, YouTube=AIza 구형 — gcloud 로 발급)
+          + 모델 gemini-3.5-flash (2.5는 신규 키 폐쇄)</li>
+        <li class="done">실추출 검증: 요리 쇼츠 5개 전부 RECIPE 추출 성공(재료 7~14개·단계 요약 양호),
+          음악 영상 4개 전부 ETC — 분류 오탐 0. 영상+재생목록 혼합 링크는 영상 우선으로 수정</li>
+        <li class="done">Gemini 모델 페일오버 (2026-07-12 승인·구현): 404 시 gemini-flash-latest 자동 전환
+          (재기동 전까지 유지) + 텔레그램 알림(GikkaTelegramNotifier — global 복사 소유). 테스트 24개 통과</li>
+        <li class="done">dev 대기열 검증용 음악 영상 4건 SQL 삭제 (원격 gikka DB, DELETE 4 확인)</li>
+        <li class="todo">사용자: 추출 채점 계속 (5개 더 등록해 10개 — 합격 = 8개 이상 재료 장보기 수준)</li>
+        <li class="todo">사용자: 서버 .env 에 GIKKA_GEMINI_API_KEY·GIKKA_YOUTUBE_API_KEY 2줄 (로컬 .env 값 복사)</li>
+        <li class="todo">커밋·푸시·배포 → 폰 계정으로 재생목록 일괄 등록 (로컬 분석분은 dev 계정 — 폰에선 새로 등록)</li>
+        <li class="todo">사용자: PWA 재설치(manifest 변경) → 공유 시트에서 기까 고정(pin) → 공유 등록 확인</li>
       </ul>
     </li>
     <li class="todo">4차: 레시피 목록·상세 + 추천 화면 (실제 추출 데이터로)</li>
@@ -132,17 +139,16 @@
 <div class="card next">
   <h2>다음 세션이 이어서 할 일</h2>
   <ul>
-    <li>커밋/푸시는 사용자가 직접 하기로 함. 미커밋 변경: springboot(recipe 백엔드+인증 전체,
-      build.gradle 의존성, application*.properties gikka 절) + frontend(recipe 저장소 교체·로그인)
-      + docs/recipe 문서 3종 + server-profile.md. 서버 .env(GIKKA 2줄)는 사용자가 추가 완료함</li>
-    <li>푸시 → 배포 후 사용자 실검증: 폰 크롬 https://devcontext.net/recipe 접속 →
-      구글 로그인 버튼 → 로그인 → 냉장고 사용(재료 추가·삭제) + 홈 탭 이메일·로그아웃 확인.
-      이게 확인되면 2차 완료.
-      실패 시 확인 순서: 1) OAuth 원본 4개 등록 여부 2) 동의 화면 테스트 사용자 등록 여부
-      3) 허용 목록(application-prod의 gikka.auth.allowed-emails) 이메일 일치 여부</li>
-    <li>배포 검증 추가 항목 — 서버 시간대: 등록일을 서버가 LocalDate.now()로 기록하므로
-      컨테이너가 UTC면 한국시간 자정~오전 9시 등록이 "어제"로 찍힘 (14일 오래됨 판정에도 영향).
-      재료 하나 넣고 시트의 등록 날짜가 오늘인지 확인, 어긋나면 앱 컨테이너 TZ=Asia/Seoul 설정</li>
+    <li><b>순서</b>: 추출 채점 계속(10개) → 서버 .env 2줄 → 커밋·푸시·배포 → 폰 계정 일괄 등록
+      → Share Target 검증(PWA 재설치 후 공유→기까) → 3차 완료 → 4차(레시피 목록·상세+추천)</li>
+    <li>미커밋: 3차 전체(registration 패키지·V3·gikka.media 설정 + 프론트 등록 UI·API 저장소·
+      Share Target·manifest + 로그인 버튼 pill + 모델 페일오버 + docs 3종).
+      V3 는 gikka DB 에 이미 적용됨(추가만이라 무해)</li>
+    <li>함정 메모: 로컬 8080 에 구버전 앱이 떠 있으면 새 API 404 — bootRun 전 java 종료.
+      gcloud 설치됨(키 회수: gcloud services api-keys list/get-key-string). 안 쓰는 AQ 키 1개
+      (c365af54…) 삭제 가능. 서버 시간대 확인(재료 등록일=오늘) 미완</li>
+    <li>5차 후보: styleguide 미등록분(로그인·계정 줄·rcp-inline-error), 앱 아이콘 밝은 그린,
+      SQL 자동 테스트(Testcontainers), AIza 키 API 제한 걸기</li>
     <li>남은 다듬기(다음 세션): styleguide에 로그인 화면·홈 계정 줄·rcp-inline-error 미등록.
       FridgePage 조작 에러 처리는 runMutation 으로 완료(로딩 표시는 조작이 빨라 의도적 생략).
       로그아웃 버튼은 홈 탭 계정 줄로 구현 완료 — 배포 검증 때 홈 탭에서 이메일·로그아웃 확인</li>
@@ -167,6 +173,13 @@
   <details>
     <summary>완료 기록 (펼치기)</summary>
     <ul>
+      <li>2026-07-12 3차 구현+실검증 — grill-me(재료 원문 저장·7분 컷·분류 요리/유틸/기타·합격 10중 8),
+        등록 UI(목→API 교체, 화면 무수정)·백엔드(V3·메타 조회·Gemini 1회 호출·워커·API 6종)·Share Target.
+        키 2개 체제(AQ/AIza — gcloud 발급)·gemini-3.5-flash 전환. 실추출: 요리 5개 전부 RECIPE 성공·
+        음악 4개 ETC(오탐 0). 영상+재생목록 혼합 링크는 영상 우선으로 수정</li>
+      <li>2026-07-12 2차 완료 — 폰 https 구글 로그인·냉장고 실사용 확인. 로그인 버튼 pill 다듬기,
+        태그라인 규칙 완화(승인된 변형 허용). 재생목록 등록 동선 확정: 1단계는 공유/붙여넣기 메인,
+        2단계는 [내 재생목록 불러오기](OAuth) 메인 + 공유/붙여넣기 보조·GIF 안내 제작</li>
       <li>2026-07-11 설계 세션(텔레그램) — Share Target 후보→확정(3차), 릴스·틱톡을 아이디어→확정
         기능으로 승격해 6차 신설(yt-dlp→Gemini 파일 업로드, 크롬 프로필 쿠키+launchd 주1회 터치,
         로그인 자동화 금지), 큐 구현 수준(DB 테이블+단일 워커) 명시, 최신 조사 반영

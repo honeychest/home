@@ -9,13 +9,21 @@ export function setSessionExpiredHandler(handler: (() => void) | null): void {
     onSessionExpired = handler;
 }
 
+/** 상태 코드가 계약 (CONTEXT.md 에러 계약) — 저장소가 코드별 분기(409=중복 등)할 때 사용 */
+export class HttpError extends Error {
+    constructor(public readonly status: number) {
+        super(`요청 실패 (${status})`);
+        this.name = 'HttpError';
+    }
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(path, init);
     if (res.status === 401) {
         onSessionExpired?.();
         throw new Error('로그인이 필요해요');
     }
-    if (!res.ok) throw new Error(`요청 실패 (${res.status})`);
+    if (!res.ok) throw new HttpError(res.status);
     // DELETE/PATCH 는 본문 없음
     const text = await res.text();
     return (text ? JSON.parse(text) : undefined) as T;

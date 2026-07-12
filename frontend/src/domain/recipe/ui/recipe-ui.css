@@ -119,14 +119,106 @@
 .rcp-badge {
   display: inline-flex; align-items: center;
   font-size: var(--rcp-fs-xs); font-weight: var(--rcp-fw-bold);
-  padding: 2px 8px;
+  padding: 4px 10px; /* 검수 피드백(07-12): 뭉쳐 보이지 않게 안 여백 확대 */
   border-radius: var(--rcp-radius-sm);
   background: var(--rcp-accent-soft); color: var(--rcp-accent);
+  white-space: nowrap;
 }
 .rcp-badge-expiring {
   background: var(--rcp-warn-bg); color: var(--rcp-warn-text);
   border-radius: 3px;
   box-shadow: var(--rcp-shadow-postit);
+}
+
+/* ── 배지 상태 변형 (3차 대기열) — 규칙: 채움 = 정상 흐름 / 테두리만 = 제외·문제 (2026-07-12 검수 확정) ── */
+.rcp-badge-dim { background: var(--rcp-surface-dim); color: var(--rcp-text-faint); }
+.rcp-badge-excluded { background: transparent; color: var(--rcp-text-sub); border: 1px solid var(--rcp-text-faint); }
+.rcp-badge-danger { background: transparent; color: var(--rcp-danger); border: 1px solid var(--rcp-danger); }
+
+/* 상태 요약줄 (rcp-queue-summary 등) — 배지끼리 넉넉한 간격 + 목록과의 여백 */
+.rcp-summary-row {
+  display: flex; flex-wrap: wrap;
+  gap: var(--rcp-space-2) var(--rcp-space-3);
+  margin-bottom: var(--rcp-space-4);
+}
+.rcp-badge-analyzing { animation: rcp-badge-blink 1.4s ease-in-out infinite; }
+@keyframes rcp-badge-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rcp-badge-analyzing { animation: none; }
+}
+
+/* ── 영상 행: rcp-video-row > -thumb / -body(-title/-meta) — 대기열(3차)·레시피 목록(4차) ── */
+.rcp-video-row {
+  display: flex; align-items: center; gap: var(--rcp-space-3);
+  width: 100%;
+  min-height: var(--rcp-touch);
+  background: var(--rcp-surface);
+  border: 1px solid var(--rcp-line);
+  border-radius: var(--rcp-radius-lg);
+  box-shadow: var(--rcp-shadow-row);
+  padding: var(--rcp-space-2) var(--rcp-space-3);
+  margin-bottom: var(--rcp-space-2);
+  font-family: inherit;
+  color: var(--rcp-text);
+  text-align: left;
+}
+.rcp-video-row:active { background: var(--rcp-surface-dim); }
+.rcp-video-row-thumb {
+  flex: 0 0 auto;
+  width: 48px; height: 48px;
+  border-radius: var(--rcp-radius-sm);
+  background: var(--rcp-surface-dim);
+  overflow: hidden;
+}
+.rcp-video-row-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rcp-video-row-body {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.rcp-video-row-title {
+  font-size: var(--rcp-fs-md); font-weight: var(--rcp-fw-bold);
+  overflow-wrap: anywhere; /* 다국어 대비: 긴 제목은 행 안에서 줄바꿈 */
+}
+.rcp-video-row-meta { font-size: var(--rcp-fs-xs); color: var(--rcp-text-faint); }
+
+/* ── 홈 섬네일 줄: rcp-thumb-strip > rcp-thumb (최근 분석 완료 — 쇼츠 비율 세로 카드) ── */
+.rcp-thumb-strip {
+  display: flex; gap: var(--rcp-space-2);
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.rcp-thumb-strip::-webkit-scrollbar { display: none; }
+.rcp-thumb {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  width: 96px;
+  border: none; padding: 0;
+  background: none;
+  font-family: inherit;
+  color: var(--rcp-text);
+  text-align: left;
+}
+.rcp-thumb-img {
+  width: 96px; aspect-ratio: 9 / 16;
+  border-radius: var(--rcp-radius-md);
+  background: var(--rcp-surface-dim);
+  box-shadow: var(--rcp-shadow-magnet);
+  object-fit: cover; display: block;
+}
+.rcp-thumb-name {
+  display: block;
+  margin-top: var(--rcp-space-1);
+  font-size: var(--rcp-fs-xs); font-weight: var(--rcp-fw-bold);
+  color: var(--rcp-text-sub);
+  /* 다국어 대비: 카드 폭 안에서 2줄까지, 넘치면 말줄임 */
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
 }
 
 /* ── 입력: rcp-input ── */
@@ -306,6 +398,14 @@
 }
 .rcp-input-row { display: flex; gap: var(--rcp-space-2); }
 .rcp-sheet-meta { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); }
+/* 결과 시트(3차) — 상태 설명 문단 / 조리 순서 요약 목록 */
+.rcp-sheet-detail { font-size: var(--rcp-fs-md); color: var(--rcp-text); overflow-wrap: anywhere; }
+.rcp-step-list {
+  margin: 0; padding-left: var(--rcp-space-5);
+  display: flex; flex-direction: column; gap: var(--rcp-space-1);
+  font-size: var(--rcp-fs-md);
+}
+.rcp-step-list li { overflow-wrap: anywhere; }
 .rcp-stepper {
   display: flex; align-items: center; justify-content: center;
   gap: var(--rcp-space-3);
