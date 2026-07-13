@@ -47,8 +47,9 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-13 · 로그인 버튼 개인화(2줄 투박 UI) 차단 — width 199 (200 미만이면
-    안 뜨는 구글 공식 조건). 다음: 채점 계속 → 서버 .env 2줄 → 커밋·배포</div>
+  <div class="updated">갱신: 2026-07-13 · 로그인 버튼 3건(개인화 차단·color-scheme·테마색 토큰화) +
+    요약·검색 태그 저장 구현 + 테이블 분리 설계 확정(다음 세션 착수).
+    다음: 테이블 분리 → 커밋·배포 → 채점 계속</div>
 </header>
 
 <div class="card">
@@ -138,8 +139,15 @@
           백엔드 테스트 30개·프론트 16개·빌드 통과 — 미커밋</li>
         <li class="todo">사용자: 추출 채점 계속 (5개 더 등록해 10개 — 합격 = 8개 이상 재료 장보기 수준)</li>
         <li class="todo">사용자: 서버 .env 에 GIKKA_GEMINI_API_KEY·GIKKA_YOUTUBE_API_KEY 2줄 (로컬 .env 값 복사)</li>
-        <li class="todo">커밋·푸시·배포 → 폰 계정으로 재생목록 일괄 등록 (로컬 분석분은 dev 계정 — 폰에선 새로 등록)</li>
-        <li class="todo">사용자: PWA 재설치(manifest 변경) → 공유 시트에서 기까 고정(pin) → 공유 등록 확인</li>
+        <li class="done">커밋·푸시·배포 (2026-07-13 사용자 직접 수행)</li>
+        <li class="done">PWA 재설치 → 공유 시트 기까 확인 완료 (2026-07-13 사용자 확인)</li>
+        <li class="done">다크 모드 로그인 버튼 흰 판 재발 수정: 구글 iframe 은 항상 라이트 내용물이라
+          .rcp-login-button 에만 color-scheme: light 덧선언 (2026-07-13 승인·빌드 통과 — 미커밋)</li>
+        <li class="done">요약·검색 태그 저장 (2026-07-13 승인·확정 변경): TIP/ETC 요점 요약 2~3문장 +
+          검색 태그(전 분류 공통)를 같은 Gemini 호출에서 추출·저장 (추가 비용 0).
+          V4(summary·tags·summary_version), 프롬프트·스키마·파싱, 검수 결과 시트에 요약·태그 노출.
+          recipe 테스트 통과·프론트 16개·빌드 통과 — 미커밋. 기존 TIP/ETC 는 재분석 시에만 소급</li>
+        <li class="todo">폰 계정으로 재생목록 일괄 등록 (로컬 분석분은 dev 계정 — 폰에선 새로 등록)</li>
       </ul>
     </li>
     <li class="todo">4차: 레시피 목록·상세 + 추천 화면 (실제 추출 데이터로)</li>
@@ -152,23 +160,29 @@
 <div class="card next">
   <h2>다음 세션이 이어서 할 일</h2>
   <ul>
-    <li><b>순서</b>: 추출 채점 계속(10개) → 서버 .env 2줄 → 커밋·푸시·배포 → 폰 계정 일괄 등록
-      → Share Target 검증(PWA 재설치 후 공유→기까) → 3차 완료 → 4차(레시피 목록·상세+추천)</li>
-    <li>아키텍처 심화 커밋 완료(2026-07-13): 폰 검수 통과 후 useMutation·registerLink·
-      RcpInlineError·RegistrationRules·AGENTS.md 3종·CLAUDE.md 어댑터·docs 일괄 커밋.
-      PLAYBOOK 재감사 명문화는 안 하기로 결정(레시피 종료 후 문서 소멸 가능 — 필요 시 수동 실행)</li>
+    <li><b>다음 세션 최우선 — 영상 분석 테이블 분리 (2026-07-13 설계 확정, CONTEXT.md
+      "영상 분석의 테이블 분리" 절이 원본)</b>: V5 마이그레이션(video 신설·데이터 이관·
+      registration 축소) + RegistrationRepository·Worker·Controller 재편 + 테스트 갱신.
+      성공 기준 = API 응답 모양 유지로 프론트 무수정. 주의: V4(summary·tags)는 미배포지만
+      로컬 DB 적용 가능성 있어 삭제 금지, V5 로 재편. 착수 전 미커밋 변경(요약·태그 구현
+      + 로그인 수정 3건) 커밋 여부를 사용자에게 먼저 확인할 것 — 분리 작업이 같은 파일
+      (Repository·Worker·Controller)을 다시 고치므로 커밋을 먼저 하는 게 안전</li>
+    <li><b>이후 순서</b>: 수정분 커밋·배포 → 추출 채점 계속(10개, 폰 일괄 등록 겸 — 기타
+      영상 요약·태그 검수 포함) → 3차 완료 → 4차(레시피 목록·상세+추천 — 착수 전 grill-me 필수).
+      배포·PWA·Share Target 검증은 2026-07-13 완료(사용자)</li>
+    <li>함정 메모(2026-07-13 발견, recipe 무관): ./gradlew test 전체 실행 시
+      ChatbotAdminControllerSecurityTest·AggTradeRawWriterConsumerTest 가 HEAD 에서도 실패
+      (CurrentUser 빈 부재로 컨텍스트 로드 실패 등 — 기존 문제). recipe 는
+      --tests "com.chs.springboot.domain.recipe.*" 로 통과 확인. 수리는 별도 작업</li>
     <li>함정 메모: 로컬 8080 에 구버전 앱이 떠 있으면 새 API 404 — bootRun 전 java 종료.
       gcloud 설치됨(키 회수: gcloud services api-keys list/get-key-string). 안 쓰는 AQ 키 1개
       (c365af54…) 삭제 가능. 서버 시간대 확인(재료 등록일=오늘) 미완</li>
-    <li>5차 후보: styleguide 미등록분(로그인·계정 줄·rcp-inline-error), 앱 아이콘 밝은 그린,
-      SQL 자동 테스트(Testcontainers), AIza 키 API 제한 걸기</li>
-    <li>남은 다듬기(다음 세션): styleguide에 로그인 화면·홈 계정 줄·rcp-inline-error 미등록.
-      FridgePage 조작 에러 처리는 runMutation 으로 완료(로딩 표시는 조작이 빨라 의도적 생략).
-      로그아웃 버튼은 홈 탭 계정 줄로 구현 완료 — 배포 검증 때 홈 탭에서 이메일·로그아웃 확인</li>
-    <li>프론트 테스트 기반 생김: npm run test (vitest, .test.ts만 수집 — 옛 .test.mjs 스크립트 제외).
-      도메인 판정은 순수 모듈로 빼서 테스트 (PLAYBOOK 관례 5·6번 신설)</li>
-    <li>보류 후보(아키텍처 점검에서 합의): 백엔드 FridgeRepository SQL 동작 자동 테스트
-      (Testcontainers — 배포 검증 후 적기), RcpBadge·RcpListRow 는 styleguide 외 사용처 0 (4차 재사용 후보로 유지)</li>
+    <li>4차 재료 사전 메모(2026-07-13 채점 관찰): "물"이 재료로 추출됨 — 기본양념(판정 제외)
+      분류의 대표 사례로 사전 설계 시 반영. 추출 프롬프트는 건드리지 않음(원문 저장 원칙)</li>
+    <li>5차 후보 (통합 정리 2026-07-13): styleguide 미등록분(로그인 화면·홈 계정 줄·rcp-inline-error),
+      앱 아이콘 밝은 그린(#2aa257)·모양 다듬기, SQL 동작 자동 테스트(Testcontainers —
+      FridgeRepository·Registration), AIza 키 API 제한 걸기.
+      RcpBadge·RcpListRow 는 styleguide 외 사용처 0 (4차 재사용 후보로 유지)</li>
     <li>보류(2026-07-13 결정): 비공개 재생목록 지원 — 구글 로그인에 youtube.readonly 스코프 추가로
       가능하나, 미검증 앱은 토큰 7일 만료(매주 재로그인)라 보류. 외부 사용자 확대(6차쯤) 시 재검토.
       함정 메모: '나중에 볼 동영상'(Watch Later)은 권한 있어도 API 미제공. 현행 = 일부공개 안내 방식
@@ -177,15 +191,9 @@
       RcpSticker·RcpThumbStrip 컴포넌트화 + styleguide 공백(5차 병합 권장),
       authRepository 의 http.ts 시임 우회 정리(LoginPage·RecipeApp e.message 노출 수리 포함 —
       frontend/AGENTS.md 금지 절에 모방 금지로 표기해 둠)</li>
-    <li>아키텍처 관례 4가지는 PLAYBOOK.md 2차 절로 이동 (규칙은 PLAYBOOK, 상태는 여기 — 문서 규율)</li>
-    <li>주의(이번에 실측된 함정): recipe 쪽에서 TransactionManager 를 스프링 빈으로 등록하면
-      기본 transactionManager 자동 구성이 꺼져 기존 도메인 @Transactional 전체가 깨짐.
-      반드시 GikkaDataSourceConfig 의 TransactionTemplate(gikkaTxTemplate) 방식 유지</li>
     <li>로컬 검증 방법: springboot 에서 ./gradlew bootRun (gikka DB는 Tailscale 로 원격 접속,
       dev 사용자 폴백 동작) → http://localhost:8080/api/recipe/fridge/items.
       한글 body 는 셸에서 직접 넣으면 CP949 로 깨짐 — UTF-8 파일로 --data-binary 사용</li>
-    <li>보류(사용자 요청): 앱 아이콘 그린이 너무 어두움 — 밝은 그린(#2aa257)으로 재생성 + 모양 다듬기 (5차에 포함)</li>
-    <li>배포 시 확인: PWA 아이콘이 SVG 하나뿐 — 홈화면 추가 시 아이콘이 안 나오면 PNG(192/512px) 추가 필요</li>
     <li>개발 서버 실행법: frontend 폴더에서 npm run dev → 폰(같은 와이파이)에서 http://172.30.1.45:5173/recipe</li>
     <li>디자인 시안 원본(냉장고 UI 테스트 13종 + 효과 갤러리): claude.ai 아티팩트
       6a3c89d6-f427-437f-a3ab-08a3fcac0389 — 원자 효과 9종은 2026-07-13 공용 카탈로그
@@ -197,6 +205,12 @@
   <details>
     <summary>완료 기록 (펼치기)</summary>
     <ul>
+      <li>2026-07-13 — 아키텍처 심화 일괄 커밋(useMutation·registerLink·RcpInlineError·
+        RegistrationRules·AGENTS.md 3종. PLAYBOOK 재감사 명문화는 안 함 — 필요 시 수동).
+        사용자 배포·PWA 재설치·Share Target 검증 완료. 로그인 화면 3건 수리(개인화 버튼 width 199
+        차단·color-scheme 선언 교정 라이트/다크·테마색 메타 토큰화). 요약·검색 태그 저장 구현(V4·
+        프롬프트·검수 시트). 채점 관찰: "물" 재료 추출 → 4차 기본양념 사례. DB 점검 →
+        영상 분석 테이블 분리(video/registration) 설계 확정 — 다음 세션 최우선</li>
       <li>2026-07-12 3차 구현+실검증 — grill-me(재료 원문 저장·7분 컷·분류 요리/유틸/기타·합격 10중 8),
         등록 UI(목→API 교체, 화면 무수정)·백엔드(V3·메타 조회·Gemini 1회 호출·워커·API 6종)·Share Target.
         키 2개 체제(AQ/AIza — gcloud 발급)·gemini-3.5-flash 전환. 실추출: 요리 5개 전부 RECIPE 성공·

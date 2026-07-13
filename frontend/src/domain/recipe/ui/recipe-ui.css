@@ -392,7 +392,9 @@
   white-space: pre-line;
   margin-bottom: var(--rcp-space-4);
 }
-.rcp-login-button { min-height: var(--rcp-touch); }
+/* 구글 iframe 내용물은 항상 라이트 — 이 자리만 light 로 선언해야 다크 모드에서도
+   크롬이 iframe 투명을 유지 (선언 불일치 시 흰 판을 깖, 2026-07-13) */
+.rcp-login-button { min-height: var(--rcp-touch); color-scheme: light; }
 .rcp-login-error {
   color: var(--rcp-danger);
   font-size: var(--rcp-fs-sm);

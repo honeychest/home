@@ -288,6 +288,14 @@ export default function RecipesPage() {
                             <p className="rcp-sheet-detail">{itemDetail(selected)}</p>
                         )}
 
+                        {/* TIP/ETC 요점 요약 — 검수용 노출 (정식 화면은 2단계, 2026-07-13 확정) */}
+                        {selected.status === 'DONE' && selected.summary && (
+                            <>
+                                <h3 className="rcp-section-label">요점 요약</h3>
+                                <p className="rcp-sheet-detail">{selected.summary}</p>
+                            </>
+                        )}
+
                         {selected.status === 'DONE' && selected.recipe && (
                             <>
                                 <h3 className="rcp-section-label">재료 (영상에 나온 그대로)</h3>
@@ -305,6 +313,18 @@ export default function RecipesPage() {
                                         <li key={step}>{step}</li>
                                     ))}
                                 </ol>
+                            </>
+                        )}
+
+                        {/* 검색 태그 — 전 분류 공통 적립분의 검수용 노출 */}
+                        {selected.status === 'DONE' && selected.tags && selected.tags.length > 0 && (
+                            <>
+                                <h3 className="rcp-section-label">검색 태그</h3>
+                                <div className="rcp-chip-group">
+                                    {selected.tags.map((tag) => (
+                                        <span key={tag} className="rcp-sticker">{tag}</span>
+                                    ))}
+                                </div>
                             </>
                         )}
 

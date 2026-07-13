@@ -15,6 +15,8 @@ const item = (over: Partial<RegistrationItem> = {}): RegistrationItem => ({
     thumbnailUrl: null,
     durationSeconds: null,
     recipe: null,
+    summary: null,
+    tags: null,
     registeredAt: '2026-07-12T00:00:00Z',
     ...over,
 });

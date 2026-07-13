@@ -41,6 +41,10 @@ export interface RegistrationItem {
     durationSeconds: number | null;
     /** DONE + RECIPE 일 때만 채워짐 */
     recipe: ExtractedRecipe | null;
+    /** DONE + TIP/ETC 일 때 요점 요약 2~3문장 (RECIPE 는 name·steps 가 대신 — 2026-07-13 확정) */
+    summary: string | null;
+    /** 검색용 키워드 (전 분류 공통 — 검색 기능은 나중, 지금은 적립. 2026-07-13 확정) */
+    tags: string[] | null;
     /** 등록 시각 ISO — 목록 정렬 기준 (최신이 위) */
     registeredAt: string;
 }

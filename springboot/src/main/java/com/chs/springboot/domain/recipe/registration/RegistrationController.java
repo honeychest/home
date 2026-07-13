@@ -40,10 +40,11 @@ public class RegistrationController {
     public record RegisterRequest(String url) {
     }
 
-    /** 프론트 RegistrationItem 과 1:1 */
+    /** 프론트 RegistrationItem 과 1:1 (summary=TIP/ETC 요약, tags=검색 태그 — 2026-07-13 확정) */
     public record RegistrationResponse(String videoId, String url, String platform, String category,
                                        String status, String title, String thumbnailUrl,
-                                       Integer durationSeconds, JsonNode recipe, String registeredAt) {
+                                       Integer durationSeconds, JsonNode recipe,
+                                       String summary, JsonNode tags, String registeredAt) {
     }
 
     @GetMapping
@@ -119,17 +120,23 @@ public class RegistrationController {
     }
 
     private RegistrationResponse toResponse(RegistrationRepository.Row row) {
-        JsonNode recipe = null;
-        if (row.recipeJson() != null) {
-            try {
-                recipe = mapper.readTree(row.recipeJson());
-            } catch (Exception e) {
-                throw new IllegalStateException("recipe_json 파싱 실패: video=" + row.videoId(), e);
-            }
-        }
         return new RegistrationResponse(
                 row.videoId(), row.url(), row.platform(), row.category(), row.status(),
-                row.title(), row.thumbnailUrl(), row.durationSeconds(), recipe,
+                row.title(), row.thumbnailUrl(), row.durationSeconds(),
+                readJson(row.recipeJson(), "recipe_json", row.videoId()),
+                row.summary(),
+                readJson(row.tagsJson(), "tags", row.videoId()),
                 row.registeredAt().toString());
+    }
+
+    private JsonNode readJson(String json, String column, String videoId) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return mapper.readTree(json);
+        } catch (Exception e) {
+            throw new IllegalStateException(column + " 파싱 실패: video=" + videoId, e);
+        }
     }
 }

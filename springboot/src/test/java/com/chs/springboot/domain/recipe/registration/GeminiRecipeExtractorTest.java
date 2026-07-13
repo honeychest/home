@@ -50,7 +50,7 @@ class GeminiRecipeExtractorTest {
     void extractsRecipe() {
         geminiReturns("""
                 {"category":"RECIPE","name":"두부조림","ingredients":["두부","간장","대파"],
-                 "cookMinutes":15,"steps":["두부를 썬다","조린다"]}
+                 "cookMinutes":15,"steps":["두부를 썬다","조린다"],"tags":["두부조림","두부","밑반찬"]}
                 """);
 
         var result = extractor.extract("https://www.youtube.com/shorts/abc");
@@ -60,13 +60,16 @@ class GeminiRecipeExtractorTest {
         assertEquals(List.of("두부", "간장", "대파"), result.ingredients());
         assertEquals(15, result.cookMinutes());
         assertEquals(2, result.steps().size());
+        assertEquals(List.of("두부조림", "두부", "밑반찬"), result.tags()); // 태그는 전 분류 공통
+        assertNull(result.summary()); // RECIPE 요약은 name·steps 가 대신함
     }
 
     @Test
-    @DisplayName("생활팁 영상: 분류만 TIP, 레시피 필드는 null (분류만 저장 — 확정 결정)")
-    void classifiesTipOnly() {
+    @DisplayName("생활팁 영상: 레시피 필드는 null, 요약·검색 태그가 채워짐 (2026-07-13 확정)")
+    void classifiesTipWithSummaryAndTags() {
         geminiReturns("""
-                {"category":"TIP"}
+                {"category":"TIP","summary":"운동화 끈이 안 풀리게 묶는 법을 보여준다. 매듭을 두 번 감아 고정한다.",
+                 "tags":["신발끈","매듭","운동화"]}
                 """);
 
         var result = extractor.extract("https://www.youtube.com/shorts/abc");
@@ -74,6 +77,22 @@ class GeminiRecipeExtractorTest {
         assertEquals("TIP", result.category());
         assertNull(result.name());
         assertNull(result.ingredients());
+        assertEquals("운동화 끈이 안 풀리게 묶는 법을 보여준다. 매듭을 두 번 감아 고정한다.", result.summary());
+        assertEquals(List.of("신발끈", "매듭", "운동화"), result.tags());
+    }
+
+    @Test
+    @DisplayName("요약·태그 없는 구형 응답도 안전 (summary null, tags 빈 목록)")
+    void tolerantWhenSummaryAndTagsMissing() {
+        geminiReturns("""
+                {"category":"TIP"}
+                """);
+
+        var result = extractor.extract("https://www.youtube.com/shorts/abc");
+
+        assertEquals("TIP", result.category());
+        assertNull(result.summary());
+        assertEquals(List.of(), result.tags());
     }
 
     @Test

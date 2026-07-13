@@ -56,7 +56,9 @@ public class RegistrationWorker {
                 recipe.put("steps", result.steps() == null ? List.of() : result.steps());
                 recipe.put("summaryVersion", RecipeExtractor.SUMMARY_VERSION);
             }
-            repository.markDone(item.userId(), item.videoId(), result.category(), recipe);
+            // 요약(TIP/ETC)·검색 태그(전 분류)는 같은 호출에서 나옴 — 컬럼에 함께 저장 (2026-07-13 확정)
+            repository.markDone(item.userId(), item.videoId(), result.category(), recipe,
+                    result.summary(), result.tags(), RecipeExtractor.SUMMARY_VERSION);
             log.info("[gikka] 분석 완료 video={} category={}", item.videoId(), result.category());
         } catch (RecipeExtractor.RateLimitedException e) {
             repository.releaseAfterRateLimit(item.userId(), item.videoId());

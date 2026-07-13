@@ -30,7 +30,11 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                  양념(소금, 간장 등)도 포함. 수량·단위는 빼고 이름만.
                - cookMinutes: 예상 조리 시간(분). 영상에서 알 수 없으면 생략.
                - steps: 조리 순서 요약. 각 단계를 짧은 한 문장으로, 3~7개.
-            RECIPE 가 아니면 category 만 채우세요. 모든 텍스트는 한국어로.
+            3. RECIPE 가 아닌 경우에만:
+               - summary: 영상의 요점 요약 2~3문장. 나중에 다시 찾을 때 내용을 떠올릴 수 있게.
+            4. tags: 모든 영상 공통. 이 영상을 검색할 때 쓸 만한 키워드 3~8개
+               (예: 신발 끈 묶는 영상이면 ["신발끈", "매듭", "운동화"]). 짧은 명사 위주로.
+            모든 텍스트는 한국어로.
             """;
 
     private static final Logger log = LoggerFactory.getLogger(GeminiRecipeExtractor.class);
@@ -104,7 +108,9 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                         "name", Map.of("type", "STRING"),
                         "ingredients", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
                         "cookMinutes", Map.of("type", "INTEGER"),
-                        "steps", Map.of("type", "ARRAY", "items", Map.of("type", "STRING"))),
+                        "steps", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
+                        "summary", Map.of("type", "STRING"),
+                        "tags", Map.of("type", "ARRAY", "items", Map.of("type", "STRING"))),
                 "required", List.of("category"));
     }
 
@@ -115,15 +121,19 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
         try {
             JsonNode json = MAPPER.readTree(text);
             String category = json.path("category").asText("ETC");
+            List<String> tags = toList(json.path("tags")); // 검색 태그는 전 분류 공통 (2026-07-13 확정)
             if (!"RECIPE".equals(category)) {
-                return new ExtractionResult(category, null, null, null, null);
+                return new ExtractionResult(category, null, null, null, null,
+                        json.path("summary").asText(null), tags);
             }
             return new ExtractionResult(
                     category,
                     json.path("name").asText(null),
                     toList(json.path("ingredients")),
                     json.hasNonNull("cookMinutes") ? json.get("cookMinutes").asInt() : null,
-                    toList(json.path("steps")));
+                    toList(json.path("steps")),
+                    null, // RECIPE 요약은 name·steps 가 대신함
+                    tags);
         } catch (Exception e) {
             throw new IllegalStateException("Gemini 응답 파싱 실패: " + text, e);
         }

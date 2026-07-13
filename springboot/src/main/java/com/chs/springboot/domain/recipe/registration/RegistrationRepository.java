@@ -29,12 +29,13 @@ public class RegistrationRepository {
 
     public record Row(long userId, String videoId, String url, String platform, String category,
                       String status, String title, String thumbnailUrl, Integer durationSeconds,
-                      String recipeJson, int attemptCount, OffsetDateTime registeredAt) {
+                      String recipeJson, String summary, String tagsJson,
+                      int attemptCount, OffsetDateTime registeredAt) {
     }
 
     private static final String COLUMNS =
             "user_id, video_id, url, platform, category, status, title, thumbnail_url, "
-            + "duration_seconds, recipe_json, attempt_count, registered_at";
+            + "duration_seconds, recipe_json, summary, tags, attempt_count, registered_at";
 
     public List<Row> list(long userId) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM registration WHERE user_id = :userId "
@@ -76,6 +77,7 @@ public class RegistrationRepository {
         return jdbc.sql("""
                         UPDATE registration
                         SET status = 'WAITING', category = NULL, recipe_json = NULL,
+                            summary = NULL, tags = NULL, summary_version = NULL,
                             attempt_count = 0, analyzing_started_at = NULL, registered_at = now()
                         WHERE user_id = :userId AND video_id = :videoId
                         """)
@@ -110,21 +112,28 @@ public class RegistrationRepository {
                 .query(this::mapRow).optional());
     }
 
-    public void markDone(long userId, String videoId, String category, Object recipeOrNull) {
-        String json;
-        try {
-            json = recipeOrNull == null ? null : mapper.writeValueAsString(recipeOrNull);
-        } catch (Exception e) {
-            throw new IllegalStateException("레시피 직렬화 실패", e);
-        }
+    public void markDone(long userId, String videoId, String category, Object recipeOrNull,
+                         String summaryOrNull, List<String> tags, int summaryVersion) {
+        String json = toJsonOrNull(recipeOrNull, "레시피");
+        String tagsJson = toJsonOrNull(tags == null || tags.isEmpty() ? null : tags, "태그");
         jdbc.sql("""
                         UPDATE registration
                         SET status = 'DONE', category = :category, recipe_json = :json::jsonb,
+                            summary = :summary, tags = :tags::jsonb, summary_version = :version,
                             analyzing_started_at = NULL
                         WHERE user_id = :userId AND video_id = :videoId
                         """)
                 .param("category", category).param("json", json)
+                .param("summary", summaryOrNull).param("tags", tagsJson).param("version", summaryVersion)
                 .param("userId", userId).param("videoId", videoId).update();
+    }
+
+    private String toJsonOrNull(Object value, String what) {
+        try {
+            return value == null ? null : mapper.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException(what + " 직렬화 실패", e);
+        }
     }
 
     /** 진짜 실패: 3회 소진 시 FAILED, 아니면 대기열로 복귀 */
@@ -187,6 +196,8 @@ public class RegistrationRepository {
                 rs.getString("thumbnail_url"),
                 rs.getObject("duration_seconds", Integer.class),
                 rs.getString("recipe_json"),
+                rs.getString("summary"),
+                rs.getString("tags"),
                 rs.getInt("attempt_count"),
                 rs.getObject("registered_at", OffsetDateTime.class));
     }
