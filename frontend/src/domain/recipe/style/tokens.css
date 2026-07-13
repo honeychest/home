@@ -1,7 +1,11 @@
 /* [AGENT] recipe(기까) 디자인 토큰 — 디자인의 유일한 원본 (CONTEXT.md "디자인 체계")
    방향: "냉장고 문 × 프레시" — 라이트: 아이스 화이트 + 그린 / 다크: 밤의 냉장고
    규칙: 화면·컴포넌트는 반드시 이 변수만 사용. 임의 색상값 직접 입력 금지.
-   스코프: .rcp-app 루트 아래에서만 유효 (다른 도메인에 누출 방지) */
+   스코프: .rcp-app 루트 아래에서만 유효 (다른 도메인에 누출 방지)
+   색 변경 시 함께 바꿀 것 — CSS 변수를 못 읽는 정적 파일 2곳 (2026-07-13 전수 검사):
+     public/recipe/manifest.webmanifest (theme_color·background_color, 스플래시 색)
+     public/recipe/icon.svg (앱 아이콘)
+   theme-color 메타는 RecipeApp 이 --rcp-accent-strong 을 실행 시점에 읽음 — 자동 연동 */
 
 .rcp-app {
   /* 전역(index.css)의 color-scheme: dark 를 recipe 실제 테마로 교정 —
