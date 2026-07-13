@@ -5,9 +5,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { registrationRepository } from '../data/registrationRepository';
 import type { RegistrationItem } from '../data/registrationTypes';
-import { DuplicateVideoError } from '../data/registrationTypes';
-import { parseYoutubePlaylistId, parseYoutubeVideoId } from '../data/videoUrl';
+import { registerLink } from '../data/registerLink';
+import { useMutation } from './useMutation';
 import RcpButton from '../ui/RcpButton';
+import RcpInlineError from '../ui/RcpInlineError';
 
 const RECENT_LIMIT = 10;
 
@@ -15,6 +16,8 @@ const RECENT_LIMIT = 10;
 const INVALID_URL_TEXT = '복사된 내용이 유튜브 링크가 아니에요 — 영상을 공유·복사한 뒤 눌러 주세요';
 const REGISTER_FAIL_TEXT = '등록하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const PASTE_FAIL_TEXT = '클립보드를 읽지 못했어요 — 레시피 탭에서 직접 붙여넣어 주세요';
+const UNTITLED_VIDEO_TEXT = '제목 없는 영상';
+const mutationMessage = () => REGISTER_FAIL_TEXT;
 
 interface HomePageProps {
     email: string;
@@ -26,7 +29,8 @@ export default function HomePage({ email, onLogout }: HomePageProps) {
     const isDevSession = window.location.protocol !== 'https:';
     const navigate = useNavigate();
     const [recent, setRecent] = useState<RegistrationItem[]>([]);
-    const [pasteError, setPasteError] = useState<string | null>(null);
+    // 조작 실행기 (공용 useMutation — 연타 방지 + 실패 문구 한 곳, PLAYBOOK 관례 5)
+    const mutation = useMutation(mutationMessage);
 
     const reloadRecent = useCallback(() => {
         registrationRepository.recentDone(RECENT_LIMIT)
@@ -41,32 +45,23 @@ export default function HomePage({ email, onLogout }: HomePageProps) {
     // 홈 최종 UX(CONTEXT.md): 링크 복사한 채 앱 열면 바로 분석 — 웹 단계는 붙여넣기 버튼 1탭.
     // 클립보드 API 는 https 에서만 존재 (품질 기본선 6) — 없으면 버튼 대신 안내.
     const canPaste = typeof navigator !== 'undefined' && !!navigator.clipboard?.readText;
-    const handlePasteStart = async () => {
-        setPasteError(null);
+    const handlePasteStart = () => void mutation.run(async () => {
         let text: string;
         try {
             text = await navigator.clipboard.readText();
         } catch {
-            setPasteError(PASTE_FAIL_TEXT);
+            mutation.setError(PASTE_FAIL_TEXT);
             return;
         }
-        if (!parseYoutubeVideoId(text) && !parseYoutubePlaylistId(text)) {
-            setPasteError(INVALID_URL_TEXT);
+        // 영상 우선 규칙은 registerLink 공용 모듈이 판정 (레시피 탭·공유 수신과 단일 원본).
+        // 이미 등록된 영상(duplicate) = 정상 흐름 — 대기열에서 상태 확인.
+        const outcome = await registerLink(text);
+        if (outcome.kind === 'invalid') {
+            mutation.setError(INVALID_URL_TEXT);
             return;
-        }
-        try {
-            // 영상 우선 (list= 동반 공유 링크를 일괄 등록으로 오인 방지 — RecipesPage 와 동일 규칙)
-            if (parseYoutubeVideoId(text)) await registrationRepository.register(text);
-            else await registrationRepository.registerPlaylist(text);
-        } catch (e) {
-            // 이미 등록된 영상 = 정상 흐름 (대기열에서 상태 확인) — 그 외 실패만 홈에 남아 문구 표시
-            if (!(e instanceof DuplicateVideoError)) {
-                setPasteError(REGISTER_FAIL_TEXT);
-                return;
-            }
         }
         navigate('../recipes'); // 등록 결과·진행률은 대기열이 있는 레시피 탭에서 이어 봄
-    };
+    });
 
     return (
         <main className="rcp-screen" id="rcp-home-page">
@@ -75,7 +70,7 @@ export default function HomePage({ email, onLogout }: HomePageProps) {
             </header>
 
             {canPaste ? (
-                <RcpButton className="rcp-btn-full" id="rcp-home-paste" onClick={() => void handlePasteStart()}>
+                <RcpButton className="rcp-btn-full" id="rcp-home-paste" onClick={handlePasteStart}>
                     복사한 링크로 분석 시작
                 </RcpButton>
             ) : (
@@ -83,7 +78,7 @@ export default function HomePage({ email, onLogout }: HomePageProps) {
                     개발 모드에서는 붙여넣기 버튼이 없어요 — 레시피 탭에서 링크를 직접 넣어 주세요
                 </p>
             )}
-            {pasteError && <p className="rcp-inline-error" role="alert">{pasteError}</p>}
+            <RcpInlineError message={mutation.error} />
 
             <h2 className="rcp-section-label">최근 분석된 레시피</h2>
             {recent.length === 0 ? (
@@ -95,7 +90,10 @@ export default function HomePage({ email, onLogout }: HomePageProps) {
                             {item.thumbnailUrl
                                 ? <img className="rcp-thumb-img" src={item.thumbnailUrl} alt="" loading="lazy" />
                                 : <span className="rcp-thumb-img" aria-hidden="true" />}
-                            <span className="rcp-thumb-name">{item.recipe?.name ?? item.title ?? ''}</span>
+                            {/* 이름이 비어도 링크의 접근 이름이 비지 않게 폴백 (품질 기본선 3) */}
+                            <span className="rcp-thumb-name">
+                                {item.recipe?.name ?? item.title ?? UNTITLED_VIDEO_TEXT}
+                            </span>
                         </a>
                     ))}
                 </div>

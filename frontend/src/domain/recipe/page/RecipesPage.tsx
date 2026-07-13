@@ -2,16 +2,20 @@
 // 정식 레시피 목록·상세는 4차에서 이 화면을 대체·확장한다.
 // 저장소는 registrationRepository 인터페이스만 사용 (지금은 목 — 백엔드 연결 시 구현체 교체).
 // 진행 중(대기/분석 중) 항목이 있으면 폴링으로 목록을 갱신 — 백엔드(DB 대기열+단일 워커)에서도 같은 방식.
-// 조작은 runMutation seam (FridgePage 패턴 — 실패 문구·연타 방지·재동기화 한 곳, PLAYBOOK 관례 5).
-import { useCallback, useEffect, useRef, useState } from 'react';
+// 조작은 공용 실행기(useMutation) — 실패 문구·연타 방지·재동기화 한 곳 (PLAYBOOK 관례 5).
+// 등록 분기(영상 우선)는 registerLink 공용 모듈 — 홈·공유 수신과 같은 단일 원본.
+import { useCallback, useEffect, useState } from 'react';
 import type { RegistrationItem, RegistrationStatus, VideoCategory } from '../data/registrationTypes';
 import { DuplicateVideoError } from '../data/registrationTypes';
 import { registrationRepository } from '../data/registrationRepository';
+import { registerLink } from '../data/registerLink';
 import { parseYoutubePlaylistId, parseYoutubeVideoId } from '../data/videoUrl';
+import { useMutation } from './useMutation';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
 import RcpBadge from '../ui/RcpBadge';
 import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
+import RcpInlineError from '../ui/RcpInlineError';
 import RcpVideoRow from '../ui/RcpVideoRow';
 
 const POLL_MS = 2500;
@@ -64,6 +68,14 @@ const TOO_LONG_NOTICE = '7분이 넘는 영상이라 분석하지 않아요 — 
 
 const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;
 const playlistAddedText = (count: number) => `재생목록에서 ${count}개를 대기열에 넣었어요`;
+// 문구/데이터 분리 (품질 기본선 7): 조합 문구는 템플릿 한 곳에
+const summaryBadgeText = (label: string, count: number) => `${label} ${count}`;
+const justAddedTagText = (label: string) => `${label} ✓`;
+const resultMetaText = (item: RegistrationItem) =>
+    `${itemLabel(item)} · ${formatRegisteredAt(item.registeredAt)}`;
+// 실패 문구 결정 — useMutation 에 모듈 레벨로 넘긴다 (렌더마다 재생성 방지)
+const mutationMessage = (e: unknown) =>
+    e instanceof DuplicateVideoError ? DUPLICATE_TEXT : MUTATION_ERROR_TEXT;
 
 const formatRegisteredAt = (iso: string) => {
     const d = new Date(iso);
@@ -81,12 +93,13 @@ export default function RecipesPage() {
     const [justRegistered, setJustRegistered] = useState<string[]>([]); // 이번 시트에서 넣은 것 (확인줄)
     const [registerNotice, setRegisterNotice] = useState<string | null>(null); // 긴 영상 즉시 차단 안내 등
     const [selected, setSelected] = useState<RegistrationItem | null>(null); // 항목 탭 → 결과 시트
-    const [actionError, setActionError] = useState<string | null>(null);
-    const busyRef = useRef(false);
 
     const reload = useCallback(async () => {
         setItems(await registrationRepository.list());
     }, []);
+
+    // 조작 실행기 (공용 useMutation — 실패 문구·연타 방지·재동기화 한 곳, PLAYBOOK 관례 5)
+    const mutation = useMutation(mutationMessage, reload);
 
     useEffect(() => {
         reload().catch(() => setLoadError(LOAD_ERROR_TEXT));
@@ -101,44 +114,27 @@ export default function RecipesPage() {
         return () => window.clearInterval(timer);
     }, [items, reload]);
 
-    /** 조작 실행 seam — 실패 문구·연타 방지·재동기화 한 곳 (FridgePage 패턴) */
-    const runMutation = useCallback(async (op: () => Promise<void>) => {
-        if (busyRef.current) return;
-        busyRef.current = true;
-        setActionError(null);
-        try {
-            await op();
-        } catch (e) {
-            if (e instanceof DuplicateVideoError) setActionError(DUPLICATE_TEXT);
-            else setActionError(MUTATION_ERROR_TEXT);
-            await reload().catch(() => undefined);
-        } finally {
-            busyRef.current = false;
-        }
-    }, [reload]);
-
     const handleRegister = (rawUrl: string) => {
         const url = rawUrl.trim();
         if (!url) return;
-        const playlistId = parseYoutubePlaylistId(url);
-        const videoId = parseYoutubeVideoId(url);
-        if (!playlistId && !videoId) {
-            setActionError(INVALID_URL_TEXT); // 저장소 호출 전에 프론트가 먼저 거름
-            return;
-        }
         setRegisterNotice(null);
-        void runMutation(async () => {
-            // 영상 ID 가 있으면 영상 1개 우선 — 재생목록 안에서 공유한 영상 링크(list= 동반)를
-            // 일괄 등록으로 오인하지 않게 (2026-07-12 실사용에서 발견). 재생목록 일괄은
-            // 재생목록 자체 링크(v= 없음)로만 동작
-            if (!videoId && playlistId) {
-                const count = await registrationRepository.registerPlaylist(url);
-                setJustRegistered((prev) => [...prev, playlistAddedText(count)]);
+        void mutation.run(async () => {
+            // 영상 우선 규칙은 registerLink 공용 모듈이 판정 (홈·공유 수신과 단일 원본)
+            const outcome = await registerLink(url);
+            if (outcome.kind === 'invalid') {
+                mutation.setError(INVALID_URL_TEXT);
+                return;
+            }
+            if (outcome.kind === 'duplicate') {
+                mutation.setError(DUPLICATE_TEXT); // 이 화면에서는 안내 문구로 (홈·공유는 정상 통과)
+                return;
+            }
+            if (outcome.kind === 'playlist') {
+                setJustRegistered((prev) => [...prev, playlistAddedText(outcome.added)]);
             } else {
-                const item = await registrationRepository.register(url);
                 setJustRegistered((prev) => [...prev, '영상 1개']);
                 // 길이 컷은 등록 순간 바로 알림 (2026-07-12 확정 — 기록은 남되 막힌 걸 즉시 알게)
-                if (item.status === 'TOO_LONG') setRegisterNotice(TOO_LONG_NOTICE);
+                if (outcome.item.status === 'TOO_LONG') setRegisterNotice(TOO_LONG_NOTICE);
             }
             setUrlInput(''); // 성공했을 때만 비움 (실패 시 입력 유지 — 재시도 배려)
             await reload();
@@ -153,11 +149,11 @@ export default function RecipesPage() {
             setUrlInput(text);
             handleRegister(text); // 붙여넣기 = 바로 등록 (홈 최종 UX "1탭" 지향)
         } catch {
-            setActionError(PASTE_FAIL_TEXT);
+            mutation.setError(PASTE_FAIL_TEXT);
         }
     };
 
-    const handleReanalyze = (item: RegistrationItem) => runMutation(async () => {
+    const handleReanalyze = (item: RegistrationItem) => mutation.run(async () => {
         await registrationRepository.reanalyze(item.videoId);
         setSelected(null);
         await reload();
@@ -165,14 +161,12 @@ export default function RecipesPage() {
 
     const openRegisterSheet = () => {
         setJustRegistered([]);
-        setActionError(null);
+        mutation.setError(null);
         setRegisterNotice(null);
         setRegisterOpen(true);
     };
 
-    const errorLine = actionError
-        ? <p className="rcp-inline-error" role="alert">{actionError}</p>
-        : null;
+    const errorLine = <RcpInlineError message={mutation.error} />;
 
     // 요약줄: 표시 문구(완료·유틸·기타·대기 중…) 기준으로 집계, 0인 것은 숨김
     const summary = items
@@ -209,7 +203,7 @@ export default function RecipesPage() {
                         <div className="rcp-summary-row" id="rcp-queue-summary" aria-label="분석 진행 요약">
                             {summary.map(({ label, variant, count }) => (
                                 <RcpBadge key={label} variant={variant}>
-                                    {label} {count}
+                                    {summaryBadgeText(label, count)}
                                 </RcpBadge>
                             ))}
                         </div>
@@ -244,7 +238,7 @@ export default function RecipesPage() {
                         ? <span className="rcp-just-added-hint">방금 등록한 영상이 여기 표시돼요</span>
                         : justRegistered.map((label, i) => (
                             // eslint-disable-next-line react/no-array-index-key
-                            <span key={`${label}-${i}`} className="rcp-just-added-tag">{label} ✓</span>
+                            <span key={`${label}-${i}`} className="rcp-just-added-tag">{justAddedTagText(label)}</span>
                         ))}
                 </div>
                 {registerNotice && (
@@ -288,9 +282,7 @@ export default function RecipesPage() {
                 {selected && (
                     <>
                         {errorLine}
-                        <p className="rcp-sheet-meta">
-                            {itemLabel(selected)} · {formatRegisteredAt(selected.registeredAt)}
-                        </p>
+                        <p className="rcp-sheet-meta">{resultMetaText(selected)}</p>
 
                         {itemDetail(selected) && (
                             <p className="rcp-sheet-detail">{itemDetail(selected)}</p>

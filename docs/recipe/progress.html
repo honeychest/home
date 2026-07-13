@@ -123,6 +123,11 @@
         <li class="done">Gemini 모델 페일오버 (2026-07-12 승인·구현): 404 시 gemini-flash-latest 자동 전환
           (재기동 전까지 유지) + 텔레그램 알림(GikkaTelegramNotifier — global 복사 소유). 테스트 24개 통과</li>
         <li class="done">dev 대기열 검증용 음악 영상 4건 SQL 삭제 (원격 gikka DB, DELETE 4 확인)</li>
+        <li class="done">아키텍처 심화 (2026-07-12 승인): 공용화 — useMutation 훅·registerLink(영상 우선 단일
+          원본)·RcpInlineError, 백엔드 순수 판정 분리(RegistrationRules 길이 컷·메타 색인 + parseEnvelope),
+          냉장고 로딩 3상태·터치 44px 가상 확장·문구 헬퍼·aria. PLAYBOOK "가져다 쓸 것" 절 +
+          AGENTS.md(루트·frontend·springboot, CLAUDE.md 는 @AGENTS.md 어댑터 — Codex 등 범용).
+          백엔드 테스트 30개·프론트 16개·빌드 통과 — 미커밋</li>
         <li class="todo">사용자: 추출 채점 계속 (5개 더 등록해 10개 — 합격 = 8개 이상 재료 장보기 수준)</li>
         <li class="todo">사용자: 서버 .env 에 GIKKA_GEMINI_API_KEY·GIKKA_YOUTUBE_API_KEY 2줄 (로컬 .env 값 복사)</li>
         <li class="todo">커밋·푸시·배포 → 폰 계정으로 재생목록 일괄 등록 (로컬 분석분은 dev 계정 — 폰에선 새로 등록)</li>
@@ -141,9 +146,9 @@
   <ul>
     <li><b>순서</b>: 추출 채점 계속(10개) → 서버 .env 2줄 → 커밋·푸시·배포 → 폰 계정 일괄 등록
       → Share Target 검증(PWA 재설치 후 공유→기까) → 3차 완료 → 4차(레시피 목록·상세+추천)</li>
-    <li>미커밋: 3차 전체(registration 패키지·V3·gikka.media 설정 + 프론트 등록 UI·API 저장소·
-      Share Target·manifest + 로그인 버튼 pill + 모델 페일오버 + docs 3종).
-      V3 는 gikka DB 에 이미 적용됨(추가만이라 무해)</li>
+    <li>아키텍처 심화 커밋 완료(2026-07-13): 폰 검수 통과 후 useMutation·registerLink·
+      RcpInlineError·RegistrationRules·AGENTS.md 3종·CLAUDE.md 어댑터·docs 일괄 커밋.
+      PLAYBOOK 재감사 명문화는 안 하기로 결정(레시피 종료 후 문서 소멸 가능 — 필요 시 수동 실행)</li>
     <li>함정 메모: 로컬 8080 에 구버전 앱이 떠 있으면 새 API 404 — bootRun 전 java 종료.
       gcloud 설치됨(키 회수: gcloud services api-keys list/get-key-string). 안 쓰는 AQ 키 1개
       (c365af54…) 삭제 가능. 서버 시간대 확인(재료 등록일=오늘) 미완</li>
@@ -156,6 +161,14 @@
       도메인 판정은 순수 모듈로 빼서 테스트 (PLAYBOOK 관례 5·6번 신설)</li>
     <li>보류 후보(아키텍처 점검에서 합의): 백엔드 FridgeRepository SQL 동작 자동 테스트
       (Testcontainers — 배포 검증 후 적기), RcpBadge·RcpListRow 는 styleguide 외 사용처 0 (4차 재사용 후보로 유지)</li>
+    <li>보류(2026-07-13 결정): 비공개 재생목록 지원 — 구글 로그인에 youtube.readonly 스코프 추가로
+      가능하나, 미검증 앱은 토큰 7일 만료(매주 재로그인)라 보류. 외부 사용자 확대(6차쯤) 시 재검토.
+      함정 메모: '나중에 볼 동영상'(Watch Later)은 권한 있어도 API 미제공. 현행 = 일부공개 안내 방식
+      (재생목록 404=비공개 구분 안내 + 일부공개 전환 가이드 영상은 4차 후보)</li>
+    <li>보류 후보(2026-07-12 아키텍처 심화 감사에서 이월): 계약 3중화 정리(4차 직전 권장),
+      RcpSticker·RcpThumbStrip 컴포넌트화 + styleguide 공백(5차 병합 권장),
+      authRepository 의 http.ts 시임 우회 정리(LoginPage·RecipeApp e.message 노출 수리 포함 —
+      frontend/AGENTS.md 금지 절에 모방 금지로 표기해 둠)</li>
     <li>아키텍처 관례 4가지는 PLAYBOOK.md 2차 절로 이동 (규칙은 PLAYBOOK, 상태는 여기 — 문서 규율)</li>
     <li>주의(이번에 실측된 함정): recipe 쪽에서 TransactionManager 를 스프링 빈으로 등록하면
       기본 transactionManager 자동 구성이 꺼져 기존 도메인 @Transactional 전체가 깨짐.

@@ -124,6 +124,21 @@ class GeminiRecipeExtractorTest {
         server.verify();
     }
 
+    @Test
+    @DisplayName("봉투 파싱은 순수 함수 — HTTP 없이 직접 검증 (candidates[0]…parts[0].text 안의 JSON)")
+    void parsesEnvelopeWithoutHttp() throws Exception {
+        var envelope = new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
+                {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"RECIPE\\",\\"name\\":\\"김치찌개\\",\\"ingredients\\":[\\"김치\\"],\\"steps\\":[\\"끓인다\\"]}"}]}}]}
+                """);
+
+        var result = GeminiRecipeExtractor.parseEnvelope(envelope);
+
+        assertEquals("RECIPE", result.category());
+        assertEquals("김치찌개", result.name());
+        assertEquals(List.of("김치"), result.ingredients());
+        assertNull(result.cookMinutes());
+    }
+
     private void expectFallbackSuccess() {
         String envelope = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"TIP\\"}"}]}}]}

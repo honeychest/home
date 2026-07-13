@@ -10,6 +10,7 @@ import RcpListRow from '../ui/RcpListRow';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpShelf from '../ui/RcpShelf';
 import RcpVideoRow from '../ui/RcpVideoRow';
+import RcpInlineError from '../ui/RcpInlineError';
 
 const COLOR_TOKENS = [
     '--rcp-bg', '--rcp-surface', '--rcp-surface-dim', '--rcp-line',
@@ -139,6 +140,10 @@ export default function StyleguidePage() {
             <h2 className="rcp-section-label">입력 — .rcp-input</h2>
             <input className="rcp-input" placeholder="재료 이름" />
 
+            <h2 className="rcp-section-label">조작 실패 안내 — RcpInlineError (.rcp-inline-error)</h2>
+            <Label>{'<RcpInlineError message> — useMutation.error 를 그대로 전달, null 이면 안 그림'}</Label>
+            <RcpInlineError message="저장하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요" />
+
             <h2 className="rcp-section-label">하단 시트 — RcpBottomSheet (.rcp-sheet)</h2>
             <RcpButton variant="ghost" onClick={() => setSheetOpen(true)}>시트 열어보기</RcpButton>
             <RcpBottomSheet open={sheetOpen} title="시트 제목" onClose={() => setSheetOpen(false)}>
@@ -182,6 +187,9 @@ export default function StyleguidePage() {
                     <button type="button" className="rcp-sticker">아주아주 길게 적어본 재료 이름</button>
                     <button type="button" className="rcp-sticker rcp-sticker-old">무</button>
                 </RcpShelf>
+            </div>
+            <div style={{ marginTop: 'var(--rcp-space-2)' }}>
+                <RcpInlineError message="Fehler beim Speichern — bitte Netzwerkverbindung prüfen und erneut versuchen 아주 길게 이어지는 오류 문구도 줄바꿈되어야 정상" />
             </div>
 
             <h2 className="rcp-section-label">하단 탭 바 — RcpTabBar (.rcp-tab-bar)</h2>

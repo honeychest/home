@@ -15,6 +15,18 @@
 4. 위험: 이번 단계의 리스크와 대비책
 5. 추천: 더 나은 방식이 보이면 장단점과 함께 제안
 
+### 가져다 쓸 것 (모범 패턴 — 새 화면·새 API 는 이 실물 코드를 재사용/모방한다)
+점검으로 잡지 말고 처음부터 이걸 쓴다. 같은 일을 하는 코드를 새로 만들면 그게 결함이다.
+- 화면 조작(추가·삭제·수정): `page/useMutation.ts` 훅 — 실패 문구·연타 방지·재동기화.
+  화면마다 자기식 try/catch 를 만들지 말 것. 실패 문구 표시는 `ui/RcpInlineError`.
+- 영상/재생목록 등록 분기: `data/registerLink.ts` — 영상 우선 규칙의 단일 원본.
+  outcome(invalid/duplicate/video/playlist)을 받아 문구·이동만 화면이 정한다.
+- 도메인 판정(순수 로직): 프론트 = `data/fridgeShelves.ts`·`data/videoUrl.ts` 패턴
+  (순수 모듈 + vitest). 백엔드 = `RegistrationRules`·`FridgeRepository.rankFrequent` 패턴
+  (package-private static 순수 함수 + 단위 테스트). 컨트롤러/화면에 판정을 넣지 말 것.
+- 목록 화면 3상태: `items: T[] | null`(null=첫 로딩) + loadError+다시 시도 — RecipesPage 참고.
+- 새 공용 컴포넌트: styleguide 등록 + 긴 글자 스트레스 케이스 의무 (기존 규칙 재확인).
+
 ### 작업 규칙
 - 쓰기·삭제·편집·생성 툴은 사용자 응답에 '승인' 문자열이 포함된 경우에만 사용.
   예외: `docs/recipe/` 안의 문서 3종 갱신은 사전 승인된 것으로 본다.

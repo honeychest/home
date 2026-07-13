@@ -6,14 +6,17 @@ interface RcpChipProps {
     on: boolean;
     onToggle: () => void;
     children: ReactNode;
+    /** 아이콘 등으로 시각 의미가 보강될 때 접근 이름을 명시 (품질 기본선 3) */
+    ariaLabel?: string;
 }
 
-export default function RcpChip({ on, onToggle, children }: RcpChipProps) {
+export default function RcpChip({ on, onToggle, children, ariaLabel }: RcpChipProps) {
     return (
         <button
             type="button"
             className={`rcp-chip ${on ? 'rcp-chip-on' : 'rcp-chip-off'}`}
             aria-pressed={on}
+            aria-label={ariaLabel}
             onClick={onToggle}
         >
             {children}

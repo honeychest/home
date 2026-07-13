@@ -35,10 +35,11 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiRecipeExtractor.class);
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     private final RestClient rest;
     private final GikkaMediaProperties properties;
     private final GikkaTelegramNotifier notifier;
-    private final ObjectMapper mapper = new ObjectMapper();
 
     // 모델 폐쇄 페일오버 (2026-07-12 승인): 설정 모델이 404 를 내면 폴백 모델로 전환하고
     // 재기동 전까지 유지한다 (매 호출 404 낭비 방지. 인스턴스별 판정 — 2인스턴스 각자 전환).
@@ -85,7 +86,7 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                     .body(body)
                     .retrieve()
                     .body(JsonNode.class);
-            return parse(response);
+            return parseEnvelope(response);
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
                 throw new RateLimitedException(e.getMessage());
@@ -107,11 +108,12 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                 "required", List.of("category"));
     }
 
-    private ExtractionResult parse(JsonNode response) {
+    /** Gemini 응답 봉투 파싱 — HTTP 없이 검증하는 순수 판정 (테스트: GeminiRecipeExtractorTest) */
+    static ExtractionResult parseEnvelope(JsonNode response) {
         String text = response.path("candidates").path(0).path("content").path("parts").path(0)
                 .path("text").asText("");
         try {
-            JsonNode json = mapper.readTree(text);
+            JsonNode json = MAPPER.readTree(text);
             String category = json.path("category").asText("ETC");
             if (!"RECIPE".equals(category)) {
                 return new ExtractionResult(category, null, null, null, null);

@@ -2,15 +2,17 @@
 // 선반 3칸(임박/오래됨/신선, 스냅 가로 스크롤) / 스티커 탭 → 시트(임박·수정·삭제)
 // / 자석 스티커 토글 추가 / 자유 입력 / 재등록 시 날짜 갱신
 // 저장소는 fridgeRepository 인터페이스만, 선반·날짜 판정은 fridgeShelves 순수 모듈만 사용.
-// 조작(추가·삭제·수정)은 전부 runMutation seam 을 거친다 — 실패 문구·중복 탭 방지·재동기화 한 곳.
-import { useCallback, useEffect, useRef, useState } from 'react';
+// 조작(추가·삭제·수정)은 전부 공용 실행기(useMutation)를 거친다 — 실패 문구·중복 탭 방지·재동기화 한 곳.
+import { useCallback, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import type { FridgeItem } from '../data/fridgeTypes';
 import { fridgeRepository } from '../data/fridgeRepository';
 import { OLD_THRESHOLD_DAYS, classifyShelves, daysSince, formatDate, shiftDate } from '../data/fridgeShelves';
+import { useMutation } from './useMutation';
 import RcpChip from '../ui/RcpChip';
 import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
+import RcpInlineError from '../ui/RcpInlineError';
 import RcpShelf from '../ui/RcpShelf';
 
 const FREQUENT_LIMIT = 12;
@@ -18,12 +20,20 @@ const FREQUENT_LIMIT = 12;
 // 문구/데이터 분리 규칙(PLAYBOOK 품질 기본선 7): 개수가 바뀌어도 문구가 따라오도록 템플릿 한 곳에
 const frequentSectionLabel = (limit: number) => `자주 사는 재료 (상위 ${limit}개 표시)`;
 const oldShelfLabel = (days: number) => `오래됨 (${days}일 지남)`;
+const justAddedTagText = (name: string) => `${name} ✓`;
+const sheetMetaText = (item: FridgeItem) => {
+    const parts = [`등록 ${formatDate(item.addedDate)}`, `${daysSince(item.addedDate)}일 지남`];
+    if (item.expiring) parts.push('임박 표시됨');
+    return parts.join(' · ');
+};
 // 에러 계약(CONTEXT.md): 사용자 문구는 프론트 소유 — 상태 코드 외 백엔드 메시지에 의존하지 않는다
 const MUTATION_ERROR_TEXT = '저장하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const LOAD_ERROR_TEXT = '목록을 불러오지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
+const mutationMessage = () => MUTATION_ERROR_TEXT;
 
 export default function FridgePage() {
-    const [items, setItems] = useState<FridgeItem[]>([]);
+    const [items, setItems] = useState<FridgeItem[] | null>(null); // null = 첫 로딩 (빈 상태와 구분)
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [frequentNames, setFrequentNames] = useState<string[]>([]);
     const [freeInput, setFreeInput] = useState('');
     const [selected, setSelected] = useState<FridgeItem | null>(null); // 스티커 탭 → 액션 시트
@@ -34,37 +44,28 @@ export default function FridgePage() {
     const [editing, setEditing] = useState<FridgeItem | null>(null);
     const [chipEditMode, setChipEditMode] = useState(false);
     const [editName, setEditName] = useState('');
-    const [actionError, setActionError] = useState<string | null>(null);
-    const busyRef = useRef(false); // 조작 중 재진입(연타) 방지 — 렌더와 무관하므로 ref
 
     const reloadItems = useCallback(async () => {
         setItems(await fridgeRepository.list());
     }, []);
 
-    // 자주 사는 재료는 화면 진입 시 한 번만 정렬 — 조작 중 버튼이 자리를 옮기지 않도록
-    // (순위 반영은 다음 화면 방문 때. 2026-07-09 검수 확정)
-    useEffect(() => {
-        reloadItems().catch(() => setActionError(LOAD_ERROR_TEXT));
+    const loadAll = useCallback(() => {
+        setLoadError(null);
+        reloadItems().catch(() => setLoadError(LOAD_ERROR_TEXT));
+        // 자주 사는 재료는 화면 진입 시 한 번만 정렬 — 조작 중 버튼이 자리를 옮기지 않도록
+        // (순위 반영은 다음 화면 방문 때. 2026-07-09 검수 확정)
         fridgeRepository.frequentIngredients(FREQUENT_LIMIT)
             .then(setFrequentNames)
-            .catch(() => setActionError(LOAD_ERROR_TEXT));
+            .catch(() => setLoadError(LOAD_ERROR_TEXT));
     }, [reloadItems]);
 
-    /** 조작 실행 seam — 실패 문구·연타 방지·서버 재동기화를 이 한 곳에.
-        세션 만료(401)는 http.ts 공용 seam 이 로그인 화면 전환을 담당하므로 여기서는 구분하지 않는다 */
-    const runMutation = useCallback(async (op: () => Promise<void>) => {
-        if (busyRef.current) return;
-        busyRef.current = true;
-        setActionError(null);
-        try {
-            await op();
-        } catch {
-            setActionError(MUTATION_ERROR_TEXT);
-            await reloadItems().catch(() => undefined); // 화면을 서버 상태와 재동기화 (실패해도 문구는 이미 표시)
-        } finally {
-            busyRef.current = false;
-        }
-    }, [reloadItems]);
+    useEffect(() => {
+        loadAll();
+    }, [loadAll]);
+
+    // 조작 실행기 (공용 useMutation — 실패 문구·연타 방지·재동기화 한 곳, PLAYBOOK 관례 5)
+    const mutation = useMutation(mutationMessage, reloadItems);
+    const runMutation = mutation.run;
 
     const handleAdd = (rawName: string) => runMutation(async () => {
         const name = rawName.trim();
@@ -77,7 +78,7 @@ export default function FridgePage() {
 
     const handleChipToggle = (name: string, isOn: boolean) => runMutation(async () => {
         if (isOn) {
-            const target = items.find((item) => item.name === name);
+            const target = (items ?? []).find((item) => item.name === name);
             if (target) await fridgeRepository.remove(target.id);
             setJustAdded((prev) => prev.filter((n) => n !== name));
         } else {
@@ -141,8 +142,8 @@ export default function FridgePage() {
         await reloadItems();
     });
 
-    const ownedNames = new Set(items.map((item) => item.name));
-    const shelves = classifyShelves(items);
+    const ownedNames = new Set((items ?? []).map((item) => item.name));
+    const shelves = classifyShelves(items ?? []);
     const sticker = (item: FridgeItem, extraClass: string) => (
         <button
             type="button"
@@ -154,9 +155,7 @@ export default function FridgePage() {
         </button>
     );
     // 조작 실패 안내 — 화면 본문과 열려 있는 시트 양쪽에 같은 줄을 보여준다 (시트가 화면을 덮으므로)
-    const errorLine = actionError
-        ? <p className="rcp-inline-error" role="alert">{actionError}</p>
-        : null;
+    const errorLine = <RcpInlineError message={mutation.error} />;
 
     return (
         <main className="rcp-screen" id="rcp-fridge-page">
@@ -166,8 +165,16 @@ export default function FridgePage() {
             </header>
             {errorLine}
 
+            {loadError && (
+                <div className="rcp-shell-status" role="alert">
+                    <span>{loadError}</span>
+                    <RcpButton onClick={loadAll}>다시 시도</RcpButton>
+                </div>
+            )}
+            {!loadError && items === null && <p className="rcp-empty">불러오는 중…</p>}
+
             <section id="rcp-fridge-shelves" aria-label="냉장고 재료 선반">
-                {items.length === 0 && (
+                {items !== null && items.length === 0 && (
                     <p className="rcp-empty">아직 비어 있어요. 아래 [+ 재료 추가]로 채워보세요.</p>
                 )}
                 {shelves.expiring.length > 0 && (
@@ -201,7 +208,7 @@ export default function FridgePage() {
                     {justAdded.length === 0
                         ? <span className="rcp-just-added-hint">방금 넣은 재료가 여기 표시돼요</span>
                         : justAdded.map((n) => (
-                            <span key={n} className="rcp-just-added-tag">{n} ✓</span>
+                            <span key={n} className="rcp-just-added-tag">{justAddedTagText(n)}</span>
                         ))}
                 </div>
                 <div className="rcp-sheet-heading-row">
@@ -225,9 +232,10 @@ export default function FridgePage() {
                                 <RcpChip
                                     key={name}
                                     on={false}
+                                    ariaLabel={`${name} 자주 사는 재료에서 지우기`}
                                     onToggle={() => void handleFrequentRemove(name)}
                                 >
-                                    {name} <X size={13} />
+                                    {name} <X size={13} aria-hidden="true" />
                                 </RcpChip>
                             );
                         }
@@ -265,10 +273,7 @@ export default function FridgePage() {
                 {selected && (
                     <>
                         {errorLine}
-                        <p className="rcp-sheet-meta">
-                            등록 {formatDate(selected.addedDate)} · {daysSince(selected.addedDate)}일 지남
-                            {selected.expiring && ' · 임박 표시됨'}
-                        </p>
+                        <p className="rcp-sheet-meta">{sheetMetaText(selected)}</p>
 
                         <div id="rcp-date-stepper" className="rcp-stepper">
                             <RcpButton

@@ -70,15 +70,14 @@ public class RegistrationController {
         String playlistId = YoutubeVideoId.parsePlaylistId(nonNullUrl(request))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "재생목록 링크 인식 불가"));
         List<String> videoIds = metadata.playlistVideoIds(playlistId);
-        List<VideoMetadataClient.VideoMetadata> metas = metadata.fetch(videoIds);
+        Map<String, VideoMetadataClient.VideoMetadata> metaById =
+                RegistrationRules.metadataById(metadata.fetch(videoIds));
         int added = 0;
         for (String videoId : videoIds) {
             if (repository.exists(userId, videoId)) {
                 continue;
             }
-            Optional<VideoMetadataClient.VideoMetadata> meta =
-                    metas.stream().filter(m -> m.videoId().equals(videoId)).findFirst();
-            if (insertWithMeta(userId, videoId, meta)) {
+            if (insertWithMeta(userId, videoId, Optional.ofNullable(metaById.get(videoId)))) {
                 added++;
             }
         }
@@ -100,14 +99,13 @@ public class RegistrationController {
 
     private boolean insertWithMeta(long userId, String videoId,
                                    Optional<VideoMetadataClient.VideoMetadata> meta) {
-        // 길이를 모르면(메타 실패) 컷하지 않고 분석을 시도한다 — 막는 것보다 낫다
-        boolean tooLong = meta.map(VideoMetadataClient.VideoMetadata::durationSeconds)
-                .filter(d -> d != null && d > properties.getMaxVideoMinutes() * 60)
-                .isPresent();
+        String status = RegistrationRules.initialStatus(
+                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null),
+                properties.getMaxVideoMinutes());
         return repository.insert(
                 userId, videoId,
                 "https://www.youtube.com/watch?v=" + videoId,
-                tooLong ? "TOO_LONG" : "WAITING",
+                status,
                 meta.map(VideoMetadataClient.VideoMetadata::title).orElse(null),
                 meta.map(VideoMetadataClient.VideoMetadata::thumbnailUrl).orElse(null),
                 meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null));

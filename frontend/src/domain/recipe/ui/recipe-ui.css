@@ -115,6 +115,18 @@
 .rcp-icon-btn-accent { color: var(--rcp-accent); background: var(--rcp-accent-soft); }
 .rcp-icon-btn-danger { color: var(--rcp-danger); }
 
+/* ── 터치 타깃 확장 (품질 기본선 3: 최소 --rcp-touch=44px) ──
+   칩(38px)·스티커(38px)·아이콘 버튼(36px)은 검수 확정된 시각 크기를 유지하고,
+   보이지 않는 가상 요소로 탭 영역만 44px 로 넓힌다 (주변 gap 8px 안이라 겹침 없음) */
+.rcp-chip, .rcp-sticker, .rcp-icon-btn { position: relative; }
+.rcp-chip::before, .rcp-sticker::before, .rcp-icon-btn::before {
+  content: "";
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%; height: 100%;
+  min-width: var(--rcp-touch); min-height: var(--rcp-touch);
+}
+
 /* ── 배지: rcp-badge (기본) / rcp-badge-expiring (임박 포스트잇) ── */
 .rcp-badge {
   display: inline-flex; align-items: center;
