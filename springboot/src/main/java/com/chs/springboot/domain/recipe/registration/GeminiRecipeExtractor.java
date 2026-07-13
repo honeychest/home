@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 @Component
@@ -100,9 +102,15 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
             return parseEnvelope(response);
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
-                throw new RateLimitedException(e.getMessage());
+                throw new TransientFailureException(e.getMessage());
             }
             throw e;
+        } catch (HttpServerErrorException e) {
+            // 503 "high demand" 등 Gemini 쪽 일시적 과부하 (2026-07-13 실측) — 영상 문제가 아님
+            throw new TransientFailureException(e.getMessage());
+        } catch (ResourceAccessException e) {
+            // 응답 지연으로 타임아웃(HttpClientConfig 의 readTimeout=300s) — 이것도 실측상 일시적 현상
+            throw new TransientFailureException(e.getMessage());
         }
     }
 

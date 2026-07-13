@@ -126,12 +126,32 @@ class GeminiRecipeExtractorTest {
     }
 
     @Test
-    @DisplayName("429 는 RateLimitedException — 워커가 대기 후 자동 재개 (재시도 소모 없음)")
+    @DisplayName("429 는 TransientFailureException — 워커가 대기 후 자동 재개 (재시도 소모 없음)")
     void rateLimitBecomesTypedException() {
         server.expect(method(org.springframework.http.HttpMethod.POST))
                 .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
 
-        assertThrows(RecipeExtractor.RateLimitedException.class,
+        assertThrows(RecipeExtractor.TransientFailureException.class,
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
+    }
+
+    @Test
+    @DisplayName("503(과부하)도 TransientFailureException — 429와 동일 취급 (2026-07-13 실측 반영)")
+    void serviceUnavailableBecomesTypedException() {
+        server.expect(method(org.springframework.http.HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        assertThrows(RecipeExtractor.TransientFailureException.class,
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
+    }
+
+    @Test
+    @DisplayName("타임아웃(I/O 오류)도 TransientFailureException (2026-07-13 실측 반영)")
+    void timeoutBecomesTypedException() {
+        server.expect(method(org.springframework.http.HttpMethod.POST))
+                .andRespond(request -> { throw new java.io.IOException("Request timed out"); });
+
+        assertThrows(RecipeExtractor.TransientFailureException.class,
                 () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
     }
 

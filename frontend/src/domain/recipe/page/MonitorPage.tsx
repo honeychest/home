@@ -5,7 +5,8 @@
 // 검증단계엔 과함, 필요해지면 나중에 승격 (2026-07-13 인터뷰 확정).
 // 3상태 목록 패턴 + 조작 실행기(useMutation)는 RecipesPage 모방 (PLAYBOOK "가져다 쓸 것").
 // 대기열 크기·워커 생존·429 이력은 2026-07-13 추가 확정(6분 지연 사례 재발 시 원인을 화면에서
-// 바로 구분하기 위함): "밀려서 느린가(대기열 크기)" vs "멈췄나(워커 생존)" vs "한도 때문인가(429 이력)".
+// 바로 구분하기 위함): "밀려서 느린가(대기열 크기)" vs "멈췄나(워커 생존)" vs "일시적 실패 때문인가
+// (한도·과부하·타임아웃 이력 — 2026-07-13 실측으로 429 외 503·타임아웃도 같은 통계에 포함)".
 // 항목 탭 → 시트(강제 재분석·영상 삭제)는 2026-07-13 추가 확정 — 오너 전용 강제 동작은 흩어지지
 // 않게 이 화면 한 곳에 모은다(CONTEXT.md "오너 전용 강제 동작 정책").
 import { useCallback, useEffect, useState } from 'react';
@@ -166,7 +167,7 @@ export default function MonitorPage() {
                             워커 {workerStatusText(snapshot.workerHeartbeatAt, now)}
                         </RcpBadge>
                         <RcpBadge variant={snapshot.rateLimitCount > 0 ? 'excluded' : 'dim'}>
-                            한도(429) {rateLimitText(snapshot, now)}
+                            일시적 실패(한도·과부하 등) {rateLimitText(snapshot, now)}
                         </RcpBadge>
                     </div>
 

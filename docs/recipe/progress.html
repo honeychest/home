@@ -215,6 +215,18 @@
           다중 사용자 확대 시 "사용자가 자기 목록에서 직접 삭제" 기능 재검토 필요를
           CONTEXT.md에 남김(지금은 registration 삭제 API 자체가 없음).
           백엔드 35개·프론트 16개·빌드 통과 — 미커밋</li>
+        <li class="done">일시적 실패(TransientFailureException) 확장 (2026-07-13 실사용 발견·승인·구현):
+          배포 서버에서 "강제 재분석" 눌렀는데 503 남 → SSH로 mac-mini 컨테이너 로그 직접 확인
+          (docker logs chs-app-1/2) → 원인은 서버 문제가 아니라 Gemini 쪽 일시적 과부하
+          ("high demand") + 이후 타임아웃, 3회 다 소진해 FAILED 로 고정된 것 확인
+          (미국 낮 시간대 = 무료 등급 붐빔 추정). 기존 RateLimitedException(429 전용)을
+          TransientFailureException 으로 넓혀 503(HttpServerErrorException)·타임아웃
+          (ResourceAccessException)도 429와 동일하게 시도 횟수 안 깎고 60초 대기 후 자동 재개하도록
+          변경 — 모델 404 페일오버(별개 메커니즘, 안 건드림)와 혼동하지 않게 정리.
+          로컬 모델 페일오버 제안은 검토 후 기각(이미 CONTEXT.md 확정 결정 — 품질 저하 문제,
+          이번 케이스는 일시적 현상이라 성격이 안 맞음). 모니터링 화면 "한도(429)" 라벨을
+          "일시적 실패(한도·과부하 등)"으로 정정. 테스트 2개 추가(503·타임아웃).
+          백엔드 37개·프론트 16개·빌드 통과 — 미커밋</li>
       </ul>
     </li>
     <li class="todo">4차: 레시피 목록·상세 + 추천 화면 (실제 추출 데이터로)</li>

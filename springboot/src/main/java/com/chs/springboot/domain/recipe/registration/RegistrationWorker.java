@@ -1,7 +1,8 @@
 // [AGENT] 분석 워커 — DB 대기열 + 단일 워커 (별도 큐 인프라 없음, CONTEXT.md 확정)
 // 앱 2인스턴스 안전장치 둘: claimNext 의 SKIP LOCKED(항목 중복 처리 방지)
 // + gemini_rate 슬롯(합산 호출 간격 하한 — 무료 분당 한도 보호).
-// 429 는 전 인스턴스 공통 백오프 후 자동 재개 (재시도 횟수 소모 없음 — 확정 결정).
+// 429·503(과부하)·타임아웃은 전 인스턴스 공통 백오프 후 자동 재개 (재시도 횟수 소모 없음 — 확정 결정,
+// 2026-07-13 실측으로 503·타임아웃까지 확장: 영상 문제가 아니라 Gemini 쪽 일시적 사정이라 동일 취급).
 // 2026-07-13 재편: 대기열은 video 테이블 기준(사용자 무관 — 같은 영상 중복 분석 방지가 목적).
 package com.chs.springboot.domain.recipe.registration;
 
@@ -19,7 +20,7 @@ public class RegistrationWorker {
 
     private static final Logger log = LoggerFactory.getLogger(RegistrationWorker.class);
     private static final int MAX_ATTEMPTS = 3;
-    private static final int RATE_LIMIT_BACKOFF_SECONDS = 60;
+    private static final int TRANSIENT_FAILURE_BACKOFF_SECONDS = 60;
 
     private final VideoRepository videos;
     private final RecipeExtractor extractor;
@@ -62,10 +63,11 @@ public class RegistrationWorker {
             videos.markDone(item.videoId(), result.category(), recipe,
                     result.summary(), result.tags(), RecipeExtractor.SUMMARY_VERSION);
             log.info("[gikka] 분석 완료 video={} category={}", item.videoId(), result.category());
-        } catch (RecipeExtractor.RateLimitedException e) {
+        } catch (RecipeExtractor.TransientFailureException e) {
             videos.releaseAfterRateLimit(item.videoId());
-            videos.backoffGemini(RATE_LIMIT_BACKOFF_SECONDS);
-            log.info("[gikka] Gemini 한도 도달 — {}초 휴식 후 자동 재개", RATE_LIMIT_BACKOFF_SECONDS);
+            videos.backoffGemini(TRANSIENT_FAILURE_BACKOFF_SECONDS);
+            log.info("[gikka] Gemini 일시적 실패(한도·과부하·타임아웃 등) — {}초 휴식 후 자동 재개: {}",
+                    TRANSIENT_FAILURE_BACKOFF_SECONDS, e.getMessage());
         } catch (Exception e) {
             videos.markFailure(item.videoId(), MAX_ATTEMPTS, e.getMessage());
             log.warn("[gikka] 분석 실패 video={} attempt={}: {}", item.videoId(), item.attemptCount(), e.getMessage());

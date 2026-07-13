@@ -16,9 +16,13 @@ public interface RecipeExtractor {
                             String summary, List<String> tags) {
     }
 
-    /** 429(무료 한도) 전용 — 워커가 대기 후 자동 재개한다 (재시도 횟수 소모 없음) */
-    class RateLimitedException extends RuntimeException {
-        public RateLimitedException(String message) {
+    /**
+     * 일시적 실패 — Gemini 쪽 사정으로 지금 당장은 안 되지만 곧 풀릴 상황 (2026-07-13 확정,
+     * 실측: 429 무료 한도 + 503 "high demand" 과부하 + 타임아웃 전부 이 성격으로 관찰됨).
+     * 영상 자체의 문제가 아니므로 워커가 시도 횟수 안 깎고 대기 후 자동 재개한다.
+     */
+    class TransientFailureException extends RuntimeException {
+        public TransientFailureException(String message) {
             super(message);
         }
     }
