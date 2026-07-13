@@ -4,6 +4,10 @@
    스코프: .rcp-app 루트 아래에서만 유효 (다른 도메인에 누출 방지) */
 
 .rcp-app {
+  /* 전역(index.css)의 color-scheme: dark 를 recipe 실제 테마로 교정 —
+     선언·실제 불일치 시 크롬이 구글 로그인 iframe 투명을 취소하고 흰 판을 깖 (2026-07-13) */
+  color-scheme: light;
+
   /* ── 색: 바탕 ── */
   --rcp-bg: #f7faf5;                 /* 앱 배경 (냉장고 문) */
   --rcp-bg-gradient: linear-gradient(175deg, #f9fbf7 0%, #eef4ec 100%);
@@ -67,6 +71,8 @@
 /* 다크 = "밤의 냉장고": 시스템 설정 자동 전환 (2026-07-09 인터뷰 확정) */
 @media (prefers-color-scheme: dark) {
   .rcp-app {
+    color-scheme: dark;
+
     --rcp-bg: #14171a;
     --rcp-bg-gradient: linear-gradient(175deg, #171a1d 0%, #121517 100%);
     --rcp-surface: #1e2422;
