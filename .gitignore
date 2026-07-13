@@ -2,8 +2,6 @@
 # 문서 정책: 팀 공유는 docs/, springboot/docs/, frontend/docs/, (선택) TODOS.md·ARCHITECTURE.md
 # 상세는 docs/README.md 참고. 아래는 로컬·비공유 위주.
 # -----------------------------------------------------------------------------
-CLAUDE.md
-AGENTS.md
 .cursorrules
 chs-rules.md
 geminirules.md
