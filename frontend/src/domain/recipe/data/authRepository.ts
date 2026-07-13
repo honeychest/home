@@ -5,11 +5,17 @@
 export const GOOGLE_CLIENT_ID =
     '255145024341-3pgdiae32kuhalrqtcsbahjjmn54mkq2.apps.googleusercontent.com';
 
+/** canViewMonitor: 홈 탭 모니터링 링크 노출 조건 (2026-07-13 확정 — 오너 전용, 허용 목록 재사용) */
+export interface AuthSession {
+    email: string;
+    canViewMonitor: boolean;
+}
+
 export interface AuthRepository {
-    /** 로그인된 이메일. 미로그인이면 null (dev 폴백 환경에서는 dev 이메일이 옴) */
-    me(): Promise<string | null>;
-    /** GIS 버튼이 준 credential(ID 토큰)로 로그인. 성공 시 이메일 반환 */
-    loginWithGoogle(credential: string): Promise<string>;
+    /** 로그인 세션. 미로그인이면 null (dev 폴백 환경에서는 dev 이메일이 옴) */
+    me(): Promise<AuthSession | null>;
+    /** GIS 버튼이 준 credential(ID 토큰)로 로그인. */
+    loginWithGoogle(credential: string): Promise<AuthSession>;
     logout(): Promise<void>;
 }
 
@@ -18,8 +24,7 @@ export const authRepository: AuthRepository = {
         const res = await fetch('/api/recipe/auth/me');
         if (res.status === 401) return null;
         if (!res.ok) throw new Error(`세션 확인 실패 (${res.status})`);
-        const body = (await res.json()) as { email: string };
-        return body.email;
+        return (await res.json()) as AuthSession;
     },
 
     async loginWithGoogle(credential) {
@@ -30,8 +35,7 @@ export const authRepository: AuthRepository = {
         });
         if (res.status === 403) throw new Error('아직 공개되지 않은 서비스예요');
         if (!res.ok) throw new Error(`로그인 실패 (${res.status})`);
-        const body = (await res.json()) as { email: string };
-        return body.email;
+        return (await res.json()) as AuthSession;
     },
 
     async logout() {

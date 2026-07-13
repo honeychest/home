@@ -15,6 +15,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -53,7 +54,7 @@ class GeminiRecipeExtractorTest {
                  "cookMinutes":15,"steps":["두부를 썬다","조린다"],"tags":["두부조림","두부","밑반찬"]}
                 """);
 
-        var result = extractor.extract("https://www.youtube.com/shorts/abc");
+        var result = extractor.extract("https://www.youtube.com/shorts/abc", null);
 
         assertEquals("RECIPE", result.category());
         assertEquals("두부조림", result.name());
@@ -65,6 +66,35 @@ class GeminiRecipeExtractorTest {
     }
 
     @Test
+    @DisplayName("설명란(본문)이 있으면 요청 본문에 별도 텍스트로 실어 보낸다 (2026-07-13 확정 — 재료 원문 최우선 활용)")
+    void includesDescriptionWhenPresent() {
+        server.expect(method(org.springframework.http.HttpMethod.POST))
+                .andExpect(content().string(containsString("영상 설명란 원문")))
+                .andExpect(content().string(containsString("재료: 두부 1모, 대파 1대")))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"TIP\\"}"}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        extractor.extract("https://www.youtube.com/shorts/abc", "재료: 두부 1모, 대파 1대");
+
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("설명란이 없으면(null) 요청 본문에 그 텍스트 파트를 안 붙인다")
+    void omitsDescriptionPartWhenAbsent() {
+        server.expect(method(org.springframework.http.HttpMethod.POST))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("영상 설명란 원문"))))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"TIP\\"}"}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        extractor.extract("https://www.youtube.com/shorts/abc", null);
+
+        server.verify();
+    }
+
+    @Test
     @DisplayName("생활팁 영상: 레시피 필드는 null, 요약·검색 태그가 채워짐 (2026-07-13 확정)")
     void classifiesTipWithSummaryAndTags() {
         geminiReturns("""
@@ -72,7 +102,7 @@ class GeminiRecipeExtractorTest {
                  "tags":["신발끈","매듭","운동화"]}
                 """);
 
-        var result = extractor.extract("https://www.youtube.com/shorts/abc");
+        var result = extractor.extract("https://www.youtube.com/shorts/abc", null);
 
         assertEquals("TIP", result.category());
         assertNull(result.name());
@@ -88,7 +118,7 @@ class GeminiRecipeExtractorTest {
                 {"category":"TIP"}
                 """);
 
-        var result = extractor.extract("https://www.youtube.com/shorts/abc");
+        var result = extractor.extract("https://www.youtube.com/shorts/abc", null);
 
         assertEquals("TIP", result.category());
         assertNull(result.summary());
@@ -102,7 +132,7 @@ class GeminiRecipeExtractorTest {
                 .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
 
         assertThrows(RecipeExtractor.RateLimitedException.class,
-                () -> extractor.extract("https://www.youtube.com/shorts/abc"));
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
     }
 
     @Test
@@ -111,7 +141,7 @@ class GeminiRecipeExtractorTest {
         geminiReturns("이것은 JSON 이 아님");
 
         assertThrows(IllegalStateException.class,
-                () -> extractor.extract("https://www.youtube.com/shorts/abc"));
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
     }
 
     @Test
@@ -124,8 +154,8 @@ class GeminiRecipeExtractorTest {
         expectFallbackSuccess();
         expectFallbackSuccess();
 
-        assertEquals("TIP", extractor.extract("https://www.youtube.com/shorts/abc").category());
-        assertEquals("TIP", extractor.extract("https://www.youtube.com/shorts/def").category());
+        assertEquals("TIP", extractor.extract("https://www.youtube.com/shorts/abc", null).category());
+        assertEquals("TIP", extractor.extract("https://www.youtube.com/shorts/def", null).category());
 
         server.verify();
     }
@@ -139,7 +169,7 @@ class GeminiRecipeExtractorTest {
                 .andRespond(withStatus(HttpStatus.NOT_FOUND));
 
         assertThrows(org.springframework.web.client.HttpClientErrorException.NotFound.class,
-                () -> extractor.extract("https://www.youtube.com/shorts/abc"));
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
         server.verify();
     }
 

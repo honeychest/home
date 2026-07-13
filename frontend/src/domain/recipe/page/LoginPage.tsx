@@ -2,6 +2,7 @@
 // 주의: http LAN 접속(폰→PC 개발 서버)에서는 구글 정책상 GIS 가 동작하지 않음 —
 // 로컬 개발은 백엔드 dev 폴백으로 로그인 없이 통과하므로 이 화면은 배포(https)에서만 보인다.
 import { useEffect, useRef, useState } from 'react';
+import type { AuthSession } from '../data/authRepository';
 import { GOOGLE_CLIENT_ID, authRepository } from '../data/authRepository';
 
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
@@ -33,7 +34,7 @@ function loadGisScript(): Promise<GisGlobal> {
     });
 }
 
-export default function LoginPage({ onLogin }: { onLogin: (email: string) => void }) {
+export default function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
     const buttonHost = useRef<HTMLDivElement>(null);
     const [error, setError] = useState<string | null>(null);
 

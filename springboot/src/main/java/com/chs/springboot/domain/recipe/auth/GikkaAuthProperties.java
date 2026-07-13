@@ -44,4 +44,13 @@ public class GikkaAuthProperties {
     public void setGoogleClientId(String googleClientId) {
         this.googleClientId = googleClientId;
     }
+
+    /**
+     * 오너 전용 화면(모니터링 등) 접근 판정 (2026-07-13 확정).
+     * 허용 목록이 비면(2단계 공개 상태) 아무도 통과시키지 않는다 — 그 시점엔 별도
+     * 관리자 판정을 새로 설계해야 한다 (허용 목록 비움 = 로그인 자유화이지 오너 화면 공개가 아님).
+     */
+    public boolean isOwner(String email) {
+        return !allowedEmails.isEmpty() && allowedEmails.contains(email);
+    }
 }

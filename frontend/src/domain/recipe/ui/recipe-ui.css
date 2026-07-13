@@ -456,6 +456,39 @@
 }
 .rcp-account-dev { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); }
 
+/* ── 모니터링 행: rcp-monitor-row (3차 — 전 사용자 대기열 실시간 추적, 오너 전용) ──
+   버튼 요소(탭→액션 시트, 2026-07-13 확정) — RcpVideoRow 와 동일하게 버튼 기본값 리셋 */
+.rcp-monitor-row {
+  display: flex; flex-direction: column; gap: var(--rcp-space-1);
+  width: 100%;
+  background: var(--rcp-surface);
+  border: 1px solid var(--rcp-line);
+  border-radius: var(--rcp-radius-lg);
+  box-shadow: var(--rcp-shadow-row);
+  padding: var(--rcp-space-3);
+  margin-bottom: var(--rcp-space-2);
+  font-family: inherit;
+  color: var(--rcp-text);
+  text-align: left;
+}
+.rcp-monitor-row:active { background: var(--rcp-surface-dim); }
+.rcp-monitor-row-top { display: flex; align-items: center; justify-content: space-between; gap: var(--rcp-space-2); }
+.rcp-monitor-email {
+  font-size: var(--rcp-fs-sm); font-weight: var(--rcp-fw-bold); color: var(--rcp-text-sub);
+  min-width: 0; overflow-wrap: anywhere;
+}
+.rcp-monitor-title {
+  font-size: var(--rcp-fs-md); font-weight: var(--rcp-fw-bold); color: var(--rcp-text);
+  overflow-wrap: anywhere;
+}
+.rcp-monitor-row-bottom {
+  display: flex; gap: var(--rcp-space-3);
+  font-size: var(--rcp-fs-xs); color: var(--rcp-text-faint);
+}
+.rcp-monitor-error {
+  font-size: var(--rcp-fs-xs); color: var(--rcp-danger); overflow-wrap: anywhere;
+}
+
 /* ── 앱 셸 로딩/에러 (2차 — API 전환으로 지연·실패가 실제로 생김) ── */
 .rcp-shell-status {
   min-height: 100dvh;

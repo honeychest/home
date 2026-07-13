@@ -36,8 +36,8 @@ class RegistrationRulesTest {
     @Test
     @DisplayName("재생목록 메타 색인: ID 로 찾고, 없는 영상은 null (등록은 막지 않음)")
     void indexesMetadataById() {
-        var a = new VideoMetadataClient.VideoMetadata("aaaaaaaaaaa", "김치찌개", "http://t/a.jpg", 60);
-        var b = new VideoMetadataClient.VideoMetadata("bbbbbbbbbbb", "두부조림", "http://t/b.jpg", 90);
+        var a = new VideoMetadataClient.VideoMetadata("aaaaaaaaaaa", "김치찌개", "http://t/a.jpg", 60, null);
+        var b = new VideoMetadataClient.VideoMetadata("bbbbbbbbbbb", "두부조림", "http://t/b.jpg", 90, null);
         Map<String, VideoMetadataClient.VideoMetadata> byId = RegistrationRules.metadataById(List.of(a, b));
 
         assertEquals(a, byId.get("aaaaaaaaaaa"));
@@ -48,8 +48,8 @@ class RegistrationRulesTest {
     @Test
     @DisplayName("중복 ID 메타는 첫 항목 우선 (API 이상 응답에도 색인이 깨지지 않음)")
     void duplicateMetadataKeepsFirst() {
-        var first = new VideoMetadataClient.VideoMetadata("aaaaaaaaaaa", "먼저", null, 10);
-        var dup = new VideoMetadataClient.VideoMetadata("aaaaaaaaaaa", "나중", null, 20);
+        var first = new VideoMetadataClient.VideoMetadata("aaaaaaaaaaa", "먼저", null, 10, null);
+        var dup = new VideoMetadataClient.VideoMetadata("aaaaaaaaaaa", "나중", null, 20, null);
 
         assertEquals(first, RegistrationRules.metadataById(List.of(first, dup)).get("aaaaaaaaaaa"));
     }

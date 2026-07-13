@@ -21,10 +21,12 @@ const mutationMessage = () => REGISTER_FAIL_TEXT;
 
 interface HomePageProps {
     email: string;
+    /** 오너 전용 모니터링 링크 노출 조건 (2026-07-13 확정 — 서버 판정, 허용 목록 재사용) */
+    canViewMonitor: boolean;
     onLogout: () => void;
 }
 
-export default function HomePage({ email, onLogout }: HomePageProps) {
+export default function HomePage({ email, canViewMonitor, onLogout }: HomePageProps) {
     // dev 폴백은 http(로컬 개발)에서만, 진짜 구글 로그인은 배포(https)에서만 — CONTEXT.md 인증 절
     const isDevSession = window.location.protocol !== 'https:';
     const navigate = useNavigate();
@@ -108,6 +110,15 @@ export default function HomePage({ email, onLogout }: HomePageProps) {
                         </span>
                     )}
                 </div>
+                {canViewMonitor && (
+                    <RcpButton
+                        variant="ghost"
+                        id="rcp-home-monitor-link"
+                        onClick={() => navigate('../monitor')}
+                    >
+                        모니터링
+                    </RcpButton>
+                )}
                 {!isDevSession && (
                     <RcpButton variant="ghost" id="rcp-home-logout" onClick={onLogout}>로그아웃</RcpButton>
                 )}

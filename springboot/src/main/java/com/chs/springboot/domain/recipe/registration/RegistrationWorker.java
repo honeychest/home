@@ -2,6 +2,7 @@
 // 앱 2인스턴스 안전장치 둘: claimNext 의 SKIP LOCKED(항목 중복 처리 방지)
 // + gemini_rate 슬롯(합산 호출 간격 하한 — 무료 분당 한도 보호).
 // 429 는 전 인스턴스 공통 백오프 후 자동 재개 (재시도 횟수 소모 없음 — 확정 결정).
+// 2026-07-13 재편: 대기열은 video 테이블 기준(사용자 무관 — 같은 영상 중복 분석 방지가 목적).
 package com.chs.springboot.domain.recipe.registration;
 
 import java.util.LinkedHashMap;
@@ -20,13 +21,13 @@ public class RegistrationWorker {
     private static final int MAX_ATTEMPTS = 3;
     private static final int RATE_LIMIT_BACKOFF_SECONDS = 60;
 
-    private final RegistrationRepository repository;
+    private final VideoRepository videos;
     private final RecipeExtractor extractor;
     private final GikkaMediaProperties properties;
 
-    public RegistrationWorker(RegistrationRepository repository, RecipeExtractor extractor,
+    public RegistrationWorker(VideoRepository videos, RecipeExtractor extractor,
                               GikkaMediaProperties properties) {
-        this.repository = repository;
+        this.videos = videos;
         this.extractor = extractor;
         this.properties = properties;
     }
@@ -36,16 +37,17 @@ public class RegistrationWorker {
         if (properties.getGeminiApiKey().isBlank()) {
             return; // 키 없는 환경(로컬 기본)에서는 워커가 쉰다
         }
-        repository.requeueStale();
-        if (!repository.tryAcquireGeminiSlot(properties.getGeminiMinIntervalSeconds())) {
+        videos.touchHeartbeat(); // 일할 게 없어도 갱신 — 모니터링 화면의 워커 생존 신호 (2026-07-13 확정)
+        videos.requeueStale();
+        if (!videos.tryAcquireGeminiSlot(properties.getGeminiMinIntervalSeconds())) {
             return; // 다른 인스턴스가 방금 호출함 — 이번 틱은 쉼
         }
-        repository.claimNext().ifPresent(this::analyze);
+        videos.claimNext().ifPresent(this::analyze);
     }
 
-    private void analyze(RegistrationRepository.Row item) {
+    private void analyze(VideoRepository.Row item) {
         try {
-            RecipeExtractor.ExtractionResult result = extractor.extract(item.url());
+            RecipeExtractor.ExtractionResult result = extractor.extract(item.url(), item.description());
             Map<String, Object> recipe = null;
             if ("RECIPE".equals(result.category())) {
                 // 프론트 registrationTypes.ts 의 ExtractedRecipe 와 1:1 (cookMinutes 는 null 허용)
@@ -57,15 +59,15 @@ public class RegistrationWorker {
                 recipe.put("summaryVersion", RecipeExtractor.SUMMARY_VERSION);
             }
             // 요약(TIP/ETC)·검색 태그(전 분류)는 같은 호출에서 나옴 — 컬럼에 함께 저장 (2026-07-13 확정)
-            repository.markDone(item.userId(), item.videoId(), result.category(), recipe,
+            videos.markDone(item.videoId(), result.category(), recipe,
                     result.summary(), result.tags(), RecipeExtractor.SUMMARY_VERSION);
             log.info("[gikka] 분석 완료 video={} category={}", item.videoId(), result.category());
         } catch (RecipeExtractor.RateLimitedException e) {
-            repository.releaseAfterRateLimit(item.userId(), item.videoId());
-            repository.backoffGemini(RATE_LIMIT_BACKOFF_SECONDS);
+            videos.releaseAfterRateLimit(item.videoId());
+            videos.backoffGemini(RATE_LIMIT_BACKOFF_SECONDS);
             log.info("[gikka] Gemini 한도 도달 — {}초 휴식 후 자동 재개", RATE_LIMIT_BACKOFF_SECONDS);
         } catch (Exception e) {
-            repository.markFailure(item.userId(), item.videoId(), MAX_ATTEMPTS);
+            videos.markFailure(item.videoId(), MAX_ATTEMPTS, e.getMessage());
             log.warn("[gikka] 분석 실패 video={} attempt={}: {}", item.videoId(), item.attemptCount(), e.getMessage());
         }
     }

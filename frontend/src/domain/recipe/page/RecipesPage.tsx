@@ -32,6 +32,7 @@ const STATUS_LABEL: Record<Exclude<RegistrationStatus, 'DONE'>, string> = {
     ANALYZING: '분석 중',
     TOO_LONG: '긴 영상',
     FAILED: '실패',
+    REMOVED: '삭제됨',
 };
 // 분석 완료(DONE)는 상태 대신 분류를 보여준다 (2026-07-12 확정: 요리/유틸/기타)
 const CATEGORY_LABEL: Record<VideoCategory, string> = {
@@ -47,6 +48,7 @@ const itemBadge = (item: RegistrationItem): RcpBadgeVariant => {
     if (item.status === 'DONE') return item.category === 'RECIPE' ? 'default' : 'excluded';
     if (item.status === 'ANALYZING') return 'analyzing';
     if (item.status === 'FAILED') return 'danger';
+    if (item.status === 'REMOVED') return 'danger';
     if (item.status === 'TOO_LONG') return 'excluded';
     return 'dim'; // WAITING
 };
@@ -56,14 +58,16 @@ const itemDetail = (item: RegistrationItem): string | null => {
     if (item.status === 'ANALYZING') return '영상을 분석하고 있어요. 잠시만요.';
     if (item.status === 'TOO_LONG') return '7분이 넘는 영상이라 분석하지 않았어요 (기록만 남아요).';
     if (item.status === 'FAILED') return '분석에 여러 번 실패했어요. 다시 분석을 눌러 재시도할 수 있어요.';
+    if (item.status === 'REMOVED') return '이 영상은 시스템에서 제거됐어요. 다시 분석을 누르면 복구돼요.';
     if (item.status === 'DONE' && item.category !== 'RECIPE') {
         return `요리가 아니라 ${CATEGORY_LABEL[item.category ?? 'ETC']}(으)로 분류했어요. 잘못 분류된 것 같으면 다시 분석을 눌러 주세요.`;
     }
     return null;
 };
-/** 다시 분석 가능: 실패 또는 요리가 아닌 걸로 분류된 완료 항목 (오판 구제) */
+/** 다시 분석 가능: 실패·삭제됨 또는 요리가 아닌 걸로 분류된 완료 항목 (오판 구제·복구) */
 const canReanalyze = (item: RegistrationItem): boolean =>
-    item.status === 'FAILED' || (item.status === 'DONE' && item.category !== 'RECIPE');
+    item.status === 'FAILED' || item.status === 'REMOVED'
+    || (item.status === 'DONE' && item.category !== 'RECIPE');
 const TOO_LONG_NOTICE = '7분이 넘는 영상이라 분석하지 않아요 — 목록에 기록만 남겼어요';
 
 const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;

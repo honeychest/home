@@ -7,7 +7,9 @@ import java.util.Optional;
 
 public interface VideoMetadataClient {
 
-    record VideoMetadata(String videoId, String title, String thumbnailUrl, Integer durationSeconds) {
+    /** description: 유튜브 설명란(본문) — 재료가 원문으로 적힌 경우가 많아 최우선 활용 (2026-07-13 확정) */
+    record VideoMetadata(String videoId, String title, String thumbnailUrl, Integer durationSeconds,
+                        String description) {
     }
 
     /** 영상 메타 일괄 조회 (없는 영상은 결과에서 빠짐). 조회 실패 시 빈 목록 — 등록을 막지 않는다 */

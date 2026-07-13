@@ -8,7 +8,8 @@ export type RegistrationStatus =
     | 'ANALYZING'    // Gemini 분석 중
     | 'DONE'         // 분석 완료 (category 판정됨, RECIPE 면 recipe 채워짐)
     | 'TOO_LONG'     // 길이 컷 (MAX_VIDEO_MINUTES 초과 — 등록 순간 즉시 알림, 기록은 유지)
-    | 'FAILED';      // 3회 재시도 후 실패 (수동 재분석 가능)
+    | 'FAILED'       // 3회 재시도 후 실패 (수동 재분석 가능)
+    | 'REMOVED';     // 오너가 영상을 삭제함(원본이 유튜브에서 사라진 경우 등) — 재분석하면 복구됨 (2026-07-13 확정)
 
 /** 영상 분류 (2026-07-12 확정): 분석이 판정. 1단계 기능은 RECIPE 만 사용, TIP/ETC 는 저장만.
     2단계에서 TRAVEL, DIY 등으로 세분화 예정 */

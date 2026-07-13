@@ -26,8 +26,10 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
             1. category: 요리 레시피 영상이면 RECIPE, 생활팁·요령 영상이면 TIP, 둘 다 아니면 ETC.
             2. RECIPE 인 경우에만:
                - name: 요리 이름 (짧게)
-               - ingredients: 재료 목록. 영상에 나온 이름 그대로 쓰고, 임의로 바꾸지 마세요.
-                 양념(소금, 간장 등)도 포함. 수량·단위는 빼고 이름만.
+               - ingredients: 재료 목록. 뒤에 유튜브 설명란 텍스트가 함께 주어지면 그 원문에 적힌
+                 재료 표기를 최우선으로 사용하세요 (창작자가 직접 적은 텍스트가 가장 정확합니다).
+                 설명란에 없는 재료만 화면·음성에서 보완하세요. 영상에 나온 이름 그대로 쓰고,
+                 임의로 바꾸지 마세요. 양념(소금, 간장 등)도 포함. 수량·단위는 빼고 이름만.
                - cookMinutes: 예상 조리 시간(분). 영상에서 알 수 없으면 생략.
                - steps: 조리 순서 요약. 각 단계를 짧은 한 문장으로, 3~7개.
             3. RECIPE 가 아닌 경우에만:
@@ -57,10 +59,10 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
     }
 
     @Override
-    public ExtractionResult extract(String videoUrl) {
+    public ExtractionResult extract(String videoUrl, String description) {
         String model = failedOver ? properties.getGeminiFallbackModel() : properties.getGeminiModel();
         try {
-            return callGemini(model, videoUrl);
+            return callGemini(model, videoUrl, description);
         } catch (HttpClientErrorException.NotFound e) {
             if (failedOver) {
                 throw e; // 폴백 모델까지 404 — 일반 실패 경로(3회 후 FAILED)로
@@ -70,15 +72,20 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
             log.warn("[gikka] Gemini 모델 {} 404 — {} 로 페일오버", model, fallback);
             notifier.notify("[기까] Gemini 모델 '" + model + "' 이 404(폐쇄 추정)입니다. '"
                     + fallback + "' 로 자동 전환해 분석을 계속합니다. 설정 모델 교체가 필요합니다.");
-            return callGemini(fallback, videoUrl);
+            return callGemini(fallback, videoUrl, description);
         }
     }
 
-    private ExtractionResult callGemini(String model, String videoUrl) {
+    private ExtractionResult callGemini(String model, String videoUrl, String description) {
+        List<Map<String, Object>> parts = new ArrayList<>();
+        parts.add(Map.of("fileData", Map.of("fileUri", videoUrl)));
+        parts.add(Map.of("text", PROMPT));
+        // 설명란(본문) 원문 — 재료가 여기 적힌 경우가 많아 최우선 활용 (2026-07-13 확정)
+        if (description != null && !description.isBlank()) {
+            parts.add(Map.of("text", "영상 설명란 원문:\n" + description));
+        }
         Map<String, Object> body = Map.of(
-                "contents", List.of(Map.of("parts", List.of(
-                        Map.of("fileData", Map.of("fileUri", videoUrl)),
-                        Map.of("text", PROMPT)))),
+                "contents", List.of(Map.of("parts", parts)),
                 "generationConfig", Map.of(
                         "responseMimeType", "application/json",
                         "responseSchema", responseSchema(),

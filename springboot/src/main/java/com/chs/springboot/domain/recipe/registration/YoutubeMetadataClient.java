@@ -99,7 +99,8 @@ public class YoutubeMetadataClient implements VideoMetadataClient {
                 item.path("id").asText(),
                 snippet.path("title").asText(null),
                 thumb,
-                parseIsoDurationSeconds(item.path("contentDetails").path("duration").asText(null)));
+                parseIsoDurationSeconds(item.path("contentDetails").path("duration").asText(null)),
+                snippet.path("description").asText(null));
     }
 
     /** ISO-8601 (PT1M30S 등) → 초. 파싱 불가면 null (길이 미상 = 컷하지 않고 분석 시도) */

@@ -1,13 +1,17 @@
 // [AGENT] 등록·대기열 API — 경로 /api/recipe/** 통일 (분리 규율 3), 응답은 프론트 registrationTypes.ts 계약
 // 인증: @GikkaUserId (리졸버가 미로그인 401 처리 — 본문에 인증 코드 없음)
 // 에러 계약: 상태 코드만 (400=링크 인식 불가, 404=없는 항목, 409=중복) — 문구는 프론트 소유
+// 2026-07-13 재편: video(분석 결과, video_id 당 1행) + registration(user_id<->video_id 연결) 분리.
+// 영상이 이미 있으면 메타 조회 없이 연결만 추가 — CONTEXT.md 확정(같은 영상 중복 분석 방지).
 package com.chs.springboot.domain.recipe.registration;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
+import com.chs.springboot.domain.recipe.user.GikkaUserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -26,15 +30,22 @@ import org.springframework.web.server.ResponseStatusException;
 public class RegistrationController {
 
     private final RegistrationRepository repository;
+    private final VideoRepository videos;
     private final VideoMetadataClient metadata;
     private final GikkaMediaProperties properties;
+    private final GikkaAuthProperties authProperties;
+    private final GikkaUserRepository users;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public RegistrationController(RegistrationRepository repository, VideoMetadataClient metadata,
-                                  GikkaMediaProperties properties) {
+    public RegistrationController(RegistrationRepository repository, VideoRepository videos,
+                                  VideoMetadataClient metadata, GikkaMediaProperties properties,
+                                  GikkaAuthProperties authProperties, GikkaUserRepository users) {
         this.repository = repository;
+        this.videos = videos;
         this.metadata = metadata;
         this.properties = properties;
+        this.authProperties = authProperties;
+        this.users = users;
     }
 
     public record RegisterRequest(String url) {
@@ -52,7 +63,7 @@ public class RegistrationController {
         return repository.list(userId).stream().map(this::toResponse).toList();
     }
 
-    /** 영상 1개 등록 — 메타 조회로 길이 컷을 등록 시점에 판정 (TOO_LONG 은 즉시 응답에 실림) */
+    /** 영상 1개 등록 — 이미 있는 영상이면 메타 조회 없이 연결만(길이 컷 판정도 이미 끝난 상태) */
     @PostMapping
     public RegistrationResponse register(@GikkaUserId long userId, @RequestBody RegisterRequest request) {
         String videoId = YoutubeVideoId.parseVideoId(nonNullUrl(request))
@@ -60,36 +71,43 @@ public class RegistrationController {
         if (repository.exists(userId, videoId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 등록된 영상");
         }
-        insertWithMeta(userId, videoId, metadata.fetchOne(videoId));
+        Optional<VideoMetadataClient.VideoMetadata> meta =
+                videos.exists(videoId) ? Optional.empty() : metadata.fetchOne(videoId);
+        repository.registerLink(userId, videoId, meta, properties.getMaxVideoMinutes());
         return repository.find(userId, videoId).map(this::toResponse)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "등록 직후 조회 실패"));
     }
 
-    /** 재생목록 일괄 등록 — 이미 있던 영상은 건너뛰고 추가된 수를 반환 */
+    /** 재생목록 일괄 등록 — 이미 있던 영상은 건너뛰고 추가된 수를 반환. 신규 영상만 메타 조회 */
     @PostMapping("/playlist")
     public Map<String, Integer> registerPlaylist(@GikkaUserId long userId, @RequestBody RegisterRequest request) {
         String playlistId = YoutubeVideoId.parsePlaylistId(nonNullUrl(request))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "재생목록 링크 인식 불가"));
         List<String> videoIds = metadata.playlistVideoIds(playlistId);
+        List<String> unknownVideoIds = videoIds.stream().filter(id -> !videos.exists(id)).toList();
         Map<String, VideoMetadataClient.VideoMetadata> metaById =
-                RegistrationRules.metadataById(metadata.fetch(videoIds));
+                RegistrationRules.metadataById(metadata.fetch(unknownVideoIds));
         int added = 0;
         for (String videoId : videoIds) {
             if (repository.exists(userId, videoId)) {
                 continue;
             }
-            if (insertWithMeta(userId, videoId, Optional.ofNullable(metaById.get(videoId)))) {
+            boolean linked = repository.registerLink(userId, videoId,
+                    Optional.ofNullable(metaById.get(videoId)), properties.getMaxVideoMinutes());
+            if (linked) {
                 added++;
             }
         }
         return Map.of("added", added);
     }
 
+    /** 재분석은 영상 단위 — 등록한 모든 계정에 반영 (2026-07-13 확정). 요청자가 등록한 영상인지만 확인 */
     @PostMapping("/{videoId}/reanalyze")
     public void reanalyze(@GikkaUserId long userId, @PathVariable String videoId) {
-        if (!repository.reanalyze(userId, videoId)) {
+        if (!repository.exists(userId, videoId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "등록된 영상이 아님");
         }
+        videos.reanalyze(videoId);
     }
 
     /** limit 필수 — 표시 개수의 원본은 프론트 상수 하나뿐 (서버 기본값 이중 정의 금지) */
@@ -98,18 +116,61 @@ public class RegistrationController {
         return repository.recentDone(userId, limit).stream().map(this::toResponse).toList();
     }
 
-    private boolean insertWithMeta(long userId, String videoId,
-                                   Optional<VideoMetadataClient.VideoMetadata> meta) {
-        String status = RegistrationRules.initialStatus(
-                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null),
-                properties.getMaxVideoMinutes());
-        return repository.insert(
-                userId, videoId,
-                "https://www.youtube.com/watch?v=" + videoId,
-                status,
-                meta.map(VideoMetadataClient.VideoMetadata::title).orElse(null),
-                meta.map(VideoMetadataClient.VideoMetadata::thumbnailUrl).orElse(null),
-                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null));
+    /** 프론트 MonitorItem 과 1:1 (검증단계 실시간 모니터링 — 2026-07-13 확정) */
+    public record MonitorResponse(long userId, String email, String videoId, String url, String title,
+                                  String category, String status, Integer durationSeconds, int attemptCount,
+                                  String lastError, Integer analysisSeconds,
+                                  String registeredAt, String analyzingStartedAt) {
+    }
+
+    /** 프론트 MonitorSnapshot 과 1:1 — 대기열 크기·워커 생존·429 이력 + 항목 목록 한 번에 (2026-07-13 확정) */
+    public record MonitorSnapshot(int waitingCount, int analyzingCount, String workerHeartbeatAt,
+                                  int rateLimitCount, String lastRateLimitedAt, List<MonitorResponse> items) {
+    }
+
+    /** 전 사용자 대기열 실시간 조회 — 오너 전용 (허용 목록 재사용, 목록 비면 아무도 접근 불가) */
+    @GetMapping("/monitor")
+    public MonitorSnapshot monitor(@GikkaUserId long userId, @RequestParam int limit) {
+        requireOwner(userId);
+        VideoRepository.QueueCounts counts = videos.queueCounts();
+        VideoRepository.WorkerStatus worker = videos.workerStatus();
+        List<MonitorResponse> items = repository.listForMonitor(limit).stream()
+                .map(row -> new MonitorResponse(
+                        row.userId(), row.email(), row.videoId(), row.url(), row.title(),
+                        row.category(), row.status(), row.durationSeconds(), row.attemptCount(),
+                        row.lastError(), row.analysisSeconds(), row.registeredAt().toString(),
+                        row.analyzingStartedAt() == null ? null : row.analyzingStartedAt().toString()))
+                .toList();
+        return new MonitorSnapshot(
+                counts.waiting(), counts.analyzing(),
+                worker.heartbeatAt() == null ? null : worker.heartbeatAt().toString(),
+                worker.rateLimitCount(),
+                worker.lastRateLimitedAt() == null ? null : worker.lastRateLimitedAt().toString(),
+                items);
+    }
+
+    /** 모니터링 화면 전용 강제 재분석 — 오너 전용, 요청자 본인이 등록했는지 여부와 무관 (2026-07-13 확정) */
+    @PostMapping("/monitor/{videoId}/reanalyze")
+    public void monitorReanalyze(@GikkaUserId long userId, @PathVariable String videoId) {
+        requireOwner(userId);
+        videos.reanalyze(videoId);
+    }
+
+    /**
+     * 영상 삭제 — 오너 전용 (2026-07-13 확정, 원본이 유튜브에서 삭제·비공개된 경우 등).
+     * 영상정보는 남기고 분석정보만 지워 REMOVED 로 표시 — 등록했던 다른 사용자 목록에도
+     * "삭제됨"으로 보임(연결은 유지). 재분석하면 평소 파이프라인을 다시 타며 자동 복구됨.
+     */
+    @PostMapping("/monitor/{videoId}/remove")
+    public void monitorRemove(@GikkaUserId long userId, @PathVariable String videoId) {
+        requireOwner(userId);
+        videos.remove(videoId);
+    }
+
+    private void requireOwner(long userId) {
+        if (!authProperties.isOwner(users.findEmail(userId))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "오너 전용 기능");
+        }
     }
 
     private static String nonNullUrl(RegisterRequest request) {

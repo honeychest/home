@@ -37,7 +37,8 @@ public class GikkaAuthController {
     public record LoginRequest(String credential) {
     }
 
-    public record MeResponse(String email) {
+    /** canViewMonitor: 홈 탭 모니터링 링크 노출 조건 (2026-07-13 확정 — 허용 목록 재사용) */
+    public record MeResponse(String email, boolean canViewMonitor) {
     }
 
     @PostMapping("/google")
@@ -52,13 +53,14 @@ public class GikkaAuthController {
 
         long userId = users.findOrCreate(identity.sub(), identity.email());
         response.addCookie(sessionCookie(jwt.issue(userId), (int) GikkaJwt.VALIDITY.toSeconds()));
-        return new MeResponse(identity.email());
+        return new MeResponse(identity.email(), properties.isOwner(identity.email()));
     }
 
     /** 프론트 진입 시 세션 확인용. 미로그인 401 (dev 폴백 환경에서는 dev 사용자로 통과) */
     @GetMapping("/me")
     public MeResponse me(@GikkaUserId long userId) {
-        return new MeResponse(users.findEmail(userId));
+        String email = users.findEmail(userId);
+        return new MeResponse(email, properties.isOwner(email));
     }
 
     @PostMapping("/logout")

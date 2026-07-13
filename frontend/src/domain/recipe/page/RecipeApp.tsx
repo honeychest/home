@@ -10,6 +10,7 @@ import { setSessionExpiredHandler } from '../data/http';
 import FridgePage from './FridgePage';
 import HomePage from './HomePage';
 import LoginPage from './LoginPage';
+import MonitorPage from './MonitorPage';
 import PlaceholderPage from './PlaceholderPage';
 import RecipesPage from './RecipesPage';
 import ShareTargetPage from './ShareTargetPage';
@@ -47,7 +48,7 @@ function useGikkaDocumentMeta() {
 
 type AuthState =
     | { phase: 'loading' }
-    | { phase: 'in'; email: string }
+    | { phase: 'in'; email: string; canViewMonitor: boolean }
     | { phase: 'out' }
     | { phase: 'error'; message: string };
 
@@ -58,7 +59,7 @@ export default function RecipeApp() {
     const checkSession = useCallback(() => {
         setAuth({ phase: 'loading' });
         authRepository.me()
-            .then((email) => setAuth(email ? { phase: 'in', email } : { phase: 'out' }))
+            .then((session) => setAuth(session ? { phase: 'in', ...session } : { phase: 'out' }))
             .catch((e: Error) => setAuth({ phase: 'error', message: e.message }));
     }, []);
 
@@ -99,7 +100,7 @@ export default function RecipeApp() {
     if (auth.phase === 'out') {
         return (
             <div className="rcp-app" id="rcp-app">
-                <LoginPage onLogin={(email) => setAuth({ phase: 'in', email })} />
+                <LoginPage onLogin={(session) => setAuth({ phase: 'in', ...session })} />
             </div>
         );
     }
@@ -108,7 +109,12 @@ export default function RecipeApp() {
         <div className="rcp-app" id="rcp-app">
             <Routes>
                 <Route index element={<Navigate to="fridge" replace />} />
-                <Route path="home" element={<HomePage email={auth.email} onLogout={logout} />} />
+                <Route
+                    path="home"
+                    element={(
+                        <HomePage email={auth.email} canViewMonitor={auth.canViewMonitor} onLogout={logout} />
+                    )}
+                />
                 <Route
                     path="recommend"
                     element={(
@@ -124,6 +130,8 @@ export default function RecipeApp() {
                 <Route path="share" element={<ShareTargetPage />} />
 
                 <Route path="styleguide" element={<StyleguidePage />} />
+                {/* 탭 바에 없음(오너 전용 직접 진입) — 접근 통제는 백엔드 403(허용 목록 재사용)이 실제 경계 */}
+                <Route path="monitor" element={<MonitorPage />} />
                 <Route path="*" element={<Navigate to="fridge" replace />} />
             </Routes>
             <RcpTabBar />
