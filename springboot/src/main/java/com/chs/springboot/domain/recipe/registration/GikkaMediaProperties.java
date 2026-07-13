@@ -29,6 +29,11 @@ public class GikkaMediaProperties {
     // 페일오버 알림용 — 기존 봇 값을 recipe 설정 그룹으로 복사 소유 (분리 규율 5·7). 비면 알림 생략.
     private String telegramToken = "";
     private String telegramChatId = "";
+    // 로컬 모델 페일오버 (2026-07-14 확정): 앱은 도커 컨테이너(Alpine)라 yt-dlp·ffmpeg·whisper 를
+    // 직접 실행할 수 없음 — mac-mini 호스트에서 상시 도는 파이썬 서비스(chs/server/gikka-local)를
+    // host.docker.internal 로 호출한다 (LM Studio 와 동일한 host.docker.internal 패턴).
+    private String localExtractorBaseUrl = "http://host.docker.internal:8765";
+    private boolean localExtractorEnabled = true;
 
     public String getGeminiApiKey() {
         return geminiApiKey;
@@ -92,5 +97,21 @@ public class GikkaMediaProperties {
 
     public void setGeminiMinIntervalSeconds(int geminiMinIntervalSeconds) {
         this.geminiMinIntervalSeconds = geminiMinIntervalSeconds;
+    }
+
+    public String getLocalExtractorBaseUrl() {
+        return localExtractorBaseUrl;
+    }
+
+    public void setLocalExtractorBaseUrl(String localExtractorBaseUrl) {
+        this.localExtractorBaseUrl = localExtractorBaseUrl;
+    }
+
+    public boolean isLocalExtractorEnabled() {
+        return localExtractorEnabled;
+    }
+
+    public void setLocalExtractorEnabled(boolean localExtractorEnabled) {
+        this.localExtractorEnabled = localExtractorEnabled;
     }
 }
