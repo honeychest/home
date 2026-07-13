@@ -113,7 +113,10 @@
           안 뜨는 구글 공식 조건 (2026-07-13 승인·빌드 통과 — 미커밋, 실확인은 배포 후 폰에서).
           + 버튼 뒤 흰 직사각형 수정: 전역 index.css 의 color-scheme: dark 선언 때문에 크롬이
           라이트 iframe 의 투명을 취소하던 것 — .rcp-app 에 color-scheme light/dark 선언으로 교정
-          (tokens.css, 2026-07-13 승인 — 사용자 브라우저 확인 대기)</li>
+          (tokens.css, 2026-07-13 승인 — 사용자 브라우저 확인 대기).
+          + 테마색 하드코딩 전수 검사(2026-07-13 승인): 화면 코드는 토큰 준수 확인,
+          theme-color 메타는 --rcp-accent-strong 실행 시점 읽기로 전환(RecipeApp),
+          자동화 불가 정적 파일 2곳(manifest·icon.svg)은 tokens.css 상단 체크리스트로 명시</li>
       </ul>
     </li>
     <li class="doing">3차: Gemini 추출 + 등록 화면 + Share Target + 홈 섬네일 — 구현·실검증 완료, 채점·배포 남음

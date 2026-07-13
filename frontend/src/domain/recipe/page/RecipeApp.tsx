@@ -30,7 +30,11 @@ function useGikkaDocumentMeta() {
 
         const themeColor = document.createElement('meta');
         themeColor.name = 'theme-color';
-        themeColor.content = '#1f7a3d';
+        // 색의 원본은 tokens.css — 여기 하드코딩하면 테마 색 변경 시 이 줄만 옛 색으로 남는다 (2026-07-13)
+        const appRoot = document.getElementById('rcp-app');
+        themeColor.content = appRoot
+            ? getComputedStyle(appRoot).getPropertyValue('--rcp-accent-strong').trim()
+            : '';
         document.head.appendChild(themeColor);
 
         return () => {
