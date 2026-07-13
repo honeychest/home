@@ -51,8 +51,9 @@ export default function LoginPage({ onLogin }: { onLogin: (email: string) => voi
                     },
                 });
                 // 알약(pill) + 짧은 문구 — 길쭉한 직사각형 느낌 완화 (2026-07-12 사용자 확정)
+                // width 200 미만 = 개인화 버튼(사진+이메일 2줄) 표시 안 됨 — 구글 공식 조건 (2026-07-13 사용자 확정)
                 google.accounts.id.renderButton(buttonHost.current, {
-                    theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 240,
+                    theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 199,
                 });
             })
             .catch((e: Error) => setError(e.message));

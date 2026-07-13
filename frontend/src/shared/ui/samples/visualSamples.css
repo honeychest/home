@@ -1,3 +1,7 @@
+/* [AGENT] 공용 UI 효과 샘플 — animation hook 만 제공. 색은 currentColor, 크기·도형은 적용 화면이 정한다.
+   원장: visualSamples.js / 열람: admin > UI 샘플. 적립 규칙은 frontend/AGENTS.md. */
+
+/* ── 진행·대기 ─────────────────────────────────────────────── */
 .sample_live_spinner {
   animation: sample-live-spinner 2s linear infinite;
 }
@@ -21,10 +25,128 @@
   animation: sample-scan-beam 2.5s linear infinite;
 }
 
+.sample_status_pulse {
+  animation: sample-status-pulse 1.4s ease-in-out infinite;
+}
+
+.sample_wait_bounce {
+  animation: sample-wait-bounce 0.9s ease-in-out infinite;
+}
+
+/* 점 3개로 쓸 때: 형제마다 delay 를 어긋나게 */
+.sample_wait_bounce:nth-child(2) { animation-delay: 0.12s; }
+.sample_wait_bounce:nth-child(3) { animation-delay: 0.24s; }
+
+.sample_shimmer {
+  animation: sample-shimmer 1.1s linear infinite;
+}
+
+/* ── 강조·알림 ─────────────────────────────────────────────── */
 .sample_error_badge {
   animation: sample-error-attention 0.9s ease-in-out infinite;
 }
 
+.sample_alert_pulse {
+  animation: sample-alert-pulse 1.6s ease-in-out infinite;
+}
+
+.sample_ping {
+  animation: sample-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.sample_breathe {
+  animation: sample-breathe 1.7s ease-in-out infinite;
+}
+
+.sample_orbit_ring {
+  animation: sample-orbit-ring 1.8s ease-in-out infinite;
+}
+
+/* 아래 강조 6종은 유한 재생(2회) — 클래스를 붙이는 순간 재생. 다시 재생하려면 클래스 재부착 */
+.sample_wiggle {
+  animation: sample-wiggle 0.5s ease 2;
+}
+
+.sample_ring_sweep {
+  position: relative;
+  isolation: isolate; /* z-index:-1 링이 부모 배경 뒤로 숨지 않게 */
+}
+
+.sample_ring_sweep::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--sample-ring-angle), currentColor 0 12%, transparent 12% 100%);
+  z-index: -1;
+  animation: sample-ring-sweep 0.8s linear 2;
+}
+
+.sample_border_comet {
+  position: relative;
+}
+
+.sample_border_comet::before {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px 1px currentColor;
+  offset-path: border-box;
+  offset-distance: 0%;
+  pointer-events: none;
+  animation: sample-border-comet 1s linear 2;
+}
+
+.sample_shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.sample_shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  left: -50%;
+  transform: skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  animation: sample-shine 0.7s ease 2;
+}
+
+.sample_flash {
+  animation: sample-flash 0.8s ease 2;
+}
+
+.sample_pop {
+  animation: sample-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 2;
+}
+
+/* ── 등장 (1회성 — 실사용은 1회 재생, 카탈로그만 반복) ────── */
+.sample_pop_in {
+  animation: sample-pop-in 0.3s ease-out 1 both;
+}
+
+.sample_slide_in {
+  animation: sample-slide-in 0.25s ease-out 1 both;
+}
+
+.sample_card_in {
+  animation: sample-card-in 0.35s ease-out 1 both;
+}
+
+.sample_tag_in {
+  animation: sample-tag-in 0.25s ease 1 both;
+}
+
+.sample_swap_in {
+  animation: sample-swap-in 0.2s ease-out 1 both;
+}
+
+/* ── 흐름 ─────────────────────────────────────────────────── */
 .sample_route_flow {
   animation: sample-route-flow 1.2s ease-in-out infinite;
 }
@@ -33,10 +155,58 @@
   animation: sample-route-arrow 1.5s cubic-bezier(0.32, 0, 0.18, 1) infinite;
 }
 
-.sample_orbit_ring {
-  animation: sample-orbit-ring 1.8s ease-in-out infinite;
+.sample_rail_comet {
+  background-image: linear-gradient(180deg, transparent, currentColor, transparent);
+  background-repeat: no-repeat;
+  background-size: 100% 45%;
+  animation: sample-rail-comet 1.5s ease-in-out infinite;
 }
 
+.sample_rail_flow {
+  animation: sample-rail-flow 1.3s ease-in-out infinite;
+}
+
+/* ── 연출 (1회성) ─────────────────────────────────────────── */
+.sample_sticker_arrive {
+  animation: sample-sticker-arrive 0.6s cubic-bezier(0.22, 1, 0.36, 1) 1 both;
+}
+
+.sample_shockwave {
+  position: relative;
+}
+
+.sample_shockwave::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 2px solid currentColor;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  animation: sample-shockwave 0.45s ease-out 0.3s 1 forwards;
+}
+
+.sample_fanfare_pulse {
+  animation: sample-fanfare-pulse 0.5s cubic-bezier(0.22, 1, 0.36, 1) 1 both;
+}
+
+.sample_dock_in {
+  animation: sample-dock-in 0.35s ease-out 1 both;
+}
+
+.sample_stamp_in {
+  animation: sample-stamp-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) 1 both;
+}
+
+.sample_throw_in {
+  animation: sample-throw-in 0.75s cubic-bezier(0.22, 1, 0.36, 1) 1 both;
+}
+
+.sample_slam_in {
+  animation: sample-slam-in 0.5s ease-in 1 both;
+}
+
+/* ── keyframes ────────────────────────────────────────────── */
 @keyframes sample-live-spinner {
   to {
     transform: rotate(360deg);
@@ -52,6 +222,30 @@
   }
 }
 
+@keyframes sample-scan-beam {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+@keyframes sample-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@keyframes sample-wait-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.55; }
+  50% { transform: translateY(-6px); opacity: 1; }
+}
+
+@keyframes sample-shimmer {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.25); }
+}
+
 @keyframes sample-error-attention {
   0%, 100% {
     filter: drop-shadow(0 0 0 currentColor);
@@ -61,13 +255,60 @@
   }
 }
 
-@keyframes sample-scan-beam {
+@keyframes sample-alert-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px currentColor, 0 0 8px 0 transparent; opacity: 0.75; }
+  50% { box-shadow: 0 0 0 1px currentColor, 0 0 12px 0 currentColor; opacity: 1; }
+}
+
+@keyframes sample-ping {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: 0.95; }
+  65% { box-shadow: 0 0 0 8px transparent; opacity: 1; }
+  100% { box-shadow: 0 0 0 10px transparent; opacity: 0.95; }
+}
+
+@keyframes sample-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+@keyframes sample-orbit-ring {
   0% {
-    transform: translateX(-120%);
+    opacity: 0.6;
+    transform: scale(0.5);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.5);
   }
   100% {
-    transform: translateX(420%);
+    opacity: 0.6;
+    transform: scale(0.5);
   }
+}
+
+@keyframes sample-pop-in {
+  from { transform: scale(0.82) translateY(12px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes sample-slide-in {
+  from { transform: translateX(-10px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes sample-card-in {
+  from { transform: translateY(10px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes sample-tag-in {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes sample-swap-in {
+  from { transform: translateY(4px); opacity: 0.35; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 @keyframes sample-route-flow {
@@ -98,17 +339,106 @@
   }
 }
 
-@keyframes sample-orbit-ring {
-  0% {
-    opacity: 0.6;
-    transform: scale(0.5);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.5);
-  }
-  100% {
-    opacity: 0.6;
-    transform: scale(0.5);
+@keyframes sample-rail-comet {
+  0% { opacity: 0; background-position: 0 -120%; }
+  18%, 68% { opacity: 1; }
+  100% { opacity: 0.15; background-position: 0 220%; }
+}
+
+@keyframes sample-rail-flow {
+  0% { opacity: 0; transform: translateY(-8px); }
+  18%, 68% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(8px); }
+}
+
+@keyframes sample-sticker-arrive {
+  0% { transform: translateY(60%) scale(1.4); opacity: 0; }
+  50% { transform: translateY(0) scale(1); opacity: 1; }
+  65% { transform: scaleX(1.28) scaleY(0.72); }
+  82% { transform: scaleX(0.92) scaleY(1.07); }
+  100% { transform: scale(1); }
+}
+
+@keyframes sample-shockwave {
+  0% { opacity: 0.85; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2); }
+}
+
+@keyframes sample-fanfare-pulse {
+  0% { transform: scale(0.72); opacity: 0; }
+  22% { opacity: 0.92; }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes sample-dock-in {
+  from { transform: translateY(-8px) scale(0.96); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes sample-wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-6deg); }
+  75% { transform: rotate(6deg); }
+}
+
+@property --sample-ring-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes sample-ring-sweep {
+  from { --sample-ring-angle: 0deg; }
+  to { --sample-ring-angle: 360deg; }
+}
+
+@keyframes sample-border-comet {
+  0% { offset-distance: 0%; opacity: 1; }
+  100% { offset-distance: 100%; opacity: 1; }
+}
+
+@keyframes sample-shine {
+  to { left: 130%; }
+}
+
+@keyframes sample-flash {
+  0%, 100% { background-color: transparent; }
+  40% { background-color: color-mix(in srgb, currentColor 18%, transparent); }
+}
+
+@keyframes sample-pop {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14); }
+}
+
+@keyframes sample-stamp-in {
+  0% { transform: translateY(-150%) scale(1.5); opacity: 0; }
+  50% { transform: translateY(0) scale(1); opacity: 1; }
+  65% { transform: scaleX(1.28) scaleY(0.72); }
+  82% { transform: scaleX(0.92) scaleY(1.07); }
+  100% { transform: scale(1); }
+}
+
+@keyframes sample-throw-in {
+  0% { transform: translateX(280%) rotate(420deg) scale(1.4); opacity: 0; }
+  55% { transform: translateX(0) rotate(0deg) scale(1); opacity: 1; }
+  68% { transform: scaleX(1.22) scaleY(0.78); }
+  84% { transform: scaleX(0.94) scaleY(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes sample-slam-in {
+  0% { transform: scale(2.8); opacity: 0; }
+  55% { transform: scale(1); opacity: 1; }
+  70% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+/* 모션 최소화 설정 존중 — 샘플 효과 전체 정지 */
+@media (prefers-reduced-motion: reduce) {
+  [class*="sample_"],
+  [class*="sample_"]::after {
+    animation: none !important;
   }
 }

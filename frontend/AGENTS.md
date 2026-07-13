@@ -16,6 +16,12 @@
 - API 호출은 도메인 저장소 인터페이스(`data/*Repository.ts`)를 거친다. 화면에서 fetch 직접 호출 금지.
 - 목록 화면 3상태: `items: T[] | null`(null=첫 로딩) + loadError + 다시 시도 버튼.
   모범: `src/domain/recipe/page/RecipesPage.tsx`.
+- 상태·진행 효과(깜빡임·스핀·스캔 등): `src/shared/ui/samples` 효과 카탈로그에서
+  먼저 고른다 (admin > "UI 샘플" 카드에서 실물 열람. 키 예: sample_live_spinner).
+  없으면 새 효과를 카탈로그에 등록한 뒤 사용 — 화면 CSS 에 일회성 keyframes 를 만들면 결함.
+  recipe 처럼 자체 토큰을 쓰는 도메인은 직접 import 하지 말고 참고·복사로 자기 방식 적용.
+- 적립 규칙: 이번 작업에서 2곳 이상 쓰일 만한 공용 요소(훅·컴포넌트·효과)를 만들었으면
+  커밋 전에 이 절에 등록한다 (효과는 카탈로그에도). 쓸수록 라이브러리가 커져야 정상.
 
 ## 금지
 - 서버 오류의 `e.message` 를 화면에 그대로 노출 — 실패 문구는 화면이 정한 고정

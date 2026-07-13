@@ -10,9 +10,10 @@
 }
 
 .modal {
-  width: min(760px, 94vw);
-  max-height: min(720px, 86vh);
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  width: min(860px, 94vw);
+  max-height: min(760px, 88vh);
   padding: 16px;
   border-radius: 16px;
   border: 1px solid var(--monitor-border);
@@ -20,113 +21,217 @@
   box-shadow: 0 24px 70px rgba(2, 6, 23, 0.24);
 }
 
-.grid {
+/* 그룹 영역만 스크롤 — 헤더·상세줄은 고정 (많아져도 상세줄이 항상 보임) */
+.groups {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
+  margin-top: 10px;
 }
 
-.card {
-  display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
+.group {
   min-width: 0;
-  padding: 12px;
-  border-radius: 14px;
+}
+
+.groupTitle {
+  margin: 0 0 6px;
+  color: var(--monitor-text-primary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.groupCount {
+  color: var(--monitor-text-secondary);
+  font-weight: 700;
+}
+
+/* 조밀 타일 — 96px 안팎으로 자동 줄바꿈, 24개가 한 화면에 들어가는 밀도 */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+
+.tile {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px;
+  border-radius: 10px;
   border: 1px solid rgba(17, 24, 39, 0.10);
   background: #fff;
+  cursor: pointer;
+  text-align: center;
+}
+
+.tile:hover {
+  border-color: rgba(13, 148, 136, 0.45);
+}
+
+.tileSelected {
+  border-color: var(--monitor-gauge-ok);
+  box-shadow: 0 0 0 1px var(--monitor-gauge-ok);
+}
+
+.tileKey {
+  overflow: hidden;
+  color: var(--monitor-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .preview {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 64px;
-  border-radius: 12px;
+  height: 44px;
+  border-radius: 8px;
   background:
     linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(15, 23, 42, 0.04)),
     #f8fafc;
   color: var(--monitor-gauge-ok);
+  overflow: hidden;
+}
+
+/* 1회성 효과는 카탈로그에서만 무한 반복으로 재생 (실사용은 1회) */
+.loop :global([class*="sample_"]) {
+  animation-iteration-count: infinite !important;
+  animation-duration: 1.6s !important;
+  animation-delay: 0s !important;
+}
+
+.loop :global([class*="sample_"])::after {
+  animation-iteration-count: infinite !important;
+  animation-duration: 1.6s !important;
+  animation-delay: 0s !important;
 }
 
 .glyph {
   display: inline-block;
-  width: 18px;
-  height: 18px;
   color: currentColor;
 }
 
-.preview :global(.sample_live_spinner) {
+/* ── 미리보기 도형 (원장의 shape 필드와 1:1 — 효과 CSS 와 무관한 카탈로그 전용) ── */
+.shape_dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.shape_ring {
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+
+.shape_ringOpen {
+  width: 16px;
+  height: 16px;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 999px;
   box-sizing: border-box;
 }
 
-.preview :global(.sample_live_dot) {
-  width: 14px;
-  height: 14px;
-  border: 2px solid currentColor;
+.shape_beam {
+  width: 56px;
+  height: 12px;
   border-radius: 999px;
-  background: currentColor;
-  box-sizing: border-box;
+  background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
-.preview :global(.sample_scan_beam) {
-  width: 58px;
-  height: 14px;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-}
-
-.preview :global(.sample_error_badge) {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: currentColor;
-  transform: rotate(45deg);
-}
-
-.preview :global(.sample_route_flow) {
-  width: 18px;
+.shape_bar {
+  width: 24px;
   height: 6px;
   border-radius: 999px;
   background: currentColor;
 }
 
-.preview :global(.sample_route_arrow) {
-  width: 12px;
-  height: 12px;
+.shape_pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.shape_pill::before {
+  content: "라벨";
+}
+
+.shape_card {
+  width: 34px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.shape_arrow {
+  width: 10px;
+  height: 10px;
   border-top: 2px solid currentColor;
   border-right: 2px solid currentColor;
   transform: rotate(45deg);
 }
 
-.preview :global(.sample_orbit_ring) {
-  width: 18px;
-  height: 18px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
+.shape_diamond {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: currentColor;
+  transform: rotate(45deg);
 }
 
-.meta {
-  min-width: 0;
+.shape_rail {
+  width: 6px;
+  height: 30px;
+  border-radius: 999px;
+  background-color: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* ── 하단 고정 상세줄 ── */
+.detail {
   display: grid;
   gap: 4px;
+  min-height: 74px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(17, 24, 39, 0.10);
+  background: #fff;
 }
 
-.key {
+.detailHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.detailKey {
   color: var(--monitor-text-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
   font-weight: 900;
 }
 
-.label {
+.detailLabel {
   color: var(--monitor-text-primary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
+}
+
+.detailOnce {
+  color: var(--monitor-text-secondary);
+  font-size: 11px;
 }
 
 .code {
@@ -143,5 +248,5 @@
 }
 
 @media (max-width: 768px) {
-  .grid { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
 }

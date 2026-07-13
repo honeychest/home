@@ -2,14 +2,24 @@
 
 이 폴더의 파일을 수정하기 전에 읽는다. 절차 규칙(승인·커밋·점검)은 `/chs/chs-rules.md`.
 
-## 가져다 쓸 것 — 같은 일을 하는 코드를 새로 만들면 그게 결함이다
-- 순수 판정(임계값·분류·매칭 등)은 컨트롤러/저장소에 인라인하지 말고
-  static 순수 함수 + 단위 테스트로. 모범: `domain/recipe/registration/RegistrationRules.java`,
-  `domain/recipe/fridge/FridgeRepository.rankFrequent`, `GeminiRecipeExtractor.parseEnvelope`.
-- 외부 HTTP 는 `RestClient.Builder` 주입으로 만들어 MockRestServiceServer 테스트 시임 확보.
-  모범: `domain/recipe/registration/GeminiRecipeExtractor.java`.
-- 외부 시스템(AI·메타 조회 등) 호출은 인터페이스 뒤에 격리 — 구현체 교체로 끝나게.
-  모범: `RecipeExtractor` / `VideoMetadataClient`.
+## 가져다 쓸 것 — 패턴 카탈로그 (같은 일을 하는 코드를 새로 만들면 그게 결함이다)
+지시할 때 키 이름으로 부를 수 있다 (예: "재고 알림은 pattern-queue-worker + pattern-failover-notify 로").
+모범 실물은 살아있는 프로덕션 코드다 — 별도 예제 코드를 만들지 말고 실물을 열어 모방한다.
+
+| 키 | 의도 (언제 쓰나) | 모범 실물 (recipe 는 `domain/recipe/` 아래) |
+|---|---|---|
+| pattern-pure-rules | 임계값·분류·매칭 등 순수 판정. 컨트롤러/저장소에 인라인 금지 — static 순수 함수 + 단위 테스트 | `registration/RegistrationRules.java`, `fridge/FridgeRepository.rankFrequent`, `GeminiRecipeExtractor.parseEnvelope` |
+| pattern-rest-seam | 외부 HTTP 호출 — `RestClient.Builder` 주입으로 MockRestServiceServer 테스트 시임 확보 | `registration/GeminiRecipeExtractor.java` |
+| pattern-port-adapter | 외부 시스템(AI·메타 조회 등) 인터페이스 격리 — 구현체 교체로 끝나게 | `RecipeExtractor` / `VideoMetadataClient` |
+| pattern-failover-notify | 외부 의존이 막혔을 때 폴백 전환 + 텔레그램 알림 | `GeminiRecipeExtractor` 페일오버 + `GikkaTelegramNotifier` |
+| pattern-queue-worker | DB 대기열 + 단일 워커 비동기 처리 (2인스턴스 중복 실행 안전) | `registration/RegistrationWorker.java` |
+| pattern-tx-template | 보조 DB(gikka) 트랜잭션 — 스프링 빈 TransactionManager 등록 금지(아래 금지 참조) | `GikkaDataSourceConfig` 의 `gikkaTxTemplate` |
+
+적립 규칙: 이번 작업에서 2곳 이상 쓰일 만한 구조를 만들었으면 커밋 전에 키를 붙여
+이 표에 등록한다. 실물이 리팩토링되면 키는 유지하고 경로만 갱신. 10개를 넘으면
+`springboot/docs/patterns.md` 로 분리하고 여기엔 링크만 남긴다.
+사람용 교보재(흐름 설명·뼈대 코드)는 `frontend/src/page/admin/backendPatterns.js` 원장 —
+admin > "백엔드 패턴"에서 열람. 패턴 등록·변경 시 표와 이 원장 두 곳을 함께 갱신한다.
 
 ## 금지
 - `domain/recipe` ↔ 다른 패키지 상호 import (ArchUnit 이 빌드에서 차단 — 규칙 완화 금지.

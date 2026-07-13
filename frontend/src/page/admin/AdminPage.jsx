@@ -29,6 +29,8 @@ import MyIpCard from './sections/MyIpCard';
 import AllowedIpsCard from './sections/AllowedIpsCard';
 import VisualSampleCard from './sections/VisualSampleCard';
 import VisualSampleModal from './sections/VisualSampleModal';
+import BackendPatternCard from './sections/BackendPatternCard';
+import BackendPatternModal from './sections/BackendPatternModal';
 
 export default function AdminPage() {
     const navigate = useNavigate();
@@ -46,6 +48,7 @@ export default function AdminPage() {
     const allowed = useAllowedIps({ enabled: featureFlags.flags.monitorAllowedIpManage });
 
     const [sampleOpen, setSampleOpen] = useState(false);
+    const [patternOpen, setPatternOpen] = useState(false);
 
     useEffect(() => {
         if (shouldRedirectToAdminLogin({ canAccess, isForbidden })) {
@@ -100,11 +103,13 @@ export default function AdminPage() {
                             patchFlags={featureFlags.patchFlags}
                         />
                         <VisualSampleCard onOpen={() => setSampleOpen(true)} />
+                        <BackendPatternCard onOpen={() => setPatternOpen(true)} />
                         {featureFlags.flags.monitorAllowedIpManage && <AllowedIpsCard allowed={allowed} />}
                     </aside>
                 </div>
             </div>
             <VisualSampleModal open={sampleOpen} onClose={() => setSampleOpen(false)} />
+            <BackendPatternModal open={patternOpen} onClose={() => setPatternOpen(false)} />
         </Layout>
     );
 }

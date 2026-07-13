@@ -47,8 +47,8 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-12 · 모델 페일오버 구현(404→latest 자동 전환+텔레그램) +
-    dev 대기열 음악 영상 4건 정리 완료. 다음: 채점 계속 → 서버 .env 2줄 → 커밋·배포</div>
+  <div class="updated">갱신: 2026-07-13 · 로그인 버튼 개인화(2줄 투박 UI) 차단 — width 199 (200 미만이면
+    안 뜨는 구글 공식 조건). 다음: 채점 계속 → 서버 .env 2줄 → 커밋·배포</div>
 </header>
 
 <div class="card">
@@ -108,7 +108,9 @@
           프론트 첫 테스트 기반), 냉장고 화면 인라인 style 6곳 → 킷 클래스, 조작 실행기 runMutation
           (실패 문구·연타 방지·재동기화 한 곳 + 에러 계약 CONTEXT.md 확정). Secure 쿠키 반영</li>
         <li class="done">배포 후 실검증: 폰 https(devcontext.net)에서 구글 로그인 → 냉장고 실사용 확인 (2026-07-12)</li>
-        <li class="done">로그인 버튼 다듬기: 구글 렌더 옵션 pill·signin_with·240px (2026-07-12 승인 — 미커밋)</li>
+        <li class="done">로그인 버튼 다듬기: 구글 렌더 옵션 pill·signin_with (2026-07-12 승인) →
+          width 199 로 변경해 개인화 버튼(사진+이메일 2줄, 투박) 차단 — width 200 미만이면
+          안 뜨는 구글 공식 조건 (2026-07-13 승인·빌드 통과 — 미커밋, 실확인은 배포 후 폰에서)</li>
       </ul>
     </li>
     <li class="doing">3차: Gemini 추출 + 등록 화면 + Share Target + 홈 섬네일 — 구현·실검증 완료, 채점·배포 남음
@@ -179,6 +181,9 @@
     <li>보류(사용자 요청): 앱 아이콘 그린이 너무 어두움 — 밝은 그린(#2aa257)으로 재생성 + 모양 다듬기 (5차에 포함)</li>
     <li>배포 시 확인: PWA 아이콘이 SVG 하나뿐 — 홈화면 추가 시 아이콘이 안 나오면 PNG(192/512px) 추가 필요</li>
     <li>개발 서버 실행법: frontend 폴더에서 npm run dev → 폰(같은 와이파이)에서 http://172.30.1.45:5173/recipe</li>
+    <li>디자인 시안 원본(냉장고 UI 테스트 13종 + 효과 갤러리): claude.ai 아티팩트
+      6a3c89d6-f427-437f-a3ab-08a3fcac0389 — 원자 효과 9종은 2026-07-13 공용 카탈로그
+      (shared/ui/samples, admin > UI 샘플)에 적립 완료. 조합 프리셋은 등록 안 함(조합 규칙은 samples/README.md)</li>
   </ul>
 </div>
 
