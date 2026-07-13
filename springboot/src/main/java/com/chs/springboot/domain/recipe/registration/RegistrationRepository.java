@@ -63,7 +63,7 @@ public class RegistrationRepository {
                                 int maxVideoMinutes) {
         return Boolean.TRUE.equals(tx.execute(status -> {
             videos.insertIfAbsent(videoId, meta, maxVideoMinutes);
-            videos.reviveIfRemoved(videoId);
+            videos.reviveIfRemoved(videoId, meta, maxVideoMinutes);
             return jdbc.sql("""
                             INSERT INTO registration (user_id, video_id) VALUES (:userId, :videoId)
                             ON CONFLICT (user_id, video_id) DO NOTHING

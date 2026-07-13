@@ -44,6 +44,17 @@ public class VideoRepository {
                 .query(Integer.class).single() > 0;
     }
 
+    /**
+     * 메타 조회 생략 여부 판단용 (2026-07-13 확정 — REMOVED 는 "존재하지만 되살아나야 할" 상태라
+     * exists() 만 보면 메타를 영원히 못 채움). REMOVED 는 존재하지 않는 것처럼 취급해 메타를
+     * 다시 조회하게 한다.
+     */
+    public boolean existsActive(String videoId) {
+        return jdbc.sql("SELECT COUNT(*) FROM video WHERE video_id = :videoId AND status <> 'REMOVED'")
+                .param("videoId", videoId)
+                .query(Integer.class).single() > 0;
+    }
+
     /** 영상이 이미 있으면 아무 일도 안 함(메타 조회·분석 0회 — CONTEXT.md 확정). 없으면 새로 생성.
         description(설명란)은 재료가 원문으로 적힌 경우가 많아 분석 시 최우선 활용 (2026-07-13 확정) */
     public void insertIfAbsent(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta,
@@ -134,17 +145,34 @@ public class VideoRepository {
                 .param("videoId", videoId).update();
     }
 
-    /** 재분석: 상태·분류·결과 초기화 후 대기열 맨 뒤로 (영상 단위 — 등록한 모든 계정에 반영, 확정 결정).
-        @return false = 없는 영상 (404) */
-    public boolean reanalyze(String videoId) {
+    /**
+     * 재분석: 상태·분류·결과 초기화 후 대기열 맨 뒤로 (영상 단위 — 등록한 모든 계정에 반영, 확정 결정).
+     * 메타(제목·썸네일·길이·설명란)도 함께 갱신 (2026-07-13 확정 — 실측 발견: description 활용
+     * 기능 도입 전에 등록된 영상은 재분석해도 description 이 계속 NULL이라 새 기능이 무용지물이었음.
+     * meta 필드가 없으면(조회 실패 등) 기존 값 유지(COALESCE) — 메타 조회 실패가 재분석을 막지 않음.
+     * 길이 컷도 새 duration 기준으로 재판정(과거엔 무조건 WAITING — 갱신된 길이가 7분 초과로 바뀌는
+     * 경우까지 반영). @return false = 없는 영상 (404)
+     */
+    public boolean reanalyze(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta,
+                             int maxVideoMinutes) {
+        String status = RegistrationRules.initialStatus(
+                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null), maxVideoMinutes);
         return jdbc.sql("""
                         UPDATE video
-                        SET status = 'WAITING', category = NULL, recipe_json = NULL,
+                        SET status = :status, category = NULL, recipe_json = NULL,
                             summary = NULL, tags = NULL, summary_version = NULL,
                             attempt_count = 0, analyzing_started_at = NULL, last_error = NULL,
-                            analysis_seconds = NULL, queued_at = now()
+                            analysis_seconds = NULL, queued_at = now(),
+                            title = COALESCE(:title, title), thumbnail_url = COALESCE(:thumb, thumbnail_url),
+                            duration_seconds = COALESCE(:duration, duration_seconds),
+                            description = COALESCE(:description, description)
                         WHERE video_id = :videoId
                         """)
+                .param("status", status)
+                .param("title", meta.map(VideoMetadataClient.VideoMetadata::title).orElse(null))
+                .param("thumb", meta.map(VideoMetadataClient.VideoMetadata::thumbnailUrl).orElse(null))
+                .param("duration", meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null))
+                .param("description", meta.map(VideoMetadataClient.VideoMetadata::description).orElse(null))
                 .param("videoId", videoId).update() > 0;
     }
 
@@ -166,13 +194,29 @@ public class VideoRepository {
                 .param("videoId", videoId).update();
     }
 
-    /** REMOVED 상태였던 영상을 누군가 다시 등록하면 자동으로 되살림(WAITING) — insertIfAbsent 뒤에 항상 호출 */
-    public void reviveIfRemoved(String videoId) {
+    /**
+     * REMOVED 상태였던 영상을 누군가 다시 등록하면 자동으로 되살림(WAITING) — insertIfAbsent 뒤에
+     * 항상 호출. 메타도 함께 갱신(2026-07-13 확정 — reanalyze 와 같은 이유: 되살릴 때 메타를
+     * 안 갱신하면 description 등이 계속 비어있을 수 있음). meta 는 컨트롤러가 existsActive() 로
+     * REMOVED 를 "신규"처럼 취급해 미리 조회해 온 것 — 조회 실패 시 기존 값 유지(COALESCE).
+     */
+    public void reviveIfRemoved(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta,
+                                int maxVideoMinutes) {
+        String status = RegistrationRules.initialStatus(
+                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null), maxVideoMinutes);
         jdbc.sql("""
                         UPDATE video
-                        SET status = 'WAITING', queued_at = now()
+                        SET status = :status, queued_at = now(),
+                            title = COALESCE(:title, title), thumbnail_url = COALESCE(:thumb, thumbnail_url),
+                            duration_seconds = COALESCE(:duration, duration_seconds),
+                            description = COALESCE(:description, description)
                         WHERE video_id = :videoId AND status = 'REMOVED'
                         """)
+                .param("status", status)
+                .param("title", meta.map(VideoMetadataClient.VideoMetadata::title).orElse(null))
+                .param("thumb", meta.map(VideoMetadataClient.VideoMetadata::thumbnailUrl).orElse(null))
+                .param("duration", meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null))
+                .param("description", meta.map(VideoMetadataClient.VideoMetadata::description).orElse(null))
                 .param("videoId", videoId).update();
     }
 

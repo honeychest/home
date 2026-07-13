@@ -72,7 +72,7 @@ public class RegistrationController {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 등록된 영상");
         }
         Optional<VideoMetadataClient.VideoMetadata> meta =
-                videos.exists(videoId) ? Optional.empty() : metadata.fetchOne(videoId);
+                videos.existsActive(videoId) ? Optional.empty() : metadata.fetchOne(videoId);
         repository.registerLink(userId, videoId, meta, properties.getMaxVideoMinutes());
         return repository.find(userId, videoId).map(this::toResponse)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "등록 직후 조회 실패"));
@@ -84,7 +84,7 @@ public class RegistrationController {
         String playlistId = YoutubeVideoId.parsePlaylistId(nonNullUrl(request))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "재생목록 링크 인식 불가"));
         List<String> videoIds = metadata.playlistVideoIds(playlistId);
-        List<String> unknownVideoIds = videoIds.stream().filter(id -> !videos.exists(id)).toList();
+        List<String> unknownVideoIds = videoIds.stream().filter(id -> !videos.existsActive(id)).toList();
         Map<String, VideoMetadataClient.VideoMetadata> metaById =
                 RegistrationRules.metadataById(metadata.fetch(unknownVideoIds));
         int added = 0;
@@ -101,13 +101,17 @@ public class RegistrationController {
         return Map.of("added", added);
     }
 
-    /** 재분석은 영상 단위 — 등록한 모든 계정에 반영 (2026-07-13 확정). 요청자가 등록한 영상인지만 확인 */
+    /**
+     * 재분석은 영상 단위 — 등록한 모든 계정에 반영 (2026-07-13 확정). 요청자가 등록한 영상인지만 확인.
+     * 메타도 함께 재조회(2026-07-13 확정 — description 활용 기능 도입 전 등록된 영상은 재분석해도
+     * description 이 안 채워지던 문제 수정. 조회 실패해도 재분석 자체는 진행됨).
+     */
     @PostMapping("/{videoId}/reanalyze")
     public void reanalyze(@GikkaUserId long userId, @PathVariable String videoId) {
         if (!repository.exists(userId, videoId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "등록된 영상이 아님");
         }
-        videos.reanalyze(videoId);
+        videos.reanalyze(videoId, metadata.fetchOne(videoId), properties.getMaxVideoMinutes());
     }
 
     /** limit 필수 — 표시 개수의 원본은 프론트 상수 하나뿐 (서버 기본값 이중 정의 금지) */
@@ -149,11 +153,12 @@ public class RegistrationController {
                 items);
     }
 
-    /** 모니터링 화면 전용 강제 재분석 — 오너 전용, 요청자 본인이 등록했는지 여부와 무관 (2026-07-13 확정) */
+    /** 모니터링 화면 전용 강제 재분석 — 오너 전용, 요청자 본인이 등록했는지 여부와 무관 (2026-07-13 확정).
+        메타도 함께 재조회 (일반 재분석과 동일 이유) */
     @PostMapping("/monitor/{videoId}/reanalyze")
     public void monitorReanalyze(@GikkaUserId long userId, @PathVariable String videoId) {
         requireOwner(userId);
-        videos.reanalyze(videoId);
+        videos.reanalyze(videoId, metadata.fetchOne(videoId), properties.getMaxVideoMinutes());
     }
 
     /**
