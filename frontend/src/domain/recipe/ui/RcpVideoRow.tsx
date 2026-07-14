@@ -24,9 +24,11 @@ export default function RcpVideoRow({ title, thumbnailUrl, badge, meta, onClick 
             </span>
             <span className="rcp-video-row-body">
                 <span className="rcp-video-row-title">{title}</span>
+            </span>
+            <span className="rcp-video-row-trailing">
+                {badge}
                 {meta !== undefined && <span className="rcp-video-row-meta">{meta}</span>}
             </span>
-            {badge}
         </button>
     );
 }

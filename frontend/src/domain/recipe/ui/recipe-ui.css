@@ -200,10 +200,15 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.rcp-video-row-meta { font-size: var(--rcp-fs-2xs); color: var(--rcp-text-faint); }
-/* 배지 폭 고정(2026-07-14 확정): 상태 라벨 길이가 제각각이라(대기 중/긴 영상/삭제됨 등)
+/* 오른쪽 칼럼(배지+날짜) — 세로로 쌓아 제목(최대 2줄)과 시각적 높이를 맞춘다
+   (2026-07-14 확정). 배지 폭 고정: 상태 라벨 길이가 제각각이라(대기 중/긴 영상/삭제됨 등)
    고정 안 하면 제목 영역 폭이 행마다 달라져 카드 정렬이 흔들림 */
-.rcp-video-row > .rcp-badge { flex: 0 0 auto; min-width: 64px; justify-content: center; }
+.rcp-video-row-trailing {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+}
+.rcp-video-row-trailing > .rcp-badge { min-width: 64px; justify-content: center; }
+.rcp-video-row-meta { font-size: var(--rcp-fs-2xs); color: var(--rcp-text-faint); }
 
 /* ── 홈 섬네일 줄: rcp-thumb-strip > rcp-thumb (최근 분석 완료 — 쇼츠 비율 세로 카드) ── */
 .rcp-thumb-strip {
@@ -266,6 +271,7 @@
   width: 100%;
   max-height: 70dvh; /* 위 30%는 항상 배경 노출 — 탭으로 닫을 여백 확보 (2026-07-14 확정) */
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   background: var(--rcp-surface);
   border-radius: var(--rcp-radius-xl) var(--rcp-radius-xl) 0 0;
   box-shadow: var(--rcp-shadow-sheet);

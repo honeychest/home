@@ -28,10 +28,10 @@ const DUPLICATE_TEXT = '이미 등록된 영상이에요';
 const PASTE_FAIL_TEXT = '클립보드를 읽지 못했어요 — 직접 붙여넣어 주세요';
 
 const STATUS_LABEL: Record<Exclude<RegistrationStatus, 'DONE'>, string> = {
-    WAITING: '대기 중',
-    ANALYZING: '분석 중',
+    WAITING: '분석대기',
+    ANALYZING: '분석중',
     TOO_LONG: '긴 영상',
-    FAILED: '실패',
+    FAILED: '분석실패',
     REMOVED: '삭제됨',
 };
 // 분석 완료(DONE)는 상태 대신 분류를 보여준다 (2026-07-12 확정: 요리/유틸/기타)
@@ -40,9 +40,14 @@ const CATEGORY_LABEL: Record<VideoCategory, string> = {
     TIP: '유틸',
     ETC: '기타',
 };
-/** 배지 문구: 완료 항목은 분류, 나머지는 진행 상태 */
-const itemLabel = (item: RegistrationItem): string =>
-    item.status === 'DONE' ? CATEGORY_LABEL[item.category ?? 'ETC'] : STATUS_LABEL[item.status];
+/** 배지 문구: 요리로 완료된 항목은 배지 없음(정상 흐름이라 따로 표시할 필요 없음 — 2026-07-14
+    확정), 유틸·기타는 분류, 나머지는 진행 상태 */
+const itemLabel = (item: RegistrationItem): string | null => {
+    if (item.status === 'DONE') {
+        return item.category === 'RECIPE' ? null : CATEGORY_LABEL[item.category ?? 'ETC'];
+    }
+    return STATUS_LABEL[item.status];
+};
 /** 배지 톤 규칙: 채움 = 정상 흐름 / 테두리만 = 제외·문제 */
 const itemBadge = (item: RegistrationItem): RcpBadgeVariant => {
     if (item.status === 'DONE') return item.category === 'RECIPE' ? 'default' : 'excluded';
@@ -71,8 +76,10 @@ const playlistAddedText = (count: number) => `재생목록에서 ${count}개를 
 // 문구/데이터 분리 (품질 기본선 7): 조합 문구는 템플릿 한 곳에
 const summaryBadgeText = (label: string, count: number) => `${label} ${count}`;
 const justAddedTagText = (label: string) => `${label} ✓`;
-const resultMetaText = (item: RegistrationItem) =>
-    `${itemLabel(item)} · ${formatRegisteredAt(item.registeredAt)}`;
+const resultMetaText = (item: RegistrationItem) => {
+    const label = itemLabel(item);
+    return label ? `${label} · ${formatRegisteredAt(item.registeredAt)}` : formatRegisteredAt(item.registeredAt);
+};
 // 실패 문구 결정 — useMutation 에 모듈 레벨로 넘긴다 (렌더마다 재생성 방지)
 const mutationMessage = (e: unknown) =>
     e instanceof DuplicateVideoError ? DUPLICATE_TEXT : MUTATION_ERROR_TEXT;
@@ -165,7 +172,11 @@ export default function RecipesPage() {
     const handleUnregister = (item: RegistrationItem) => mutation.run(async () => {
         await registrationRepository.unregister(item.videoId);
         setSelected(null);
-        await reload();
+        // 낙관적 업데이트 (2026-07-14 확정): 성공을 이미 아니까 전체 재조회 대신 로컬에서
+        // 바로 제거 — 재조회 왕복이 없어져 삭제 직후 체감 지연이 사라진다.
+        // 실패 시엔 이 줄까지 오지 않고 useMutation 의 자동 재동기화(reload)가 서버 상태로
+        // 복구한다 (삭제 안 된 항목이 다시 나타남 — 별도 복구 로직 불필요).
+        setItems((prev) => prev?.filter((i) => i.videoId !== item.videoId) ?? prev);
     });
 
     const openRegisterSheet = () => {
@@ -177,10 +188,12 @@ export default function RecipesPage() {
 
     const errorLine = <RcpInlineError message={mutation.error} />;
 
-    // 요약줄: 표시 문구(완료·유틸·기타·대기 중…) 기준으로 집계, 0인 것은 숨김
+    // 요약줄: 표시 문구(유틸·기타·분석대기…) 기준으로 집계 — 정상 완료된 요리는 배지가 없어
+    // 집계에서도 제외된다(0인 것은 숨김과 같은 취지: 주의가 필요한 상태만 보여줌)
     const summary = items
         ? items.reduce<{ label: string; variant: RcpBadgeVariant; count: number }[]>((acc, item) => {
             const label = itemLabel(item);
+            if (!label) return acc;
             const found = acc.find((s) => s.label === label);
             if (found) found.count += 1;
             else acc.push({ label, variant: itemBadge(item), count: 1 });
@@ -222,16 +235,19 @@ export default function RecipesPage() {
                         {items.length === 0 && (
                             <p className="rcp-empty">아직 등록한 영상이 없어요. 아래 [+ 영상 등록]으로 시작해 보세요.</p>
                         )}
-                        {items.map((item) => (
-                            <RcpVideoRow
-                                key={item.videoId}
-                                title={item.title ?? item.url}
-                                thumbnailUrl={item.thumbnailUrl}
-                                badge={<RcpBadge variant={itemBadge(item)}>{itemLabel(item)}</RcpBadge>}
-                                meta={formatRegisteredAt(item.registeredAt)}
-                                onClick={() => setSelected(item)}
-                            />
-                        ))}
+                        {items.map((item) => {
+                            const label = itemLabel(item);
+                            return (
+                                <RcpVideoRow
+                                    key={item.videoId}
+                                    title={item.title ?? item.url}
+                                    thumbnailUrl={item.thumbnailUrl}
+                                    badge={label ? <RcpBadge variant={itemBadge(item)}>{label}</RcpBadge> : undefined}
+                                    meta={formatRegisteredAt(item.registeredAt)}
+                                    onClick={() => setSelected(item)}
+                                />
+                            );
+                        })}
                     </section>
 
                     <RcpButton className="rcp-btn-full" id="rcp-register-button" onClick={openRegisterSheet}>
