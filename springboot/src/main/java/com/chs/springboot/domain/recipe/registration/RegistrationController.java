@@ -52,11 +52,15 @@ public class RegistrationController {
     public record RegisterRequest(String url) {
     }
 
-    /** 프론트 RegistrationItem 과 1:1 (summary=TIP/ETC 요약, tags=검색 태그 — 2026-07-13 확정) */
+    /** 프론트 RegistrationItem 과 1:1 (summary=TIP/ETC 요약, tags=검색 태그 — 2026-07-13 확정).
+        analysisSignals: 이 분석에 실제로 쓸 수 있었던 원시 신호 목록(예: ["FRAMES","DESCRIPTION"] —
+        TRANSCRIPT 가 빠졌으면 음성 인식이 거의 안 됐다는 뜻) — 경고 문구는 프론트가 도출
+        (2026-07-14 확정, pattern-raw-signal) */
     public record RegistrationResponse(String videoId, String url, String platform, String category,
                                        String status, String title, String thumbnailUrl,
                                        Integer durationSeconds, JsonNode recipe,
-                                       String summary, JsonNode tags, String registeredAt) {
+                                       String summary, JsonNode tags, String registeredAt,
+                                       JsonNode analysisSignals) {
     }
 
     @GetMapping
@@ -195,7 +199,8 @@ public class RegistrationController {
                 readJson(row.recipeJson(), "recipe_json", row.videoId()),
                 row.summary(),
                 readJson(row.tagsJson(), "tags", row.videoId()),
-                row.registeredAt().toString());
+                row.registeredAt().toString(),
+                readJson(row.analysisSignalsJson(), "analysis_signals", row.videoId()));
     }
 
     private JsonNode readJson(String json, String column, String videoId) {

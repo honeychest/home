@@ -608,6 +608,12 @@
 .rcp-sheet-meta { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); }
 /* 결과 시트(3차) — 상태 설명 문단 / 조리 순서 요약 목록 */
 .rcp-sheet-detail { font-size: var(--rcp-fs-md); color: var(--rcp-text); overflow-wrap: anywhere; }
+/* 분석 품질 경고 — data/analysisQuality.ts 가 도출한 문구를 담는 콜아웃 (2026-07-14 확정) */
+.rcp-quality-warning {
+  font-size: var(--rcp-fs-sm); color: var(--rcp-status-warning-text);
+  background: var(--rcp-status-warning-bg); border-radius: var(--rcp-radius-sm);
+  padding: 8px 12px; overflow-wrap: anywhere;
+}
 .rcp-step-list {
   /* 2026-07-14 확정 — 번호가 안 보이던 원인 2가지 모두 수정:
      1) display:flex 였던 걸 되돌림 — flex/grid 컨테이너의 자식은 브라우저가 리스트

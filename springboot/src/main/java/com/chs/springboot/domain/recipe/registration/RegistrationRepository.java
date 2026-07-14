@@ -32,12 +32,13 @@ public class RegistrationRepository {
     public record Row(String videoId, String url, String platform, String category,
                       String status, String title, String thumbnailUrl, Integer durationSeconds,
                       String recipeJson, String summary, String tagsJson,
-                      int attemptCount, OffsetDateTime registeredAt) {
+                      int attemptCount, OffsetDateTime registeredAt, String analysisSignalsJson) {
     }
 
     private static final String JOINED_COLUMNS =
             "v.video_id, v.url, v.platform, v.category, v.status, v.title, v.thumbnail_url, "
-            + "v.duration_seconds, v.recipe_json, v.summary, v.tags, v.attempt_count, r.registered_at";
+            + "v.duration_seconds, v.recipe_json, v.summary, v.tags, v.attempt_count, r.registered_at, "
+            + "v.analysis_signals";
     private static final String JOIN = "FROM registration r JOIN video v ON v.video_id = r.video_id ";
 
     public List<Row> list(long userId) {
@@ -149,6 +150,7 @@ public class RegistrationRepository {
                 rs.getString("summary"),
                 rs.getString("tags"),
                 rs.getInt("attempt_count"),
-                rs.getObject("registered_at", OffsetDateTime.class));
+                rs.getObject("registered_at", OffsetDateTime.class),
+                rs.getString("analysis_signals"));
     }
 }

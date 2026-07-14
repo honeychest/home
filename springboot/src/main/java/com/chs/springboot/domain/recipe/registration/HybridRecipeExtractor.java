@@ -27,8 +27,10 @@ public class HybridRecipeExtractor implements RecipeExtractor {
 
     @Override
     public ExtractionResult extract(String videoUrl, String description) {
+        Integer transcriptChars = null; // 로컬이 아예 안 돌면 null 그대로 (2026-07-14, pattern-raw-signal)
         try {
             ExtractionResult localResult = local.extract(videoUrl, description);
+            transcriptChars = localResult.transcriptChars();
             if ("RECIPE".equals(localResult.category())) {
                 return localResult;
             }
@@ -36,6 +38,8 @@ public class HybridRecipeExtractor implements RecipeExtractor {
         } catch (LocalRecipeExtractor.LocalUnavailableException e) {
             log.warn("[gikka] 로컬 추출 불가 — Gemini 로 전체 폴백: {}", e.getMessage());
         }
-        return gemini.extract(videoUrl, description);
+        // TIP/ETC 로 버려진 로컬 결과라도 transcriptChars(음성 인식 신호)는 최종 채택 결과에 이어붙인다 —
+        // "이 영상에 음성 정보가 얼마나 있었나"는 어느 쪽이 채택되든 변하지 않는 사실이므로
+        return gemini.extract(videoUrl, description).withTranscriptChars(transcriptChars);
     }
 }

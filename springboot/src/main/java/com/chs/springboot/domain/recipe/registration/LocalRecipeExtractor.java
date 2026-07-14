@@ -55,13 +55,16 @@ public class LocalRecipeExtractor implements RecipeExtractor {
         }
     }
 
-    /** 응답 봉투 파싱 — 호스트 서비스가 ExtractionResult 와 1:1 JSON 을 그대로 돌려줌 */
+    /** 응답 봉투 파싱 — 호스트 서비스가 ExtractionResult 와 1:1 JSON 을 그대로 돌려줌.
+        transcriptChars: gikka/server.py 가 whisper 전사 글자 수를 함께 실어 보냄
+        (2026-07-14 확정, pattern-raw-signal — "음성 인식이 얼마나 됐는지"는 로컬만 아는 사실) */
     static ExtractionResult parse(JsonNode json) {
         String category = json.path("category").asText("ETC");
         List<String> tags = toList(json.path("tags"));
+        Integer transcriptChars = json.hasNonNull("transcriptChars") ? json.get("transcriptChars").asInt() : null;
         if (!"RECIPE".equals(category)) {
             return new ExtractionResult(category, null, null, null, null,
-                    json.path("summary").asText(null), tags);
+                    json.path("summary").asText(null), tags, transcriptChars);
         }
         return new ExtractionResult(
                 category,
@@ -70,7 +73,7 @@ public class LocalRecipeExtractor implements RecipeExtractor {
                 json.hasNonNull("cookMinutes") ? json.get("cookMinutes").asInt() : null,
                 toList(json.path("steps")),
                 null,
-                tags);
+                tags, transcriptChars);
     }
 
     private static List<String> toList(JsonNode array) {

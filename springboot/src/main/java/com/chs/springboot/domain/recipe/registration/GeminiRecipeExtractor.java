@@ -36,8 +36,14 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                - steps: 조리 순서 요약. 각 단계를 짧은 한 문장으로, 3~7개.
             3. RECIPE 가 아닌 경우에만:
                - summary: 영상의 요점 요약 2~3문장. 나중에 다시 찾을 때 내용을 떠올릴 수 있게.
+                 화면·음성·설명란에서 명확히 확인되지 않는 고유명사(인물 이름, 지명, 특정
+                 사건·경기 등)는 절대 단정해서 쓰지 마세요. 확실하지 않으면 "한 선수가",
+                 "경기 중" 처럼 일반적인 표현으로 대체하세요. 이 요약은 나중에 원본 영상을
+                 찾기 위한 실마리일 뿐이니, 그럴듯하게 지어내는 것보다 짧고 정확한 편이
+                 낫습니다 — 아는 것만 쓰고 모르는 건 생략하세요.
             4. tags: 모든 영상 공통. 이 영상을 검색할 때 쓸 만한 키워드 3~8개
                (예: 신발 끈 묶는 영상이면 ["신발끈", "매듭", "운동화"]). 짧은 명사 위주로.
+               이 태그들이 나중에 이 영상을 다시 찾는 핵심 단서이니 summary 보다 중요합니다.
             모든 텍스트는 한국어로.
             """;
 
@@ -139,7 +145,7 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
             List<String> tags = toList(json.path("tags")); // 검색 태그는 전 분류 공통 (2026-07-13 확정)
             if (!"RECIPE".equals(category)) {
                 return new ExtractionResult(category, null, null, null, null,
-                        json.path("summary").asText(null), tags);
+                        json.path("summary").asText(null), tags, null);
             }
             return new ExtractionResult(
                     category,
@@ -148,7 +154,7 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                     json.hasNonNull("cookMinutes") ? json.get("cookMinutes").asInt() : null,
                     toList(json.path("steps")),
                     null, // RECIPE 요약은 name·steps 가 대신함
-                    tags);
+                    tags, null); // transcriptChars 는 Hybrid 가 로컬 시도 결과에서 이어붙임
         } catch (Exception e) {
             throw new IllegalStateException("Gemini 응답 파싱 실패: " + text, e);
         }

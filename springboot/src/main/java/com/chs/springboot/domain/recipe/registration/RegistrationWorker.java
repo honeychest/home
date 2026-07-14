@@ -60,8 +60,9 @@ public class RegistrationWorker {
                 recipe.put("summaryVersion", RecipeExtractor.SUMMARY_VERSION);
             }
             // 요약(TIP/ETC)·검색 태그(전 분류)는 같은 호출에서 나옴 — 컬럼에 함께 저장 (2026-07-13 확정)
+            List<String> signals = RegistrationRules.analysisSignals(item.description(), result.transcriptChars());
             videos.markDone(item.videoId(), result.category(), recipe,
-                    result.summary(), result.tags(), RecipeExtractor.SUMMARY_VERSION);
+                    result.summary(), result.tags(), RecipeExtractor.SUMMARY_VERSION, signals);
             log.info("[gikka] 분석 완료 video={} category={}", item.videoId(), result.category());
         } catch (RecipeExtractor.TransientFailureException e) {
             videos.releaseAfterRateLimit(item.videoId());

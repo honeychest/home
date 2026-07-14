@@ -18,6 +18,7 @@ const item = (over: Partial<RegistrationItem> = {}): RegistrationItem => ({
     summary: null,
     tags: null,
     registeredAt: '2026-07-12T00:00:00Z',
+    analysisSignals: null,
     ...over,
 });
 

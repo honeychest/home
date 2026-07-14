@@ -10,10 +10,21 @@ public interface RecipeExtractor {
     int SUMMARY_VERSION = 1;
 
     /** category: RECIPE/TIP/ETC. RECIPE 가 아니면 레시피 필드는 null 이고 summary(요점 2~3문장)가 채워진다
-        (2026-07-13 확정 — 같은 호출이라 추가 비용 0). tags 는 검색용 키워드 — 전 분류 공통 */
+        (2026-07-13 확정 — 같은 호출이라 추가 비용 0). tags 는 검색용 키워드 — 전 분류 공통.
+        transcriptChars: 로컬 파이프라인이 whisper 로 뽑은 음성 전사 글자 수 (2026-07-14 확정,
+        pattern-raw-signal). Gemini 단독 호출(로컬 불가로 폴백)이면 null — "로컬이 안 돌았다"는
+        사실 그대로. RECIPE 채택 여부와 무관하게 로컬이 한 번이라도 돌았으면 채워짐
+        (HybridRecipeExtractor 가 TIP/ETC 로 버려지는 로컬 결과에서도 이 값만은 이어받음).
+        이 raw 값에서 경고 문구를 만드는 판정은 RegistrationRules.analysisSignals() 가 전담 —
+        여기·추출기들은 사실만 나른다 */
     record ExtractionResult(String category, String name, List<String> ingredients,
                             Integer cookMinutes, List<String> steps,
-                            String summary, List<String> tags) {
+                            String summary, List<String> tags, Integer transcriptChars) {
+
+        /** transcriptChars 만 교체한 복사본 — Hybrid 가 최종 채택 결과에 로컬의 원시 신호를 이어붙일 때 사용 */
+        ExtractionResult withTranscriptChars(Integer chars) {
+            return new ExtractionResult(category, name, ingredients, cookMinutes, steps, summary, tags, chars);
+        }
     }
 
     /**

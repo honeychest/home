@@ -10,6 +10,7 @@ import { DuplicateVideoError } from '../data/registrationTypes';
 import { registrationRepository } from '../data/registrationRepository';
 import { fridgeRepository } from '../data/fridgeRepository';
 import { registerLink } from '../data/registerLink';
+import { analysisQualityWarning } from '../data/analysisQuality';
 import { parseYoutubePlaylistId, parseYoutubeVideoId } from '../data/videoUrl';
 import { useMutation } from './useMutation';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
@@ -336,6 +337,10 @@ export default function RecipesPage() {
                     <>
                         {errorLine}
                         <p className="rcp-sheet-meta">{resultMetaText(selected)}</p>
+
+                        {analysisQualityWarning(selected) && (
+                            <p className="rcp-quality-warning">{analysisQualityWarning(selected)}</p>
+                        )}
 
                         {itemDetail(selected) && (
                             <p className="rcp-sheet-detail">{itemDetail(selected)}</p>

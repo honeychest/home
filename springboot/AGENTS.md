@@ -14,6 +14,7 @@
 | pattern-failover-notify | 외부 의존이 막혔을 때 폴백 전환 + 텔레그램 알림 | `GeminiRecipeExtractor` 페일오버 + `GikkaTelegramNotifier` |
 | pattern-queue-worker | DB 대기열 + 단일 워커 비동기 처리 (2인스턴스 중복 실행 안전) | `registration/RegistrationWorker.java` |
 | pattern-tx-template | 보조 DB(gikka) 트랜잭션 — 스프링 빈 TransactionManager 등록 금지(아래 금지 참조) | `GikkaDataSourceConfig` 의 `gikkaTxTemplate` |
+| pattern-raw-signal | 품질 경고 등 "증상" 표시 — 증상 하나짜리 좁은 컬럼(`has_xxx`, `xxx_warning`) 대신 원인이 될 원시 신호를 목록 컬럼에 저장, 경고 문구는 그 신호 조합을 보는 별도 순수 매핑 함수가 도출 | `registration/RegistrationRules.analysisSignals` + `video.analysis_signals` |
 
 적립 규칙: 이번 작업에서 2곳 이상 쓰일 만한 구조를 만들었으면 커밋 전에 키를 붙여
 이 표에 등록한다. 실물이 리팩토링되면 키는 유지하고 경로만 갱신. 10개를 넘으면
@@ -27,6 +28,8 @@ admin > "백엔드 패턴"에서 열람. 패턴 등록·변경 시 표와 이 �
 - recipe 쪽 TransactionManager 스프링 빈 등록 (부트 기본 자동 구성이 꺼져 기존 도메인
   @Transactional 전체가 깨짐 — 2026-07-10 실측). gikka 트랜잭션은 `gikkaTxTemplate` 로만.
 - 새 `@Scheduled` 를 중복 실행 고려 없이 추가 (앱 2인스턴스 — 멱등성 또는 단일 실행 장치 필수).
+- 특정 증상 하나만을 위한 좁은 단일 목적 컬럼 신설(`pattern-raw-signal` 위반) — 그 증상을
+  낳는 원시 신호를 저장하고 판정은 순수 함수로 분리할 것.
 
 ## 서버 제약 (상세: `chs/server/**`, commit-check server-profile)
 - 앱 2인스턴스 · 힙 512M(SerialGC) · Hikari 풀 4(배치 6) — 큰 인메모리 적재·긴 트랜잭션 주의.

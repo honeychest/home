@@ -47,32 +47,47 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-14 · 이번 세션: 4차(보관함 다듬기 + 추천 화면) grill-me 완료 후
-    구현까지 완료 — 탭 이름 "레시피"→"보관함" 변경, 재료/양념 2단계 분류(정규화 없이 원문
-    정확 매칭, 코드 상수 19개), 추천 3단계(완전 가능/양념만 부족/재료 부족 1~3개, 각 최대
-    5개) + 겹침형 커버플로우 레이아웃(클로드 아티팩트 목업으로 사용자가 슬라이더 조절해
-    확정한 값 그대로 구현). 백엔드(IngredientClassifier·RecommendRules·RecommendController)
-    51개 테스트·ArchUnit 격리 통과, 프론트(RcpCoverflow·RecommendPage) 빌드·vitest 16개
-    통과, gitnexus detect_changes 확인 완료 — 전부 미커밋, 폰 실사용 검증 남음.
-    이전 세션의 레시피 탭 UX 다듬기(recipe - 15~18)는 이미 커밋·배포·폰 확인 완료됨.</div>
+  <div class="updated">갱신: 2026-07-14(추가) · 이번 세션(신규): 5차 grill-me — "자주 사는 재료
+    버튼"은 이미 완료 확인, 영상 an2jmE9LUHY 코르키/아칼리 할루시네이션 실측(Gemini 대 로컬
+    비교로 Gemini도 확신에 찬 오류를 낼 수 있음 확인) 계기로 범위 재구성. 우선순위 1)ETC/TIP
+    프롬프트 안전화 2)보관함 검색+gikka 전체 보완 3)추천 소스 확장(전체 RECIPE 풀) 4)재료·
+    양념 사전 DB화+LLM 확신도 필드+오너 판정 큐(PENDING/SKIPPED/CONFIRMED). 콘텐츠 신고
+    버튼은 범위 제외. 결정 전체는 CONTEXT.md "5차 확장" 절 참고 — 코드 구현은 다음 세션부터.
+    이전 세션 기록(4차): grill-me→구현→
+    로컬 실사용 디버깅까지 전부 완료, 커밋됨(675f2b7 "recipe - 19 추천기능 구현").
+    탭 이름 "레시피"→"보관함" 변경, 재료/양념 2단계 분류(정규화 없이 원문 정확 매칭, 코드
+    상수 19개 + 표기 차이 별칭 2건), 추천 3단계(완전 가능/양념만 부족/재료 부족 — 개수 상한
+    없음, 부족 적은 순, 각 최대 5개) + 겹침형 커버플로우 레이아웃(클로드 아티팩트 목업으로
+    슬라이더 조절해 확정) + 카드 탭 → 상세 팝업(재료 있음/없음·조리시간·조리순서·원본 링크).
+    로컬 실사용 중 발견된 버그 3건도 그 자리에서 수정: "4개 이상 부족 제외" 규칙이 오히려
+    추천을 텅 비게 해 삭제, 3단계 레이아웃이 페이지 높이 붕괴로 안 보이던 문제(중첩 flex
+    100dvh 고정), 카드 z-index 가 팝업을 가리던 문제(isolation:isolate) — 전부 PLAYBOOK.md
+    "함정 — CSS" 절에 재발 방지로 기록. 백엔드(RecommendRules 알고리즘 단일 파일·
+    RecommendController) 53개 테스트·ArchUnit 통과, 프론트(RcpCoverflow·RecommendPage)
+    빌드·vitest 16개 통과.</div>
 </header>
 
 <div class="card">
   <h2>현재 단계</h2>
-  <div class="phase-now"><span>4차 구현 완료 — 커밋·배포·폰 실사용 검증 남음</span><span>82%</span></div>
-  <div class="bar"><div style="width:82%"></div></div>
+  <div class="phase-now"><span>5차 grill-me 완료, 구현 착수 전 — 4차 배포검증 병행 이월</span><span>10%</span></div>
+  <div class="bar"><div style="width:10%"></div></div>
 </div>
 
 <div class="card alert">
   <h2>지금 알아야 할 것</h2>
   <ul>
-    <li><b>다음 세션 최우선 — 4차(보관함+추천) 전부 미커밋</b>: 백엔드(recommend 패키지 3개
-      파일 + RegistrationRepository 메서드 추가)·프론트(RcpCoverflow·RecommendPage·
-      recommendRepository/Types + 보관함 탭 4개 파일 수정 + PlaceholderPage 삭제).
-      커밋 전 gitnexus_detect_changes 재확인 → 배포 후 폰에서 확인할 것: 커버플로우
-      스와이프(가운데 카드 확대+겹침), 배지 가독성(라이트/다크 둘 다), 추천 3단계가
-      실제 등록 데이터로 잘 갈리는지(지금은 채점용 데이터 5개뿐이라 각 섹션이 거의
-      비어있을 수 있음 — 정상).</li>
+    <li><b>다음 세션 최우선 — 5차 구현 착수</b> (2026-07-14 grill-me 완료, 아직 코드 작업
+      시작 전): 순서 1) ETC/TIP 프롬프트 안전화 2) 보관함 검색+gikka 전체 보완 3) 추천
+      소스 확장 4) 재료/양념 사전+오너 판정 큐. 착수 배경 — 사용자가 "품질 향상 후 소수
+      친구에게 PWA 설치 안내" 계획을 밝혀 다중 사용자 전환이 임박한 일정으로 확인됨,
+      콜드스타트(신규 사용자 보관함·추천이 텅 빔) 문제를 초대 전에 먼저 해결해야 함.
+      상세 결정은 CONTEXT.md "5차 확장" 절.</li>
+    <li>4차 배포 후 폰 실사용 검증은 여전히 미완(아래로 이월, 5차 구현과 병행 가능):
+      커밋 완료(675f2b7), 로컬
+      개발기(npm run dev + bootRun)에서는 실사용 디버깅까지 마쳤지만 배포 환경·실제 폰
+      터치에서 확인은 아직임. 확인할 것: 커버플로우 스와이프(가운데 카드 확대+겹침), 카드
+      탭 → 상세 팝업이 잘 뜨는지, 배지 가독성(라이트/다크 둘 다), 추천 3단계가 실제 등록
+      데이터로 잘 갈리는지.</li>
     <li>3차 잔여 이월 항목(4차와 병행 가능, 완료 아님): 추출 채점 5→10개(사용자 액션),
       서버 .env 에 GIKKA_GEMINI_API_KEY·GIKKA_YOUTUBE_API_KEY 2줄, 폰 계정으로 재생목록
       일괄 등록 실검증. 4차 착수가 이 항목들을 완료 처리한다는 뜻은 아님 — CONTEXT.md
@@ -312,28 +327,49 @@
         </li>
       </ul>
     </li>
-    <li class="doing">4차: 보관함(구 레시피 탭) 다듬기 + 추천 화면 — 구현 완료, 폰 실사용 검증 남음
+    <li class="done">4차: 보관함(구 레시피 탭) 다듬기 + 추천 화면 — 구현·로컬 실사용 디버깅 완료,
+      커밋됨(675f2b7 "recipe - 19 추천기능 구현"). 배포·폰 검증만 남음
       <ul>
         <li class="done">grill-me(탭 이름 "보관함"으로 변경, 재료/양념 2단계 분류 확정 —
           정규화는 안 함, 추천 3단계 구조로 확장(완전 가능/양념만 부족/재료 부족),
           커버플로우 레이아웃을 클로드 아티팩트 목업으로 사용자가 직접 슬라이더 조절해 확정)</li>
-        <li class="done">백엔드: `IngredientClassifier`(재료/양념 순수 분류, 코드 상수 19개)·
-          `RecommendRules`(3단계 판정, 순수 함수 + 테스트 6개)·
+        <li class="done">백엔드: `RecommendRules`(재료/양념 분류+매칭+3단계 판정·정렬 —
+          추천 알고리즘 단일 원본 파일, 사용자 요청으로 `IngredientClassifier` 통합)·
           `RecommendController`(GET /api/recipe/recommend)·
-          `RegistrationRepository.recipesForUser` 신설. 백엔드 51개 테스트·ArchUnit 격리 통과</li>
+          `RegistrationRepository.recipesForUser` 신설. 백엔드 53개 테스트·ArchUnit 격리 통과</li>
         <li class="done">프론트: `RcpCoverflow`(겹침형 커버플로우 킷, styleguide 등록+긴 글자
-          스트레스 케이스 포함)·`RecommendPage`(3단계 섹션)·`recommendRepository`/`recommendTypes`.
+          스트레스 케이스 포함)·`RecommendPage`(3단계 섹션 + 카드 탭 상세 팝업)·
+          `recommendRepository`/`recommendTypes`.
           보관함 탭(RecipesPage): 카드 제목을 AI 추출 요리 이름 우선으로 변경, 상세 시트에
           재료별 냉장고 보유 표시(.rcp-chip-on/off 재사용) 추가. RcpTabBar 라벨 "레시피"→"보관함".
-          빌드·vitest 16개 통과, gitnexus detect_changes 확인(영향 범위 예상대로, medium —
-          새 recommend 흐름 1건만 해당)</li>
-        <li class="todo">폰 실사용 검증: 커버플로우 스와이프 제스처, 배지 가독성(라이트/다크),
-          추천 3단계가 실제 등록 데이터로 잘 갈리는지</li>
-        <li class="todo">검색·재료 정규화 사전·양념 관리 화면은 이번 단계에 안 만듦(CONTEXT.md
+          빌드·vitest 16개 통과</li>
+        <li class="done">로컬 실사용 디버깅(오너가 실제로 재료 채워보며 발견) — 4건 즉시 수정:
+          ① "재료 부족" 상한(4개 이상 제외)이 추천을 텅 비게 만들어 삭제(상한 없이 항상
+          부족 적은 순 표시), ② 표기 차이 별칭 2건(다진 마늘=다진마늘, 백식초=식초) 추가,
+          ③ 3단계 레이아웃 페이지 높이 붕괴(중첩 flex, `.rcp-recommend-page`에 100dvh 고정
+          + %높이 연쇄를 flex-grow로 통일) 수정, ④ 카드 z-index가 팝업(하단 시트) 위를
+          가리던 문제 `isolation:isolate`로 수정. 재발 방지 메모는 PLAYBOOK.md "함정 — CSS" 절</li>
+        <li class="todo">폰 실사용 검증(배포 후): 커버플로우 스와이프 제스처, 카드 탭 상세
+          팝업, 배지 가독성(라이트/다크), 추천 3단계가 실제 등록 데이터로 잘 갈리는지</li>
+        <li class="todo">검색·재료 정규화 사전(전면)·양념 관리 화면은 이번 단계에 안 만듦(CONTEXT.md
           "확장성" — 나중에 필요성이 쌓이면 재검토)</li>
       </ul>
     </li>
-    <li class="todo">5차: 다듬기 (자주 사는 재료 버튼, 새 재료 분류 질문, 앱 아이콘 색·모양 개선)</li>
+    <li class="todo">5차: 품질 향상 + 다중 사용자 준비 (2026-07-14 grill-me 완료, 구현 착수 전.
+      상세 CONTEXT.md "5차 확장" 절 · PLAYBOOK.md "5차" 절)
+      <ul>
+        <li class="done">grill-me 점검 — "자주 사는 재료 버튼"은 이미 2차에서 완료 확인(범위 제외),
+          코르키/아칼리 할루시네이션 실측(Gemini vs 로컬 비교 완료), 범위·우선순위 확정</li>
+        <li class="todo">1) ETC/TIP 프롬프트 안전화 (고유명사 단정 금지 지시 추가,
+          `an2jmE9LUHY` 재분석으로 검증)</li>
+        <li class="todo">2) 보관함 검색 (내 것 우선 → gikka 전체 보완 노출 → "내 보관함에 등록" 버튼)</li>
+        <li class="todo">3) 추천 소스 확장 (내 등록 한정 → gikka 전체 RECIPE, "내 보관함" 배지)</li>
+        <li class="todo">4) 재료/양념 사전 DB화 + LLM 확신도 필드 + 오너 판정 큐
+          (PENDING/SKIPPED/CONFIRMED, `/recipe/monitor`에 통합)</li>
+        <li class="todo">보류: 콘텐츠 신고 버튼(범위 제외, CONTEXT.md 참고 기록만) ·
+          앱 아이콘 색 갱신(#1f7a3d→#2aa257) · styleguide 미등록분 · Testcontainers · AIza 키 제한</li>
+      </ul>
+    </li>
     <li class="todo">6차: 릴스·틱톡 확장 (2026-07-11 신설·확정 기능 — 유튜브 추출 품질 합격 후 착수.
       yt-dlp→Gemini 파일 업로드, 인스타 쿠키 운영 방식 포함 상세는 CONTEXT.md 구현 순서 참고)</li>
   </ul>
@@ -342,9 +378,11 @@
 <div class="card next">
   <h2>다음 세션이 이어서 할 일</h2>
   <ul>
-    <li><b>다음 세션 최우선 — 4차 커밋·배포 후 폰 실사용 검증</b>: grill-me·구현 모두 완료,
-      전부 미커밋 상태. 위 "지금 알아야 할 것" 최상단 항목 참고. 검색어 배치는 이번 세션에도
-      "지금은 안 만든다(2단계 후보 그대로)"로 확정돼 계속 이월 상태.</li>
+    <li><b>다음 세션 최우선 — 5차 구현 착수</b> (grill-me 완료, 코드 작업은 아직 시작 안 함):
+      CONTEXT.md "5차 확장" 절·PLAYBOOK.md "5차" 절 순서대로 1)프롬프트 안전화
+      2)보관함 검색 3)추천 소스 확장 4)재료 사전+판정 큐. 1번부터 시작할 것.</li>
+    <li>4차 배포 후 폰 실사용 검증은 5차와 병행 이월(완료 아님): 커밋 완료(675f2b7).
+      검색어 배치는 "보관함 검색"으로 이번 5차에 포함돼 더 이상 이월 아님(위 참고).</li>
     <li><b>병행 이월(3차 잔여, 완료 아님)</b>: 추출 채점 계속(5→10개, 로컬+Gemini 하이브리드
       결과로 — 합격 기준 10중 8), 서버 .env 키 2줄(GIKKA_GEMINI_API_KEY·GIKKA_YOUTUBE_API_KEY),
       폰 계정으로 재생목록 일괄 등록 실검증.</li>
@@ -390,19 +428,44 @@
   <details>
     <summary>완료 기록 (펼치기)</summary>
     <ul>
-      <li>2026-07-14 — 4차(보관함+추천) grill-me → 구현 완료(전부 미커밋). grill-me 결정:
-        탭 이름 "레시피"→"보관함"(요리 외 콘텐츠도 담는 성격 반영), 재료 정규화는 안 함(원문
-        정확 매칭) + 재료/양념 2단계 분류(코드 상수 19개, 관리 화면 없음 — 3단계 확장 여지만
-        남김), 추천을 2층→3단계(완전 가능/양념만 부족/재료 부족 1~3개)로 확장, 레이아웃은
-        겹침형 커버플로우 — 클로드 아티팩트 목업 4회 반복(분리형→겹침형→불투명 배지로 색
-        반전)으로 사용자가 슬라이더 조절해 최종 값을 직접 확정한 뒤 그대로 구현.
-        백엔드: IngredientClassifier·RecommendRules(순수, 테스트 6개)·RecommendController
-        (GET /api/recipe/recommend)·RegistrationRepository.recipesForUser. 51개 테스트·
+      <li>2026-07-14 — 5차 grill-me(코드 구현 전, 계획 단계): "자주 사는 재료 버튼"이 이미
+        2차에서 완료돼 있음을 코드 확인으로 발견해 범위 제외. 사용자가 "품질 향상 뒤 소수
+        친구에게 PWA 설치 안내 예정"이라 밝혀 다중 사용자 전환이 임박했음을 확인, 콜드스타트
+        문제(신규 사용자 보관함·추천 텅 빔)를 초대 전 과제로 재정의. 계기가 된 실측: 영상
+        `an2jmE9LUHY`("롤에서 못 참는 거 GOAT")의 Gemini 요약이 "코르키 플레이하는 페이커"로
+        확신에 차 서술했으나 실제는 아칼리(사용자 확인) — description엔 근거 정보 없어
+        순수 할루시네이션. 같은 영상 로컬 모델 비교 실행 결과 로컬은 화면에 보이는 것만
+        서술하고 선수·챔피언명을 추측하지 않아 더 안전 — CONTEXT.md의 기존 가정("TIP/ETC는
+        로컬이 위험, Gemini가 안전망")이 이 사례에서 뒤집힘. 대화로 4개 작업 확정: 1)ETC/TIP
+        프롬프트에 "확인 안 되는 고유명사 단정 금지" 지시 추가 2)보관함 검색 신설(내 것
+        우선 → gikka 전체 보완 → 등록 버튼, 원래 별개 논의였던 "검색"과 "콜드스타트 전체
+        DB 노출"이 그릴미 중 하나로 합쳐짐) 3)추천 후보를 "내 등록"에서 "gikka 전체 RECIPE"로
+        확장 4)재료/양념 사전을 코드 상수에서 DB로 이관 + 분석 호출에 LLM 확신도 필드 추가해
+        UNSURE만 오너 판정 큐(PENDING/SKIPPED/CONFIRMED 4상태, 미확정은 MAIN 기본값)로.
+        콘텐츠 신고 버튼·오너 수정 화면은 "지금 할 일 아님"으로 범위 제외(참고만 기록).
+        CONTEXT.md "5차 확장" 절·PLAYBOOK.md "5차" 절에 결정 전체 반영 — 코드 구현은
+        다음 세션 최우선</li>
+      <li>2026-07-14 — 4차(보관함+추천) grill-me → 구현 → 로컬 실사용 디버깅까지 완료,
+        커밋됨(675f2b7 "recipe - 19 추천기능 구현"). grill-me 결정: 탭 이름 "레시피"→"보관함"
+        (요리 외 콘텐츠도 담는 성격 반영), 재료 정규화는 원칙적으로 안 함(원문 정확 매칭) +
+        재료/양념 2단계 분류(코드 상수 19개, 관리 화면 없음), 추천을 2층→3단계(완전 가능/
+        양념만 부족/재료 부족)로 확장, 레이아웃은 겹침형 커버플로우 — 클로드 아티팩트 목업
+        4회 반복(분리형→겹침형→불투명 배지로 색 반전)으로 사용자가 슬라이더 조절해 최종
+        값을 직접 확정한 뒤 그대로 구현. 카드 탭 → 상세 팝업(재료 있음/없음·조리시간·
+        조리순서·원본 링크)도 같은 세션에 추가.
+        백엔드: RecommendRules(재료/양념 분류+매칭+3단계 판정 — 추천 알고리즘 단일 원본
+        파일, 사용자 요청으로 IngredientClassifier 통합)·RecommendController
+        (GET /api/recipe/recommend)·RegistrationRepository.recipesForUser. 53개 테스트·
         ArchUnit 통과. 프론트: RcpCoverflow(styleguide 등록+긴 글자 케이스)·RecommendPage·
         recommendRepository/Types, 보관함 탭 카드 제목을 AI 요리 이름 우선으로, 상세 시트에
         재료별 냉장고 보유 표시 추가(.rcp-chip-on/off 재사용), 안 쓰는 PlaceholderPage 삭제.
-        빌드·vitest 16개 통과, gitnexus detect_changes 확인(영향 범위 예상대로).
-        CONTEXT.md 동기화 완료 — 다음 세션 최우선은 커밋·배포·폰 실사용 검증</li>
+        오너가 로컬에서 직접 재료·레시피를 채워 실사용 테스트하며 발견한 버그 4건도 그 자리에서
+        수정: "4개 이상 부족 제외" 상한이 추천을 텅 비게 만든 문제(상한 삭제, 실사용 첫
+        테스트에서 바로 뒤집힘) · 표기 차이 별칭 누락("다진 마늘"·"백식초") · 3단계 레이아웃
+        페이지 높이 붕괴(100dvh 고정 + %높이 연쇄를 flex-grow로 전환) · 카드 z-index가
+        상세 팝업을 가리던 문제(isolation:isolate). 전부 PLAYBOOK.md "함정 — CSS" 절에
+        재발 방지 메모로 남김. 빌드·vitest 16개 통과.
+        CONTEXT.md·PLAYBOOK.md 동기화 완료 — 다음 세션 최우선은 배포·폰 실사용 검증</li>
       <li>2026-07-14 — 로컬 모델 페일오버 구현 완료(커밋 3fadc25). STT 실측 비교(base/medium
         기각·large-v3-turbo 채택), 레시피 3건 Gemini 대조 검증(높은 일치율), TIP/ETC
         할루시네이션 발견 → 카테고리별 라우팅 설계(로컬 RECIPE 우선·나머지 Gemini).

@@ -53,4 +53,29 @@ class RegistrationRulesTest {
 
         assertEquals(first, RegistrationRules.metadataById(List.of(first, dup)).get("aaaaaaaaaaa"));
     }
+
+    @Test
+    @DisplayName("분석 신호: FRAMES 는 항상 포함, 설명란·전사는 있을 때만 추가")
+    void analysisSignalsIncludesAvailableInputsOnly() {
+        assertEquals(List.of("FRAMES"), RegistrationRules.analysisSignals(null, null));
+        assertEquals(List.of("FRAMES", "DESCRIPTION"), RegistrationRules.analysisSignals("설명란 원문", null));
+        assertEquals(List.of("FRAMES", "TRANSCRIPT"), RegistrationRules.analysisSignals(null, 50));
+        assertEquals(List.of("FRAMES", "DESCRIPTION", "TRANSCRIPT"),
+                RegistrationRules.analysisSignals("설명란", 50));
+    }
+
+    @Test
+    @DisplayName("전사 글자 수가 임계값 미만이면(잡음 수준) TRANSCRIPT 신호를 넣지 않는다")
+    void sparseTranscriptIsNotCountedAsSignal() {
+        assertEquals(List.of("FRAMES"),
+                RegistrationRules.analysisSignals(null, RegistrationRules.MIN_TRANSCRIPT_CHARS - 1));
+        assertEquals(List.of("FRAMES", "TRANSCRIPT"),
+                RegistrationRules.analysisSignals(null, RegistrationRules.MIN_TRANSCRIPT_CHARS));
+    }
+
+    @Test
+    @DisplayName("빈 설명란(공백뿐)은 DESCRIPTION 신호에 안 들어간다")
+    void blankDescriptionIsNotCountedAsSignal() {
+        assertEquals(List.of("FRAMES"), RegistrationRules.analysisSignals("   ", null));
+    }
 }

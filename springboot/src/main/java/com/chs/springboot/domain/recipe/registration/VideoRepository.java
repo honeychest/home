@@ -31,12 +31,12 @@ public class VideoRepository {
                       String title, String thumbnailUrl, Integer durationSeconds, String description,
                       String recipeJson, String summary, String tagsJson,
                       int attemptCount, Integer analysisSeconds, String lastError,
-                      OffsetDateTime queuedAt) {
+                      OffsetDateTime queuedAt, String analysisSignalsJson) {
     }
 
     private static final String COLUMNS =
             "video_id, url, platform, category, status, title, thumbnail_url, duration_seconds, description, "
-            + "recipe_json, summary, tags, attempt_count, analysis_seconds, last_error, queued_at";
+            + "recipe_json, summary, tags, attempt_count, analysis_seconds, last_error, queued_at, analysis_signals";
 
     public boolean exists(String videoId) {
         return jdbc.sql("SELECT COUNT(*) FROM video WHERE video_id = :videoId")
@@ -97,19 +97,24 @@ public class VideoRepository {
     }
 
     public void markDone(String videoId, String category, Object recipeOrNull,
-                         String summaryOrNull, java.util.List<String> tags, int summaryVersion) {
+                         String summaryOrNull, java.util.List<String> tags, int summaryVersion,
+                         java.util.List<String> analysisSignals) {
         String json = toJsonOrNull(recipeOrNull, "레시피");
         String tagsJson = toJsonOrNull(tags == null || tags.isEmpty() ? null : tags, "태그");
+        String signalsJson = toJsonOrNull(analysisSignals == null || analysisSignals.isEmpty()
+                ? null : analysisSignals, "분석 신호");
         jdbc.sql("""
                         UPDATE video
                         SET status = 'DONE', category = :category, recipe_json = :json::jsonb,
                             summary = :summary, tags = :tags::jsonb, summary_version = :version,
+                            analysis_signals = :signals::jsonb,
                             analysis_seconds = EXTRACT(EPOCH FROM (now() - analyzing_started_at))::int,
                             analyzing_started_at = NULL, last_error = NULL
                         WHERE video_id = :videoId
                         """)
                 .param("category", category).param("json", json)
                 .param("summary", summaryOrNull).param("tags", tagsJson).param("version", summaryVersion)
+                .param("signals", signalsJson)
                 .param("videoId", videoId).update();
     }
 
@@ -160,7 +165,7 @@ public class VideoRepository {
         return jdbc.sql("""
                         UPDATE video
                         SET status = :status, category = NULL, recipe_json = NULL,
-                            summary = NULL, tags = NULL, summary_version = NULL,
+                            summary = NULL, tags = NULL, summary_version = NULL, analysis_signals = NULL,
                             attempt_count = 0, analyzing_started_at = NULL, last_error = NULL,
                             analysis_seconds = NULL, queued_at = now(),
                             title = COALESCE(:title, title), thumbnail_url = COALESCE(:thumb, thumbnail_url),
@@ -187,7 +192,7 @@ public class VideoRepository {
         jdbc.sql("""
                         UPDATE video
                         SET status = 'REMOVED', category = NULL, recipe_json = NULL, summary = NULL,
-                            tags = NULL, summary_version = NULL, attempt_count = 0,
+                            tags = NULL, summary_version = NULL, analysis_signals = NULL, attempt_count = 0,
                             analyzing_started_at = NULL, last_error = NULL, analysis_seconds = NULL
                         WHERE video_id = :videoId
                         """)
@@ -301,6 +306,7 @@ public class VideoRepository {
                 rs.getInt("attempt_count"),
                 rs.getObject("analysis_seconds", Integer.class),
                 rs.getString("last_error"),
-                rs.getObject("queued_at", OffsetDateTime.class));
+                rs.getObject("queued_at", OffsetDateTime.class),
+                rs.getString("analysis_signals"));
     }
 }

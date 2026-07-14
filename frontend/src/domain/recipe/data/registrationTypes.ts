@@ -48,6 +48,11 @@ export interface RegistrationItem {
     tags: string[] | null;
     /** 등록 시각 ISO — 목록 정렬 기준 (최신이 위) */
     registeredAt: string;
+    /** 이 분석에 실제로 쓸 수 있었던 원시 신호 목록 (예: ["FRAMES","DESCRIPTION"] — TRANSCRIPT 가
+        빠졌으면 음성 인식이 거의 안 됐다는 뜻). 경고 문구는 이 값을 보고 프론트가 도출한다
+        (data/analysisQuality.ts 참고). 마이그레이션 이전 데이터는 null (2026-07-14 확정,
+        pattern-raw-signal — springboot/AGENTS.md) */
+    analysisSignals: string[] | null;
 }
 
 /** 같은 영상 재등록 — API 구현체는 409 를 이 에러로 변환한다 (문구는 화면 소유) */

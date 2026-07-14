@@ -57,10 +57,13 @@ PROMPT_TEMPLATE = """\
    - steps: 조리 순서 요약. 각 단계를 짧은 한 문장으로, 3~7개.
 3. RECIPE 가 아닌 경우에만:
    - summary: 영상의 요점 요약 2~3문장. 나중에 다시 찾을 때 내용을 떠올릴 수 있게.
-   주의: 실제로 화면·음성·설명란에 나오지 않은 고유명사(사람 이름 등)를 추측해서 넣지 마세요 —
-   모르면 생략하세요 (2026-07-14 확정, 실측에서 모델이 사전 지식으로 없는 인물명을 지어낸
-   사례 발견).
+   주의: 화면·음성·설명란에서 명확히 확인되지 않는 고유명사(인물 이름, 지명, 특정 사건·경기
+   등)는 절대 단정해서 쓰지 마세요. 확실하지 않으면 "한 선수가", "경기 중" 처럼 일반적인
+   표현으로 대체하세요 (2026-07-14 확정, 실측에서 모델이 사전 지식으로 없는 인물명을 지어낸
+   사례 발견). 이 요약은 나중에 원본 영상을 찾기 위한 실마리일 뿐이니, 그럴듯하게 지어내는
+   것보다 짧고 정확한 편이 낫습니다 — 아는 것만 쓰고 모르는 건 생략하세요.
 4. tags: 모든 영상 공통. 이 영상을 검색할 때 쓸 만한 키워드 3~8개. 짧은 명사 위주로.
+   이 태그들이 나중에 이 영상을 다시 찾는 핵심 단서이니 summary 보다 중요합니다.
 
 모든 텍스트는 한국어로, 반드시 JSON으로만 답하세요 (키: category,name,ingredients,cookMinutes,steps,summary,tags).
 
@@ -169,7 +172,11 @@ def extract(video_url, description):
         audio_path = extract_audio(video_path, work_dir)
         transcript = transcribe(audio_path, work_dir)
         payload = build_payload(frames, transcript, description)
-        return call_local_model(payload)
+        result = call_local_model(payload)
+        # 음성 인식이 실제로 얼마나 됐는지 — 백엔드가 분석 품질 신호로 저장 (2026-07-14 확정,
+        # 이 자체는 판단이 아니라 사실이라 여기선 개수만 실어 보낸다. 경고 여부 판정은 백엔드 몫)
+        result["transcriptChars"] = len((transcript or "").strip())
+        return result
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
