@@ -11,7 +11,7 @@ import FridgePage from './FridgePage';
 import HomePage from './HomePage';
 import LoginPage from './LoginPage';
 import MonitorPage from './MonitorPage';
-import PlaceholderPage from './PlaceholderPage';
+import RecommendPage from './RecommendPage';
 import RecipesPage from './RecipesPage';
 import ShareTargetPage from './ShareTargetPage';
 import StyleguidePage from './StyleguidePage';
@@ -115,16 +115,7 @@ export default function RecipeApp() {
                         <HomePage email={auth.email} canViewMonitor={auth.canViewMonitor} onLogout={logout} />
                     )}
                 />
-                <Route
-                    path="recommend"
-                    element={(
-                        <PlaceholderPage
-                            pageId="rcp-recommend-page"
-                            title="추천"
-                            description="지금 만들 수 있는 요리를 여기서 보여줘요 (4차 예정)"
-                        />
-                    )}
-                />
+                <Route path="recommend" element={<RecommendPage />} />
                 <Route path="fridge" element={<FridgePage />} />
                 <Route path="recipes" element={<RecipesPage />} />
                 <Route path="share" element={<ShareTargetPage />} />

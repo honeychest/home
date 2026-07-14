@@ -431,6 +431,141 @@
 }
 .rcp-chip-group { display: flex; flex-wrap: wrap; gap: var(--rcp-space-2); }
 
+/* ── 추천 화면 골격: 세로 스크롤 없이 3단계가 폰 높이에 맞춰 나뉜다 (2026-07-14 확정,
+   사용자 요청 — "폰 크기에 상관없이 세로스크롤 안 생기게"). .rcp-screen(flex:1, 100dvh 기준)
+   자체는 이미 실제 높이를 갖고 있으므로, 그 안을 중첩 flex 로 다시 나누고 각 단계에
+   min-height:0 을 줘 내용이 넘쳐도 강제로 줄어들게 한다(표준 "flex 안에서 스크롤 없이
+   맞추기" 패턴) */
+/* .rcp-app 은 min-height(최소값)만 가져서 넘치면 페이지 전체가 커지는 게 다른 화면(냉장고 등)
+   에선 정상 동작(스크롤 원함)이지만, 이 화면만은 "항상 한 화면"이 요구 사항이라 여기서만
+   실제 뷰포트 높이로 못박는다 — 상위 요소를 안 건드리고 이 화면에만 국소적으로 적용 */
+.rcp-recommend-page { display: flex; flex-direction: column; overflow: hidden; height: 100dvh; max-height: 100dvh; }
+.rcp-recommend-sections {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  gap: var(--rcp-space-2);
+}
+.rcp-recommend-section {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+}
+.rcp-recommend-section-head {
+  display: flex; align-items: baseline; gap: var(--rcp-space-2);
+  flex-wrap: nowrap; overflow: hidden;
+}
+.rcp-recommend-section-title {
+  font-size: var(--rcp-fs-sm); font-weight: var(--rcp-fw-heavy);
+  color: var(--rcp-text-sub); letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.rcp-recommend-section-sub {
+  font-size: var(--rcp-fs-2xs); color: var(--rcp-text-faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.rcp-recommend-section-empty {
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center;
+  color: var(--rcp-text-faint);
+  font-size: var(--rcp-fs-sm);
+}
+
+/* ── 겹침형 커버플로우: rcp-coverflow-wrap > rcp-coverflow > rcp-coverflow-card ──
+   (2026-07-14 확정, 4차 추천 화면. 목업에서 사용자가 직접 슬라이더로 맞춘 값을 RcpCoverflow.tsx
+   상수로 고정. 카드는 부모가 주는 높이를 그대로 채우고(aspect-ratio 로 폭을 계산) — 고정
+   px 가 아니라 섹션 높이(=폰 화면 높이)에 맞춰 저절로 커지고 작아진다. 가운데 정렬용
+   좌우 padding 은 실제 카드 폭이 매번 달라지므로 RcpCoverflow.tsx 가 측정해 인라인으로 부여) */
+/* 높이는 퍼센트(%) 연쇄 대신 flex-grow 로 한 번에 통일한다 — wrap(%)→coverflow(%)→card(%)
+   식으로 여러 단계를 %로 이어붙이면 브라우저에서 0으로 무너지는 걸 실측으로 확인(2026-07-14).
+   flex:1 을 매 단계 그대로 넘기면 훨씬 안정적이다. */
+.rcp-coverflow-wrap { position: relative; height: 220px; display: flex; } /* 독립 사용(styleguide 등) 기본값 */
+/* 추천 화면 안에서는 섹션이 나눠준 높이를 그대로 채운다(폰 높이에 맞춰 가변) */
+.rcp-recommend-section .rcp-coverflow-wrap { flex: 1; min-height: 0; height: auto; }
+.rcp-coverflow {
+  flex: 1; min-height: 0;
+  display: flex; align-items: stretch;
+  /* 위아래 여백 — 가운데 카드가 1.15배 확대될 때 위아래로 넘치는 만큼(대략 카드 높이의
+     7~8%씩) 미리 비워둔다. 안 비워두면 overflow-y:hidden 이 확대분을 그대로 잘라
+     이름표·칩 배지 윗부분이 잘려 보이는 문제가 실제로 발견됨(2026-07-14) */
+  padding-block: 18px;
+  /* 카드의 JS z-index(0~100, 가운데가 제일 높음)가 커버플로우 밖으로 새어나가 하단 시트
+     (z-index:50) 위를 덮어버리는 문제가 실제로 발견됨(2026-07-14) — 새 스택 컨텍스트로
+     완전히 가둬서 이 컴포넌트 밖 어떤 요소와도 z-index 경쟁이 생기지 않게 한다 */
+  isolation: isolate;
+  overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  cursor: grab;
+}
+.rcp-coverflow::-webkit-scrollbar { display: none; }
+.rcp-coverflow-dragging { cursor: grabbing; scroll-snap-type: none; }
+.rcp-coverflow-card {
+  /* height 는 명시하지 않고 부모(.rcp-coverflow)의 align-items:stretch 기본 동작에 맡긴다 —
+     stretch 는 flex 컨테이너가 이미 가진 실제 높이를 그대로 물려주므로 % 계산이 필요 없다 */
+  flex: 0 0 auto; aspect-ratio: 0.86;
+  border-radius: var(--rcp-radius-lg);
+  scroll-snap-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--rcp-shadow-magnet);
+  will-change: transform, opacity;
+  transform-origin: center center;
+}
+.rcp-coverflow-thumb {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  background: var(--rcp-surface-dim);
+}
+.rcp-coverflow-thumb-fallback {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--rcp-accent-soft);
+  color: var(--rcp-accent-strong);
+}
+.rcp-coverflow-vignette {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.28) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.16) 0%, rgba(0, 0, 0, 0) 24%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0.22) 100%);
+  pointer-events: none;
+}
+.rcp-coverflow-name {
+  position: absolute; top: 8px; left: 8px; right: 8px;
+  display: flex;
+}
+.rcp-coverflow-name span {
+  max-width: 100%;
+  color: #1c2b20;
+  font-size: var(--rcp-fs-sm); font-weight: var(--rcp-fw-heavy);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* 카드 폭이 좁아 2줄은 과함 — 1줄+말줄임 */
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  padding: 4px 10px;
+  backdrop-filter: blur(4px);
+}
+.rcp-coverflow-chips {
+  position: absolute; bottom: 8px; left: 8px; right: 8px;
+  display: flex; gap: 4px; flex-wrap: nowrap; overflow: hidden;
+}
+.rcp-coverflow-chip {
+  font-size: var(--rcp-fs-2xs); font-weight: var(--rcp-fw-bold);
+  color: #1c2b20;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+.rcp-coverflow-chip-more {
+  color: #fff;
+  background: rgba(31, 122, 61, 0.72);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
 /* ── 로그인 화면 (2차) ── */
 .rcp-login {
   min-height: 100dvh;

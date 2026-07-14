@@ -95,6 +95,15 @@ public class RegistrationRepository {
                 .query(this::mapRow).list();
     }
 
+    /** 추천 계산용: 완료된 요리(RECIPE+DONE)만 (2026-07-14 4차 확정 — recipe_json 이 항상 있음) */
+    public List<Row> recipesForUser(long userId) {
+        return jdbc.sql("SELECT " + JOINED_COLUMNS + " " + JOIN
+                        + "WHERE r.user_id = :userId AND v.status = 'DONE' AND v.category = 'RECIPE' "
+                        + "ORDER BY r.registered_at DESC")
+                .param("userId", userId)
+                .query(this::mapRow).list();
+    }
+
     /** 모니터링 화면 한 행 — 전 사용자 대기열 실시간 추적용 (오너 전용) */
     public record MonitorRow(long userId, String email, String videoId, String url, String title,
                              String category, String status, Integer durationSeconds, int attemptCount,

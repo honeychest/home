@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { RegistrationItem, RegistrationStatus, VideoCategory } from '../data/registrationTypes';
 import { DuplicateVideoError } from '../data/registrationTypes';
 import { registrationRepository } from '../data/registrationRepository';
+import { fridgeRepository } from '../data/fridgeRepository';
 import { registerLink } from '../data/registerLink';
 import { parseYoutubePlaylistId, parseYoutubeVideoId } from '../data/videoUrl';
 import { useMutation } from './useMutation';
@@ -76,6 +77,9 @@ const itemDetail = (item: RegistrationItem): string | null => {
 };
 const TOO_LONG_NOTICE = '7분이 넘는 영상이라 분석하지 않아요 — 목록에 기록만 남겼어요';
 
+// 카드 제목: AI가 추출한 요리 이름이 원본 영상 제목보다 "무슨 요리인지" 더 잘 드러남
+// (2026-07-14 확정 — 이전엔 저장만 하고 목록엔 안 보여주고 있었음)
+const itemTitle = (item: RegistrationItem): string => item.recipe?.name || item.title || item.url;
 const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;
 const playlistAddedText = (count: number) => `재생목록에서 ${count}개를 대기열에 넣었어요`;
 // 문구/데이터 분리 (품질 기본선 7): 조합 문구는 템플릿 한 곳에
@@ -108,9 +112,15 @@ export default function RecipesPage() {
     // 요약 배지 탭 → 필터 (2026-07-14 확정). 지금은 전체 로드 + 클라이언트 필터로 충분
     // (개인용, 1000건도 부담 없는 규모) — 페이징 도입 시 서버 쿼리 파라미터 방식으로 교체 예정.
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
+    // 상세 시트의 재료별 있음/없음 표시용 (2026-07-14 확정) — 정확 매칭, 정규화 없음
+    const [fridgeNames, setFridgeNames] = useState<Set<string> | null>(null);
 
     const reload = useCallback(async () => {
         setItems(await registrationRepository.list());
+    }, []);
+
+    useEffect(() => {
+        fridgeRepository.list().then((list) => setFridgeNames(new Set(list.map((i) => i.name)))).catch(() => undefined);
     }, []);
 
     // 조작 실행기 (공용 useMutation — 실패 문구·연타 방지·재동기화 한 곳, PLAYBOOK 관례 5)
@@ -213,7 +223,7 @@ export default function RecipesPage() {
     return (
         <main className="rcp-screen" id="rcp-recipes-page">
             <header className="rcp-screen-header">
-                <h1 className="rcp-screen-title">레시피</h1>
+                <h1 className="rcp-screen-title">보관함</h1>
                 <p className="rcp-screen-subtitle">쇼츠 링크를 넣으면 재료와 조리법을 꺼내드려요</p>
             </header>
             {errorLine}
@@ -259,7 +269,7 @@ export default function RecipesPage() {
                         {displayedItems.map((item) => (
                             <RcpVideoRow
                                 key={item.videoId}
-                                title={item.title ?? item.url}
+                                title={itemTitle(item)}
                                 thumbnailUrl={item.thumbnailUrl}
                                 badge={<RcpBadge variant={itemBadge(item)}>{itemLabel(item)}</RcpBadge>}
                                 meta={formatRegisteredAt(item.registeredAt)}
@@ -343,9 +353,13 @@ export default function RecipesPage() {
                             <>
                                 <h3 className="rcp-section-label">재료 (영상에 나온 그대로)</h3>
                                 <div className="rcp-chip-group">
-                                    {selected.recipe.ingredients.map((name) => (
-                                        <span key={name} className="rcp-sticker">{name}</span>
-                                    ))}
+                                    {selected.recipe.ingredients.map((name) => {
+                                        // 냉장고 보유 여부 표시 (2026-07-14 확정) — 정확 매칭, 정규화 없음.
+                                        // 조회 실패(fridgeNames===null)면 판정 없이 중립 스티커로
+                                        const haveClass = fridgeNames === null ? 'rcp-sticker'
+                                            : `rcp-chip ${fridgeNames.has(name) ? 'rcp-chip-on' : 'rcp-chip-off'}`;
+                                        return <span key={name} className={haveClass}>{name}</span>;
+                                    })}
                                 </div>
                                 {selected.recipe.cookMinutes !== null && (
                                     <p className="rcp-sheet-meta">{cookMinutesText(selected.recipe.cookMinutes)}</p>

@@ -10,7 +10,16 @@ import RcpListRow from '../ui/RcpListRow';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpShelf from '../ui/RcpShelf';
 import RcpVideoRow from '../ui/RcpVideoRow';
+import RcpCoverflow from '../ui/RcpCoverflow';
 import RcpInlineError from '../ui/RcpInlineError';
+import { ChefHat } from 'lucide-react';
+
+const COVERFLOW_SAMPLE = [
+    { id: 'a', title: '떡볶이', missing: [] as string[] },
+    { id: 'b', title: '아주아주 길게 적어본 요리 이름도 한 줄 말줄임까지만 (긴 글자 스트레스 테스트)', missing: ['간장', '참기름'] },
+    { id: 'c', title: '제육볶음', missing: ['고추장', '고춧가루', '대파'] },
+    { id: 'd', title: '순두부찌개', missing: ['순두부'] },
+];
 
 const COLOR_TOKENS = [
     '--rcp-bg', '--rcp-surface', '--rcp-surface-dim', '--rcp-line',
@@ -105,6 +114,31 @@ export default function StyleguidePage() {
                 onClick={() => {}}
             />
 
+            <h2 className="rcp-section-label">겹침형 커버플로우 — RcpCoverflow (.rcp-coverflow)</h2>
+            <Label>{'<RcpCoverflow items keyOf renderCard> — 추천 화면(4차) 3단계 섹션. 가운데 카드 확대(1.15배)+겹침(-60px), 옆 카드 축소(0.62배)·반투명(0.55) — 목업에서 사용자가 슬라이더로 확정한 값을 상수화'}</Label>
+            <RcpCoverflow
+                items={COVERFLOW_SAMPLE}
+                keyOf={(item) => item.id}
+                renderCard={(item) => (
+                    <>
+                        <div className="rcp-coverflow-thumb-fallback"><ChefHat size={40} /></div>
+                        <div className="rcp-coverflow-vignette" />
+                        <div className="rcp-coverflow-name"><span>{item.title}</span></div>
+                        {item.missing.length > 0 && (
+                            <div className="rcp-coverflow-chips">
+                                {item.missing.slice(0, 2).map((m) => (
+                                    <span key={m} className="rcp-coverflow-chip">{m}</span>
+                                ))}
+                                {item.missing.length > 2 && (
+                                    <span className="rcp-coverflow-chip rcp-coverflow-chip-more">{`+${item.missing.length - 2}`}</span>
+                                )}
+                            </div>
+                        )}
+                    </>
+                )}
+            />
+            <Label>{'긴 글자 스트레스 테스트: 이름표는 1줄+말줄임(카드 폭이 좁아 2줄은 과함 — 눌러서 상세로 들어가면 전체 이름 확인 가능, 정보 손실 없음)'}</Label>
+
             <h2 className="rcp-section-label">홈 섬네일 줄 — .rcp-thumb-strip / .rcp-thumb</h2>
             <Label>{'최근 분석 완료 영상 — 쇼츠 비율(9:16) 카드, 스냅 가로 스크롤'}</Label>
             <div className="rcp-thumb-strip">
@@ -195,7 +229,7 @@ export default function StyleguidePage() {
 
             <h2 className="rcp-section-label">하단 탭 바 — RcpTabBar (.rcp-tab-bar)</h2>
             <p style={{ fontSize: 'var(--rcp-fs-sm)', color: 'var(--rcp-text-sub)' }}>
-                이 화면 아래에 떠 있는 그것. 탭: 홈 / 추천 / 냉장고 / 레시피.
+                이 화면 아래에 떠 있는 그것. 탭: 홈 / 추천 / 냉장고 / 보관함.
             </p>
         </main>
     );

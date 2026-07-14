@@ -15,7 +15,7 @@ const RECENT_LIMIT = 10;
 // 에러 계약(CONTEXT.md): 사용자 문구는 프론트 소유
 const INVALID_URL_TEXT = '복사된 내용이 유튜브 링크가 아니에요 — 영상을 공유·복사한 뒤 눌러 주세요';
 const REGISTER_FAIL_TEXT = '등록하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
-const PASTE_FAIL_TEXT = '클립보드를 읽지 못했어요 — 레시피 탭에서 직접 붙여넣어 주세요';
+const PASTE_FAIL_TEXT = '클립보드를 읽지 못했어요 — 보관함 탭에서 직접 붙여넣어 주세요';
 const UNTITLED_VIDEO_TEXT = '제목 없는 영상';
 const mutationMessage = () => REGISTER_FAIL_TEXT;
 
@@ -55,14 +55,14 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
             mutation.setError(PASTE_FAIL_TEXT);
             return;
         }
-        // 영상 우선 규칙은 registerLink 공용 모듈이 판정 (레시피 탭·공유 수신과 단일 원본).
+        // 영상 우선 규칙은 registerLink 공용 모듈이 판정 (보관함 탭·공유 수신과 단일 원본).
         // 이미 등록된 영상(duplicate) = 정상 흐름 — 대기열에서 상태 확인.
         const outcome = await registerLink(text);
         if (outcome.kind === 'invalid') {
             mutation.setError(INVALID_URL_TEXT);
             return;
         }
-        navigate('../recipes'); // 등록 결과·진행률은 대기열이 있는 레시피 탭에서 이어 봄
+        navigate('../recipes'); // 등록 결과·진행률은 대기열이 있는 보관함 탭에서 이어 봄
     });
 
     return (
@@ -77,7 +77,7 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                 </RcpButton>
             ) : (
                 <p className="rcp-empty" id="rcp-home-paste-unavailable">
-                    개발 모드에서는 붙여넣기 버튼이 없어요 — 레시피 탭에서 링크를 직접 넣어 주세요
+                    개발 모드에서는 붙여넣기 버튼이 없어요 — 보관함 탭에서 링크를 직접 넣어 주세요
                 </p>
             )}
             <RcpInlineError message={mutation.error} />

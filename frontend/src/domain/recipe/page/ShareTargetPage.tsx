@@ -9,7 +9,7 @@ import RcpInlineError from '../ui/RcpInlineError';
 
 // 에러 계약(CONTEXT.md): 문구는 프론트 소유
 const NO_LINK_TEXT = '공유된 내용에서 유튜브 링크를 찾지 못했어요';
-const FAIL_TEXT = '등록하지 못했어요 — 레시피 탭에서 다시 시도해 주세요';
+const FAIL_TEXT = '등록하지 못했어요 — 보관함 탭에서 다시 시도해 주세요';
 
 export default function ShareTargetPage() {
     const [params] = useSearchParams();
@@ -23,7 +23,7 @@ export default function ShareTargetPage() {
         const goQueue = () => navigate('/recipe/recipes', { replace: true });
 
         const run = async () => {
-            // 영상 우선 규칙은 registerLink 공용 모듈이 판정 (홈·레시피 탭과 단일 원본).
+            // 영상 우선 규칙은 registerLink 공용 모듈이 판정 (홈·보관함 탭과 단일 원본).
             // 이미 등록된 영상 공유(duplicate) = 정상 흐름 — 대기열에서 상태 확인.
             const outcome = await registerLink(link);
             if (outcome.kind === 'invalid') {
@@ -46,7 +46,7 @@ export default function ShareTargetPage() {
                 <>
                     <RcpInlineError message={error} />
                     <RcpButton className="rcp-btn-full" onClick={() => navigate('/recipe/recipes', { replace: true })}>
-                        레시피 탭으로
+                        보관함 탭으로
                     </RcpButton>
                 </>
             ) : (
