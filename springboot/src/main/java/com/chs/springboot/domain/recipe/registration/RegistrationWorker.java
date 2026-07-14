@@ -65,7 +65,7 @@ public class RegistrationWorker {
                     result.summary(), result.tags(), RecipeExtractor.SUMMARY_VERSION, signals);
             log.info("[gikka] 분석 완료 video={} category={}", item.videoId(), result.category());
         } catch (RecipeExtractor.TransientFailureException e) {
-            videos.releaseAfterRateLimit(item.videoId());
+            videos.releaseAfterRateLimit(item.videoId(), e.getMessage());
             videos.backoffGemini(TRANSIENT_FAILURE_BACKOFF_SECONDS);
             log.info("[gikka] Gemini 일시적 실패(한도·과부하·타임아웃 등) — {}초 휴식 후 자동 재개: {}",
                     TRANSIENT_FAILURE_BACKOFF_SECONDS, e.getMessage());

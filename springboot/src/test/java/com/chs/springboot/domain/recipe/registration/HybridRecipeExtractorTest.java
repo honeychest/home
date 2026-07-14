@@ -86,4 +86,33 @@ class HybridRecipeExtractorTest {
         assertEquals("RECIPE", result.category());
         assertEquals("두부조림", result.name());
     }
+
+    @Test
+    @DisplayName("로컬이 TIP/ETC 로 성공했는데 Gemini 검증이 일시적으로 실패(429)하면 로컬 결과를 그대로 채택")
+    void keepsLocalResultWhenGeminiTransientFailureAfterLocalSuccess() {
+        localServer.expect(method(org.springframework.http.HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {"category":"TIP","summary":"로컬 요약","tags":["신발끈"]}
+                        """, MediaType.APPLICATION_JSON));
+        geminiServer.expect(method(org.springframework.http.HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+
+        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", null);
+
+        assertEquals("TIP", result.category());
+        assertEquals("로컬 요약", result.summary());
+    }
+
+    @Test
+    @DisplayName("로컬 자체가 불가한데 Gemini 마저 일시적으로 실패하면 대체할 결과가 없어 예외를 그대로 던짐")
+    void rethrowsTransientFailureWhenNoLocalFallback() {
+        localServer.expect(method(org.springframework.http.HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+        geminiServer.expect(method(org.springframework.http.HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                RecipeExtractor.TransientFailureException.class,
+                () -> hybrid.extract("https://www.youtube.com/watch?v=abc", null));
+    }
 }

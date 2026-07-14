@@ -34,12 +34,13 @@ public class VideoRepository {
                       String title, String thumbnailUrl, Integer durationSeconds, String description,
                       String recipeJson, String summary, String tagsJson,
                       int attemptCount, Integer analysisSeconds, String lastError,
-                      OffsetDateTime queuedAt, String analysisSignalsJson) {
+                      OffsetDateTime queuedAt, String analysisSignalsJson, int geminiRetryCount) {
     }
 
     private static final String COLUMNS =
             "video_id, url, platform, category, status, title, thumbnail_url, duration_seconds, description, "
-            + "recipe_json, summary, tags, attempt_count, analysis_seconds, last_error, queued_at, analysis_signals";
+            + "recipe_json, summary, tags, attempt_count, analysis_seconds, last_error, queued_at, "
+            + "analysis_signals, gemini_retry_count";
 
     public boolean exists(String videoId) {
         return jdbc.sql("SELECT COUNT(*) FROM video WHERE video_id = :videoId")
@@ -112,7 +113,7 @@ public class VideoRepository {
                             summary = :summary, tags = :tags::jsonb, summary_version = :version,
                             analysis_signals = :signals::jsonb,
                             analysis_seconds = EXTRACT(EPOCH FROM (now() - analyzing_started_at))::int,
-                            analyzing_started_at = NULL, last_error = NULL
+                            analyzing_started_at = NULL, last_error = NULL, gemini_retry_count = 0
                         WHERE video_id = :videoId
                         """)
                 .param("category", category).param("json", json)
@@ -135,22 +136,26 @@ public class VideoRepository {
                         UPDATE video
                         SET status = CASE WHEN attempt_count >= :max THEN 'FAILED' ELSE 'WAITING' END,
                             analysis_seconds = EXTRACT(EPOCH FROM (now() - analyzing_started_at))::int,
-                            analyzing_started_at = NULL, last_error = :error
+                            analyzing_started_at = NULL, last_error = :error, gemini_retry_count = 0
                         WHERE video_id = :videoId
                         """)
                 .param("max", maxAttempts).param("error", errorMessage)
                 .param("videoId", videoId).update();
     }
 
-    /** 429: 시도 횟수를 돌려주고 대기열 복귀 (기다렸다 재시도 — 횟수 소모 없음, 확정 결정) */
-    public void releaseAfterRateLimit(String videoId) {
+    /** 429·503·타임아웃: 시도 횟수를 돌려주고 대기열 복귀 (기다렸다 재시도 — 횟수 소모 없음, 확정 결정).
+        이 경로는 HybridRecipeExtractor 가 대체할 로컬 결과를 못 찾았을 때만 타므로(2026-07-14 확정),
+        gemini_retry_count 를 그대로 누적해 모니터링 화면에 "몇 번째 재시도인지" 보여준다.
+        errorMessage 는 그동안 last_error 가 안 채워지던 문제 해결 — 무슨 오류로 대기 중인지 노출 */
+    public void releaseAfterRateLimit(String videoId, String errorMessage) {
         jdbc.sql("""
                         UPDATE video
                         SET status = 'WAITING', attempt_count = GREATEST(attempt_count - 1, 0),
-                            analyzing_started_at = NULL
+                            analyzing_started_at = NULL, last_error = :error,
+                            gemini_retry_count = gemini_retry_count + 1
                         WHERE video_id = :videoId
                         """)
-                .param("videoId", videoId).update();
+                .param("videoId", videoId).param("error", errorMessage).update();
     }
 
     /**
@@ -170,7 +175,7 @@ public class VideoRepository {
                         SET status = :status, category = NULL, recipe_json = NULL,
                             summary = NULL, tags = NULL, summary_version = NULL, analysis_signals = NULL,
                             attempt_count = 0, analyzing_started_at = NULL, last_error = NULL,
-                            analysis_seconds = NULL, queued_at = now(),
+                            gemini_retry_count = 0, analysis_seconds = NULL, queued_at = now(),
                             title = COALESCE(:title, title), thumbnail_url = COALESCE(:thumb, thumbnail_url),
                             duration_seconds = COALESCE(:duration, duration_seconds),
                             description = COALESCE(:description, description)
@@ -196,7 +201,8 @@ public class VideoRepository {
                         UPDATE video
                         SET status = 'REMOVED', category = NULL, recipe_json = NULL, summary = NULL,
                             tags = NULL, summary_version = NULL, analysis_signals = NULL, attempt_count = 0,
-                            analyzing_started_at = NULL, last_error = NULL, analysis_seconds = NULL
+                            analyzing_started_at = NULL, last_error = NULL, analysis_seconds = NULL,
+                            gemini_retry_count = 0
                         WHERE video_id = :videoId
                         """)
                 .param("videoId", videoId).update();
@@ -278,17 +284,21 @@ public class VideoRepository {
                 .single();
     }
 
-    /** 워커 생존·429 이력 — gemini_rate 단일 행 */
-    public record WorkerStatus(OffsetDateTime heartbeatAt, int rateLimitCount, OffsetDateTime lastRateLimitedAt) {
+    /** 워커 생존·429 이력 — gemini_rate 단일 행. nextRetryAt: backoffGemini 가 last_call_at 을
+        미래로 밀어둔 값 그대로 — 지금 백오프 중이면 "다음 재시도 가능 시각", 아니면 과거 시각
+        (2026-07-14 확정, 모니터링 화면 카운트다운용) */
+    public record WorkerStatus(OffsetDateTime heartbeatAt, int rateLimitCount, OffsetDateTime lastRateLimitedAt,
+                               OffsetDateTime nextRetryAt) {
     }
 
     public WorkerStatus workerStatus() {
-        return jdbc.sql("SELECT heartbeat_at, rate_limit_count, last_rate_limited_at "
+        return jdbc.sql("SELECT heartbeat_at, rate_limit_count, last_rate_limited_at, last_call_at "
                         + "FROM gemini_rate WHERE id = 1")
                 .query((rs, i) -> new WorkerStatus(
                         rs.getObject("heartbeat_at", OffsetDateTime.class),
                         rs.getInt("rate_limit_count"),
-                        rs.getObject("last_rate_limited_at", OffsetDateTime.class)))
+                        rs.getObject("last_rate_limited_at", OffsetDateTime.class),
+                        rs.getObject("last_call_at", OffsetDateTime.class)))
                 .single();
     }
 
@@ -310,6 +320,7 @@ public class VideoRepository {
                 rs.getObject("analysis_seconds", Integer.class),
                 rs.getString("last_error"),
                 rs.getObject("queued_at", OffsetDateTime.class),
-                rs.getString("analysis_signals"));
+                rs.getString("analysis_signals"),
+                rs.getInt("gemini_retry_count"));
     }
 }

@@ -125,16 +125,21 @@ public class RegistrationController {
         return repository.recentDone(userId, limit).stream().map(this::toResponse).toList();
     }
 
-    /** 프론트 MonitorItem 과 1:1 (검증단계 실시간 모니터링 — 2026-07-13 확정) */
+    /** 프론트 MonitorItem 과 1:1 (검증단계 실시간 모니터링 — 2026-07-13 확정).
+        geminiRetryCount: 로컬 대체 결과가 없어 Gemini 재시도 루프를 도는 중인 횟수
+        (2026-07-14 확정 — attempt_count 는 이 상황에서 소모되지 않게 설계돼 있어 별도 노출) */
     public record MonitorResponse(long userId, String email, String videoId, String url, String title,
                                   String category, String status, Integer durationSeconds, int attemptCount,
                                   String lastError, Integer analysisSeconds,
-                                  String registeredAt, String analyzingStartedAt) {
+                                  String registeredAt, String analyzingStartedAt, int geminiRetryCount) {
     }
 
-    /** 프론트 MonitorSnapshot 과 1:1 — 대기열 크기·워커 생존·429 이력 + 항목 목록 한 번에 (2026-07-13 확정) */
+    /** 프론트 MonitorSnapshot 과 1:1 — 대기열 크기·워커 생존·429 이력 + 항목 목록 한 번에 (2026-07-13 확정).
+        nextRetryAt: Gemini 백오프 중이면 다음 재시도 가능 시각, 아니면 과거 시각 (2026-07-14 확정 —
+        모니터링 화면의 카운트다운 표시용, gemini_rate.last_call_at 재사용) */
     public record MonitorSnapshot(int waitingCount, int analyzingCount, String workerHeartbeatAt,
-                                  int rateLimitCount, String lastRateLimitedAt, List<MonitorResponse> items) {
+                                  int rateLimitCount, String lastRateLimitedAt, String nextRetryAt,
+                                  List<MonitorResponse> items) {
     }
 
     /** 전 사용자 대기열 실시간 조회 — 오너 전용 (허용 목록 재사용, 목록 비면 아무도 접근 불가) */
@@ -148,13 +153,15 @@ public class RegistrationController {
                         row.userId(), row.email(), row.videoId(), row.url(), row.title(),
                         row.category(), row.status(), row.durationSeconds(), row.attemptCount(),
                         row.lastError(), row.analysisSeconds(), row.registeredAt().toString(),
-                        row.analyzingStartedAt() == null ? null : row.analyzingStartedAt().toString()))
+                        row.analyzingStartedAt() == null ? null : row.analyzingStartedAt().toString(),
+                        row.geminiRetryCount()))
                 .toList();
         return new MonitorSnapshot(
                 counts.waiting(), counts.analyzing(),
                 worker.heartbeatAt() == null ? null : worker.heartbeatAt().toString(),
                 worker.rateLimitCount(),
                 worker.lastRateLimitedAt() == null ? null : worker.lastRateLimitedAt().toString(),
+                worker.nextRetryAt() == null ? null : worker.nextRetryAt().toString(),
                 items);
     }
 

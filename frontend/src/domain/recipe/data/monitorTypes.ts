@@ -20,6 +20,9 @@ export interface MonitorItem {
     registeredAt: string;
     /** ANALYZING 일 때만 값이 있음 — 경과 시간 계산 기준 */
     analyzingStartedAt: string | null;
+    /** 로컬 대체 결과가 없어 Gemini 재시도 루프를 도는 중인 횟수 (2026-07-14 확정 —
+        attempt_count 는 이 상황에서 소모되지 않게 설계돼 있어 별도 노출) */
+    geminiRetryCount: number;
 }
 
 /** 전 사용자 대기열 스냅샷 — 대기열 크기·워커 생존·429 이력 + 항목 목록 (2026-07-13 확정) */
@@ -30,5 +33,7 @@ export interface MonitorSnapshot {
     workerHeartbeatAt: string | null;
     rateLimitCount: number;
     lastRateLimitedAt: string | null;
+    /** Gemini 백오프 중이면 다음 재시도 가능 시각, 아니면 과거 시각 (2026-07-14 확정, 카운트다운용) */
+    nextRetryAt: string | null;
     items: MonitorItem[];
 }

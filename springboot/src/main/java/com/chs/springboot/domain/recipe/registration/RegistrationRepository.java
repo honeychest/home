@@ -108,7 +108,8 @@ public class RegistrationRepository {
     public record MonitorRow(long userId, String email, String videoId, String url, String title,
                              String category, String status, Integer durationSeconds, int attemptCount,
                              String lastError, Integer analysisSeconds,
-                             OffsetDateTime registeredAt, OffsetDateTime analyzingStartedAt) {
+                             OffsetDateTime registeredAt, OffsetDateTime analyzingStartedAt,
+                             int geminiRetryCount) {
     }
 
     /** 전 사용자 대기열 — 최신 등록이 앞. limit 필수(표시 개수 원본은 프론트 상수 하나뿐) */
@@ -116,7 +117,7 @@ public class RegistrationRepository {
         return jdbc.sql("""
                         SELECT r.user_id, u.email, v.video_id, v.url, v.title, v.category, v.status,
                                v.duration_seconds, v.attempt_count, v.last_error, v.analysis_seconds,
-                               r.registered_at, v.analyzing_started_at
+                               r.registered_at, v.analyzing_started_at, v.gemini_retry_count
                         FROM registration r
                             JOIN video v ON v.video_id = r.video_id
                             JOIN gikka_user u ON u.id = r.user_id
@@ -131,7 +132,8 @@ public class RegistrationRepository {
                         rs.getInt("attempt_count"), rs.getString("last_error"),
                         rs.getObject("analysis_seconds", Integer.class),
                         rs.getObject("registered_at", OffsetDateTime.class),
-                        rs.getObject("analyzing_started_at", OffsetDateTime.class)))
+                        rs.getObject("analyzing_started_at", OffsetDateTime.class),
+                        rs.getInt("gemini_retry_count")))
                 .list();
     }
 

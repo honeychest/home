@@ -76,6 +76,13 @@ const rateLimitText = (snapshot: MonitorSnapshot, nowMs: number): string => {
     return `${snapshot.rateLimitCount}회${last ? ` (최근 ${last})` : ''}`;
 };
 
+/** 다음 재시도까지 남은 초 — 백오프 중이 아니면(과거 시각) null */
+const nextRetrySecondsLeft = (nextRetryAt: string | null, nowMs: number): number | null => {
+    if (!nextRetryAt) return null;
+    const left = Math.ceil((new Date(nextRetryAt).getTime() - nowMs) / 1000);
+    return left > 0 ? left : null;
+};
+
 export default function MonitorPage() {
     const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null); // null = 첫 로딩
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -169,6 +176,11 @@ export default function MonitorPage() {
                         <RcpBadge variant={snapshot.rateLimitCount > 0 ? 'warning' : 'neutral'}>
                             일시적 실패(한도·과부하 등) {rateLimitText(snapshot, now)}
                         </RcpBadge>
+                        {nextRetrySecondsLeft(snapshot.nextRetryAt, now) !== null && (
+                            <RcpBadge variant="warning">
+                                다음 재시도까지 {nextRetrySecondsLeft(snapshot.nextRetryAt, now)}초
+                            </RcpBadge>
+                        )}
                     </div>
 
                     <section id="rcp-monitor-list" aria-label="전 사용자 분석 대기열">
@@ -193,6 +205,7 @@ export default function MonitorPage() {
                                         <span>{formatElapsedSeconds(item.analysisSeconds)} 걸림</span>
                                     )}
                                     {item.attemptCount > 0 && <span>시도 {item.attemptCount}회</span>}
+                                    {item.geminiRetryCount > 0 && <span>Gemini 재시도 {item.geminiRetryCount}회</span>}
                                 </div>
                                 {item.lastError && (
                                     <p className="rcp-monitor-error" role="alert">{item.lastError}</p>
