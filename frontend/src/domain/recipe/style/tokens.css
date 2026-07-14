@@ -59,7 +59,8 @@
 
   /* ── 글자 ── */
   --rcp-font: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-  --rcp-fs-xs: 0.72rem;              /* 배지·날짜 */
+  --rcp-fs-2xs: 0.66rem;              /* 목록 행 날짜 등 최하위 보조 정보 */
+  --rcp-fs-xs: 0.72rem;              /* 배지 */
   --rcp-fs-sm: 0.84rem;              /* 보조 문구 */
   --rcp-fs-md: 0.95rem;              /* 본문·재료명 */
   --rcp-fs-lg: 1.1rem;               /* 섹션 제목 */

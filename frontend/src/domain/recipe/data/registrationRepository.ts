@@ -14,8 +14,9 @@ export interface RegistrationRepository {
     register(url: string): Promise<RegistrationItem>;
     /** 재생목록 일괄 등록 — 추가된 영상 수 반환 (이미 있던 영상은 건너뜀) */
     registerPlaylist(url: string): Promise<number>;
-    /** 수동 재분석 (분류 오판·실패 구제 — 대기열 맨 뒤로) */
-    reanalyze(videoId: string): Promise<void>;
+    /** 내 목록에서 지우기 — 내 연결만 삭제 (영상 자체·다른 사용자 연결은 무관, 오판 구제용
+        재분석은 운영자 모드로 이동 — 2026-07-14 확정) */
+    unregister(videoId: string): Promise<void>;
     /** 홈 섬네일용: 최근 분석 완료(DONE + RECIPE) 영상 */
     recentDone(limit: number): Promise<RegistrationItem[]>;
 }
@@ -44,8 +45,8 @@ export function createApiRegistrationRepository(): RegistrationRepository {
             return result.added;
         },
 
-        reanalyze(videoId) {
-            return request<void>(`${BASE}/${encodeURIComponent(videoId)}/reanalyze`, { method: 'POST' });
+        unregister(videoId) {
+            return request<void>(`${BASE}/${encodeURIComponent(videoId)}`, { method: 'DELETE' });
         },
 
         recentDone(limit) {

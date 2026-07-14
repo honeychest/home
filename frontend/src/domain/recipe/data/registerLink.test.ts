@@ -29,7 +29,7 @@ function fakeRepo(over: Partial<RegistrationRepository> = {}): RegistrationRepos
         list: async () => [],
         register: async (url: string) => { calls.push(`register:${url}`); return item(); },
         registerPlaylist: async (url: string) => { calls.push(`playlist:${url}`); return 3; },
-        reanalyze: async () => undefined,
+        unregister: async () => undefined,
         recentDone: async () => [],
         ...over,
     };

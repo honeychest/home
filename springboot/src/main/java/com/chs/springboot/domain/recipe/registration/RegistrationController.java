@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -102,17 +103,19 @@ public class RegistrationController {
     }
 
     /**
-     * 재분석은 영상 단위 — 등록한 모든 계정에 반영 (2026-07-13 확정). 요청자가 등록한 영상인지만 확인.
-     * 메타도 함께 재조회(2026-07-13 확정 — description 활용 기능 도입 전 등록된 영상은 재분석해도
-     * description 이 안 채워지던 문제 수정. 조회 실패해도 재분석 자체는 진행됨).
+     * 내 목록에서 지우기 — 내 registration 연결만 삭제 (2026-07-14 확정, 오너 전용 "영상 삭제"와는
+     * 다른 기능). video·다른 사용자 연결은 그대로 유지 — 계속 관리(추가·정리)가 가능해야 한다는 요구.
      */
-    @PostMapping("/{videoId}/reanalyze")
-    public void reanalyze(@GikkaUserId long userId, @PathVariable String videoId) {
+    @DeleteMapping("/{videoId}")
+    public void unregister(@GikkaUserId long userId, @PathVariable String videoId) {
         if (!repository.exists(userId, videoId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "등록된 영상이 아님");
         }
-        videos.reanalyze(videoId, metadata.fetchOne(videoId), properties.getMaxVideoMinutes());
+        repository.delete(userId, videoId);
     }
+
+    // 일반 사용자용 재분석 엔드포인트는 폐지 (2026-07-14 확정 — 오판 구제를 포함한 모든 강제
+    // 동작은 모니터링 화면(/monitor/{videoId}/reanalyze, 아래) 한 곳에 모으는 원칙으로 통일).
 
     /** limit 필수 — 표시 개수의 원본은 프론트 상수 하나뿐 (서버 기본값 이중 정의 금지) */
     @GetMapping("/recent")

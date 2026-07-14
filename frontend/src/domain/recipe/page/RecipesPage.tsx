@@ -57,17 +57,13 @@ const itemDetail = (item: RegistrationItem): string | null => {
     if (item.status === 'WAITING') return '차례를 기다리고 있어요. 분석이 끝나면 자동으로 바뀌어요.';
     if (item.status === 'ANALYZING') return '영상을 분석하고 있어요. 잠시만요.';
     if (item.status === 'TOO_LONG') return '7분이 넘는 영상이라 분석하지 않았어요 (기록만 남아요).';
-    if (item.status === 'FAILED') return '분석에 여러 번 실패했어요. 다시 분석을 눌러 재시도할 수 있어요.';
-    if (item.status === 'REMOVED') return '이 영상은 시스템에서 제거됐어요. 다시 분석을 누르면 복구돼요.';
+    if (item.status === 'FAILED') return '분석에 여러 번 실패했어요.';
+    if (item.status === 'REMOVED') return '이 영상은 시스템에서 제거됐어요.';
     if (item.status === 'DONE' && item.category !== 'RECIPE') {
-        return `요리가 아니라 ${CATEGORY_LABEL[item.category ?? 'ETC']}(으)로 분류했어요. 잘못 분류된 것 같으면 다시 분석을 눌러 주세요.`;
+        return `요리가 아니라 ${CATEGORY_LABEL[item.category ?? 'ETC']}(으)로 분류했어요.`;
     }
     return null;
 };
-/** 다시 분석 가능: 실패·삭제됨 또는 요리가 아닌 걸로 분류된 완료 항목 (오판 구제·복구) */
-const canReanalyze = (item: RegistrationItem): boolean =>
-    item.status === 'FAILED' || item.status === 'REMOVED'
-    || (item.status === 'DONE' && item.category !== 'RECIPE');
 const TOO_LONG_NOTICE = '7분이 넘는 영상이라 분석하지 않아요 — 목록에 기록만 남겼어요';
 
 const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;
@@ -133,14 +129,21 @@ export default function RecipesPage() {
                 mutation.setError(DUPLICATE_TEXT); // 이 화면에서는 안내 문구로 (홈·공유는 정상 통과)
                 return;
             }
+            setUrlInput(''); // 성공했을 때만 비움 (실패 시 입력 유지 — 재시도 배려)
             if (outcome.kind === 'playlist') {
                 setJustRegistered((prev) => [...prev, playlistAddedText(outcome.added)]);
+                setRegisterOpen(false); // 등록 성공하면 팝업도 닫는다 (2026-07-14 확정)
             } else {
                 setJustRegistered((prev) => [...prev, '영상 1개']);
-                // 길이 컷은 등록 순간 바로 알림 (2026-07-12 확정 — 기록은 남되 막힌 걸 즉시 알게)
-                if (outcome.item.status === 'TOO_LONG') setRegisterNotice(TOO_LONG_NOTICE);
+                // 길이 컷은 등록 순간 바로 알림 (2026-07-12 확정 — 기록은 남되 막힌 걸 즉시 알게).
+                // 이 경우엔 팝업을 닫지 않고 경고를 보여준다 — 자동 닫힘과 즉시 안내가 충돌하는
+                // 유일한 경로 (2026-07-14 확정).
+                if (outcome.item.status === 'TOO_LONG') {
+                    setRegisterNotice(TOO_LONG_NOTICE);
+                } else {
+                    setRegisterOpen(false);
+                }
             }
-            setUrlInput(''); // 성공했을 때만 비움 (실패 시 입력 유지 — 재시도 배려)
             await reload();
         });
     };
@@ -157,8 +160,10 @@ export default function RecipesPage() {
         }
     };
 
-    const handleReanalyze = (item: RegistrationItem) => mutation.run(async () => {
-        await registrationRepository.reanalyze(item.videoId);
+    // 내 목록에서 지우기 — 내 연결만 삭제 (다른 사용자·video 자체는 무관, 확인 팝업 없이 즉시 —
+    // 냉장고 삭제와 동일한 개인 데이터 관리 패턴, 2026-07-14 확정)
+    const handleUnregister = (item: RegistrationItem) => mutation.run(async () => {
+        await registrationRepository.unregister(item.videoId);
         setSelected(null);
         await reload();
     });
@@ -341,9 +346,9 @@ export default function RecipesPage() {
                         >
                             원본 영상 보기
                         </a>
-                        {canReanalyze(selected) && (
-                            <RcpButton onClick={() => void handleReanalyze(selected)}>다시 분석</RcpButton>
-                        )}
+                        <RcpButton variant="ghost" onClick={() => void handleUnregister(selected)}>
+                            내 목록에서 지우기
+                        </RcpButton>
                     </>
                 )}
             </RcpBottomSheet>

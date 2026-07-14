@@ -72,6 +72,12 @@ public class RegistrationRepository {
         }));
     }
 
+    /** 내 목록에서 지우기 — 내 연결만 삭제 (2026-07-14 확정). video·다른 사용자 연결은 그대로 유지. */
+    public void delete(long userId, String videoId) {
+        jdbc.sql("DELETE FROM registration WHERE user_id = :userId AND video_id = :videoId")
+                .param("userId", userId).param("videoId", videoId).update();
+    }
+
     public Optional<Row> find(long userId, String videoId) {
         return jdbc.sql("SELECT " + JOINED_COLUMNS + " " + JOIN
                         + "WHERE r.user_id = :userId AND r.video_id = :videoId")
