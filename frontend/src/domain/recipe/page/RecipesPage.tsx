@@ -36,26 +36,31 @@ const STATUS_LABEL: Record<Exclude<RegistrationStatus, 'DONE'>, string> = {
 };
 // 분석 완료(DONE)는 상태 대신 분류를 보여준다 (2026-07-12 확정: 요리/유틸/기타)
 const CATEGORY_LABEL: Record<VideoCategory, string> = {
-    RECIPE: '완료',
+    RECIPE: '레시피',
     TIP: '유틸',
     ETC: '기타',
 };
-/** 배지 문구: 요리로 완료된 항목은 배지 없음(정상 흐름이라 따로 표시할 필요 없음 — 2026-07-14
-    확정), 유틸·기타는 분류, 나머지는 진행 상태 */
-const itemLabel = (item: RegistrationItem): string | null => {
-    if (item.status === 'DONE') {
-        return item.category === 'RECIPE' ? null : CATEGORY_LABEL[item.category ?? 'ETC'];
-    }
-    return STATUS_LABEL[item.status];
+/** 카테고리 → 배지 색 슬롯 (2026-07-14 확정, dataviz 스킬 8색 고정 순서 팔레트).
+    새 카테고리가 늘면 이 순서 그대로 cat-4 부터 이어 쓴다 — 순서 변경 금지(색맹 구분성 근거) */
+const CATEGORY_BADGE: Record<VideoCategory, RcpBadgeVariant> = {
+    RECIPE: 'cat-1',
+    TIP: 'cat-2',
+    ETC: 'cat-3',
 };
-/** 배지 톤 규칙: 채움 = 정상 흐름 / 테두리만 = 제외·문제 */
+/** 배지 문구: 완료 항목은 분류(레시피/유틸/기타), 나머지는 진행 상태.
+    모든 항목이 항상 배지를 갖는다 — 일부만 비면 카드 오른쪽 칼럼이 들쭉날쭉해져
+    레이아웃 일관성이 깨짐 (2026-07-14 재확정: "완료" 대신 "레시피"로 문구만 교체) */
+const itemLabel = (item: RegistrationItem): string =>
+    item.status === 'DONE' ? CATEGORY_LABEL[item.category ?? 'ETC'] : STATUS_LABEL[item.status];
+/** 배지 색: 완료 항목은 카테고리 팔레트, 나머지는 상태 팔레트 — 서로 절대 안 겹치는
+    두 체계 (2026-07-14 재설계, dataviz 스킬 CVD 검증. 예전 "채움/테두리" 구분은 폐지) */
 const itemBadge = (item: RegistrationItem): RcpBadgeVariant => {
-    if (item.status === 'DONE') return item.category === 'RECIPE' ? 'default' : 'excluded';
+    if (item.status === 'DONE') return CATEGORY_BADGE[item.category ?? 'ETC'];
     if (item.status === 'ANALYZING') return 'analyzing';
-    if (item.status === 'FAILED') return 'danger';
-    if (item.status === 'REMOVED') return 'danger';
-    if (item.status === 'TOO_LONG') return 'excluded';
-    return 'dim'; // WAITING
+    if (item.status === 'FAILED') return 'critical';
+    if (item.status === 'REMOVED') return 'serious';
+    if (item.status === 'TOO_LONG') return 'warning';
+    return 'neutral'; // WAITING
 };
 /** 결과 시트의 상태 설명 — 완료된 요리는 추출 내용을 보여주므로 설명 불필요 */
 const itemDetail = (item: RegistrationItem): string | null => {
@@ -74,12 +79,12 @@ const TOO_LONG_NOTICE = '7분이 넘는 영상이라 분석하지 않아요 — 
 const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;
 const playlistAddedText = (count: number) => `재생목록에서 ${count}개를 대기열에 넣었어요`;
 // 문구/데이터 분리 (품질 기본선 7): 조합 문구는 템플릿 한 곳에
-const summaryBadgeText = (label: string, count: number) => `${label} ${count}`;
+// 필터로 선택된 배지는 체크 표시를 붙인다 — 색만으로 구분하지 않기 위한 보조 신호(색맹 대비)
+const summaryBadgeText = (label: string, count: number, active: boolean) =>
+    active ? `${label} ${count} ✓` : `${label} ${count}`;
 const justAddedTagText = (label: string) => `${label} ✓`;
-const resultMetaText = (item: RegistrationItem) => {
-    const label = itemLabel(item);
-    return label ? `${label} · ${formatRegisteredAt(item.registeredAt)}` : formatRegisteredAt(item.registeredAt);
-};
+const resultMetaText = (item: RegistrationItem) =>
+    `${itemLabel(item)} · ${formatRegisteredAt(item.registeredAt)}`;
 // 실패 문구 결정 — useMutation 에 모듈 레벨로 넘긴다 (렌더마다 재생성 방지)
 const mutationMessage = (e: unknown) =>
     e instanceof DuplicateVideoError ? DUPLICATE_TEXT : MUTATION_ERROR_TEXT;
@@ -100,6 +105,9 @@ export default function RecipesPage() {
     const [justRegistered, setJustRegistered] = useState<string[]>([]); // 이번 시트에서 넣은 것 (확인줄)
     const [registerNotice, setRegisterNotice] = useState<string | null>(null); // 긴 영상 즉시 차단 안내 등
     const [selected, setSelected] = useState<RegistrationItem | null>(null); // 항목 탭 → 결과 시트
+    // 요약 배지 탭 → 필터 (2026-07-14 확정). 지금은 전체 로드 + 클라이언트 필터로 충분
+    // (개인용, 1000건도 부담 없는 규모) — 페이징 도입 시 서버 쿼리 파라미터 방식으로 교체 예정.
+    const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
     const reload = useCallback(async () => {
         setItems(await registrationRepository.list());
@@ -188,18 +196,19 @@ export default function RecipesPage() {
 
     const errorLine = <RcpInlineError message={mutation.error} />;
 
-    // 요약줄: 표시 문구(유틸·기타·분석대기…) 기준으로 집계 — 정상 완료된 요리는 배지가 없어
-    // 집계에서도 제외된다(0인 것은 숨김과 같은 취지: 주의가 필요한 상태만 보여줌)
+    // 요약줄: 표시 문구(레시피·유틸·기타·분석대기…) 기준으로 집계, 0인 것은 숨김
     const summary = items
         ? items.reduce<{ label: string; variant: RcpBadgeVariant; count: number }[]>((acc, item) => {
             const label = itemLabel(item);
-            if (!label) return acc;
             const found = acc.find((s) => s.label === label);
             if (found) found.count += 1;
             else acc.push({ label, variant: itemBadge(item), count: 1 });
             return acc;
         }, [])
         : [];
+    // 요약 배지 필터 적용 — summary 자체는 항상 전체 items 기준으로 집계되므로(위),
+    // 필터가 걸려도 활성 배지는 그대로 남아 다시 탭하면 해제할 수 있다
+    const displayedItems = (items && activeFilter) ? items.filter((item) => itemLabel(item) === activeFilter) : items ?? [];
 
     return (
         <main className="rcp-screen" id="rcp-recipes-page">
@@ -222,32 +231,41 @@ export default function RecipesPage() {
             {items !== null && (
                 <>
                     {summary.length > 0 && (
-                        <div className="rcp-summary-row" id="rcp-queue-summary" aria-label="분석 진행 요약">
+                        <div className="rcp-summary-row" id="rcp-queue-summary" aria-label="분석 진행 요약 · 필터">
                             {summary.map(({ label, variant, count }) => (
-                                <RcpBadge key={label} variant={variant}>
-                                    {summaryBadgeText(label, count)}
-                                </RcpBadge>
+                                <button
+                                    key={label}
+                                    type="button"
+                                    className="rcp-summary-badge-btn"
+                                    aria-pressed={activeFilter === label}
+                                    onClick={() => setActiveFilter((prev) => (prev === label ? null : label))}
+                                >
+                                    <RcpBadge variant={variant}>
+                                        {summaryBadgeText(label, count, activeFilter === label)}
+                                    </RcpBadge>
+                                </button>
                             ))}
                         </div>
                     )}
 
                     <section id="rcp-queue-list" aria-label="분석 대기열">
-                        {items.length === 0 && (
-                            <p className="rcp-empty">아직 등록한 영상이 없어요. 아래 [+ 영상 등록]으로 시작해 보세요.</p>
+                        {displayedItems.length === 0 && (
+                            <p className="rcp-empty">
+                                {items.length === 0
+                                    ? '아직 등록한 영상이 없어요. 아래 [+ 영상 등록]으로 시작해 보세요.'
+                                    : '이 필터에 해당하는 항목이 없어요.'}
+                            </p>
                         )}
-                        {items.map((item) => {
-                            const label = itemLabel(item);
-                            return (
-                                <RcpVideoRow
-                                    key={item.videoId}
-                                    title={item.title ?? item.url}
-                                    thumbnailUrl={item.thumbnailUrl}
-                                    badge={label ? <RcpBadge variant={itemBadge(item)}>{label}</RcpBadge> : undefined}
-                                    meta={formatRegisteredAt(item.registeredAt)}
-                                    onClick={() => setSelected(item)}
-                                />
-                            );
-                        })}
+                        {displayedItems.map((item) => (
+                            <RcpVideoRow
+                                key={item.videoId}
+                                title={item.title ?? item.url}
+                                thumbnailUrl={item.thumbnailUrl}
+                                badge={<RcpBadge variant={itemBadge(item)}>{itemLabel(item)}</RcpBadge>}
+                                meta={formatRegisteredAt(item.registeredAt)}
+                                onClick={() => setSelected(item)}
+                            />
+                        ))}
                     </section>
 
                     <RcpButton className="rcp-btn-full" id="rcp-register-button" onClick={openRegisterSheet}>

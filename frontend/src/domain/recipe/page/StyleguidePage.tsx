@@ -81,16 +81,17 @@ export default function StyleguidePage() {
             </div>
 
             <h2 className="rcp-section-label">배지 — RcpBadge</h2>
-            <Label>{'<RcpBadge> (.rcp-badge) / variant: expiring / dim / excluded / danger / analyzing'}</Label>
-            <Label>규칙: 채움 = 정상 흐름 / 테두리만 = 제외·문제 (요약줄은 .rcp-summary-row 로 감싸기)</Label>
+            <Label>{'<RcpBadge> (.rcp-badge) — 카테고리: cat-1~8(고정 순서 팔레트) / 상태: neutral·analyzing·good·warning·serious·critical / expiring(냉장고 전용)'}</Label>
+            <Label>규칙(2026-07-14 재설계): 전부 같은 파스텔 칩 모양, 의미는 색으로만 구분 — 카테고리 팔레트와 상태 팔레트는 절대 안 겹침 (요약줄은 .rcp-summary-row 로 감싸기)</Label>
             <div className="rcp-summary-row">
-                <RcpBadge>완료</RcpBadge>
-                <RcpBadge variant="analyzing">분석 중</RcpBadge>
-                <RcpBadge variant="dim">대기 중</RcpBadge>
-                <RcpBadge variant="excluded">유틸</RcpBadge>
-                <RcpBadge variant="excluded">기타</RcpBadge>
-                <RcpBadge variant="excluded">긴 영상</RcpBadge>
-                <RcpBadge variant="danger">실패</RcpBadge>
+                <RcpBadge variant="cat-1">레시피</RcpBadge>
+                <RcpBadge variant="cat-2">유틸</RcpBadge>
+                <RcpBadge variant="cat-3">기타</RcpBadge>
+                <RcpBadge variant="analyzing">분석중</RcpBadge>
+                <RcpBadge variant="neutral">분석대기</RcpBadge>
+                <RcpBadge variant="warning">긴 영상</RcpBadge>
+                <RcpBadge variant="serious">삭제됨</RcpBadge>
+                <RcpBadge variant="critical">분석실패</RcpBadge>
                 <RcpBadge variant="expiring">임박 (냉장고용)</RcpBadge>
             </div>
 
@@ -99,7 +100,7 @@ export default function StyleguidePage() {
             <RcpVideoRow
                 title="두부조림 초간단 버전"
                 thumbnailUrl={null}
-                badge={<RcpBadge>완료</RcpBadge>}
+                badge={<RcpBadge variant="cat-1">레시피</RcpBadge>}
                 meta="7월 12일 등록"
                 onClick={() => {}}
             />
@@ -176,7 +177,7 @@ export default function StyleguidePage() {
                 <RcpVideoRow
                     title="Extra long video title that keeps going 띄어쓰기없이아주길게이어지는영상제목도행안에서줄바꿈되어야정상"
                     thumbnailUrl={null}
-                    badge={<RcpBadge variant="excluded">bald zu lang</RcpBadge>}
+                    badge={<RcpBadge variant="warning">bald zu lang</RcpBadge>}
                     meta="12월 31일 등록"
                     onClick={() => {}}
                 />

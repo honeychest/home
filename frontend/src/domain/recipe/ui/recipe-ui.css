@@ -118,8 +118,8 @@
 /* ── 터치 타깃 확장 (품질 기본선 3: 최소 --rcp-touch=44px) ──
    칩(38px)·스티커(38px)·아이콘 버튼(36px)은 검수 확정된 시각 크기를 유지하고,
    보이지 않는 가상 요소로 탭 영역만 44px 로 넓힌다 (주변 gap 8px 안이라 겹침 없음) */
-.rcp-chip, .rcp-sticker, .rcp-icon-btn { position: relative; }
-.rcp-chip::before, .rcp-sticker::before, .rcp-icon-btn::before {
+.rcp-chip, .rcp-sticker, .rcp-icon-btn, .rcp-summary-badge-btn { position: relative; }
+.rcp-chip::before, .rcp-sticker::before, .rcp-icon-btn::before, .rcp-summary-badge-btn::before {
   content: "";
   position: absolute; left: 50%; top: 50%;
   transform: translate(-50%, -50%);
@@ -127,13 +127,14 @@
   min-width: var(--rcp-touch); min-height: var(--rcp-touch);
 }
 
-/* ── 배지: rcp-badge (기본) / rcp-badge-expiring (임박 포스트잇) ── */
+/* ── 배지: rcp-badge (2026-07-14 재설계, dataviz 스킬 CVD 검증) ──
+   전부 같은 "파스텔 배경 + 진한 글자" 칩 모양 — 의미는 색으로만 구분(채움/테두리 구분 폐지,
+   필터 선택 표시와 시각적으로 겹치던 문제 해소). expiring 은 냉장고 메타포 전용이라 예외. */
 .rcp-badge {
   display: inline-flex; align-items: center;
   font-size: var(--rcp-fs-xs); font-weight: var(--rcp-fw-bold);
   padding: 4px 10px; /* 검수 피드백(07-12): 뭉쳐 보이지 않게 안 여백 확대 */
   border-radius: var(--rcp-radius-sm);
-  background: var(--rcp-accent-soft); color: var(--rcp-accent);
   white-space: nowrap;
 }
 .rcp-badge-expiring {
@@ -142,24 +143,53 @@
   box-shadow: var(--rcp-shadow-postit);
 }
 
-/* ── 배지 상태 변형 (3차 대기열) — 규칙: 채움 = 정상 흐름 / 테두리만 = 제외·문제 (2026-07-12 검수 확정) ── */
-.rcp-badge-dim { background: var(--rcp-surface-dim); color: var(--rcp-text-faint); }
-.rcp-badge-excluded { background: transparent; color: var(--rcp-text-sub); border: 1px solid var(--rcp-text-faint); }
-.rcp-badge-danger { background: transparent; color: var(--rcp-danger); border: 1px solid var(--rcp-danger); }
-
-/* 상태 요약줄 (rcp-queue-summary 등) — 배지끼리 넉넉한 간격 + 목록과의 여백 */
-.rcp-summary-row {
-  display: flex; flex-wrap: wrap;
-  gap: var(--rcp-space-2) var(--rcp-space-3);
-  margin-bottom: var(--rcp-space-4);
+/* 상태(고정 의미, 카테고리 팔레트와 절대 안 겹치는 예약색) */
+.rcp-badge-neutral  { background: var(--rcp-surface-dim); color: var(--rcp-text-faint); }
+.rcp-badge-good      { background: var(--rcp-status-good-bg); color: var(--rcp-status-good-text); }
+.rcp-badge-warning   { background: var(--rcp-status-warning-bg); color: var(--rcp-status-warning-text); }
+.rcp-badge-serious   { background: var(--rcp-status-serious-bg); color: var(--rcp-status-serious-text); }
+.rcp-badge-critical  { background: var(--rcp-status-critical-bg); color: var(--rcp-status-critical-text); }
+.rcp-badge-analyzing {
+  background: var(--rcp-accent-soft); color: var(--rcp-accent);
+  animation: rcp-badge-blink 1.4s ease-in-out infinite;
 }
-.rcp-badge-analyzing { animation: rcp-badge-blink 1.4s ease-in-out infinite; }
 @keyframes rcp-badge-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
 }
 @media (prefers-reduced-motion: reduce) {
   .rcp-badge-analyzing { animation: none; }
+}
+
+/* 카테고리(콘텐츠 분류, 고정 순서 팔레트 — 1~3 사용 중, 4~8 은 2단계 확장 예비) */
+.rcp-badge-cat-1 { background: var(--rcp-cat-1-bg); color: var(--rcp-cat-1-text); }
+.rcp-badge-cat-2 { background: var(--rcp-cat-2-bg); color: var(--rcp-cat-2-text); }
+.rcp-badge-cat-3 { background: var(--rcp-cat-3-bg); color: var(--rcp-cat-3-text); }
+.rcp-badge-cat-4 { background: var(--rcp-cat-4-bg); color: var(--rcp-cat-4-text); }
+.rcp-badge-cat-5 { background: var(--rcp-cat-5-bg); color: var(--rcp-cat-5-text); }
+.rcp-badge-cat-6 { background: var(--rcp-cat-6-bg); color: var(--rcp-cat-6-text); }
+.rcp-badge-cat-7 { background: var(--rcp-cat-7-bg); color: var(--rcp-cat-7-text); }
+.rcp-badge-cat-8 { background: var(--rcp-cat-8-bg); color: var(--rcp-cat-8-text); }
+
+/* 요약줄 배지 = 필터 버튼 (2026-07-14 확정). 시각 크기는 배지 그대로, 터치 영역만 확장(위).
+   선택 표시는 이제 배지 색과 절대 안 겹치는 전용 수단(이중 링 + 글자 강조 + 문구에 체크
+   표시)으로 강화 — 배경 색 하나로는 구분 안 되는 사람도 알아볼 수 있게(색맹 대비, "색 하나로만
+   전달 금지" 원칙) */
+.rcp-summary-badge-btn {
+  background: none; border: none; padding: 0; margin: 0;
+  font: inherit; color: inherit;
+  border-radius: var(--rcp-radius-sm);
+}
+.rcp-summary-badge-btn[aria-pressed="true"] > .rcp-badge {
+  font-weight: var(--rcp-fw-heavy);
+  box-shadow: 0 0 0 2px var(--rcp-surface), 0 0 0 4px var(--rcp-accent);
+}
+
+/* 상태 요약줄 (rcp-queue-summary 등) — 배지끼리 넉넉한 간격 + 목록과의 여백 */
+.rcp-summary-row {
+  display: flex; flex-wrap: wrap;
+  gap: var(--rcp-space-2) var(--rcp-space-3);
+  margin-bottom: var(--rcp-space-4);
 }
 
 /* ── 영상 행: rcp-video-row > -thumb / -body(-title/-meta) — 대기열(3차)·레시피 목록(4차) ── */

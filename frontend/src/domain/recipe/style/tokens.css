@@ -36,6 +36,29 @@
   --rcp-warn-text: #7a6200;
   --rcp-danger: #b3402e;             /* 삭제 */
 
+  /* ── 색: 배지 — 상태(고정 의미, 예약) ── (2026-07-14 확정, dataviz 스킬로 카테고리 팔레트와
+     안 겹치게 검증) 카테고리 색과 절대 혼용 금지 — "실패"가 어쩌다 카테고리 색과 같아 보이면 안 됨 */
+  --rcp-status-good-bg: #daf2da; --rcp-status-good-text: #0ca30c;
+  --rcp-status-warning-bg: #fef4df; --rcp-status-warning-text: #91670e;
+  --rcp-status-serious-bg: #fceee8; --rcp-status-serious-text: #a0593d;
+  --rcp-status-critical-bg: #f8e4e4; --rcp-status-critical-text: #bf3636;
+
+  /* ── 색: 배지 — 카테고리(고정 순서 팔레트, dataviz 스킬 8색 검증: CVD ΔE 24.2 라이트/10.3 다크) ──
+     새 카테고리가 생기면 이 순서 그대로 다음 슬롯을 쓴다(순서 변경 금지 — 색맹 구분성의 근거).
+     글자색은 검증된 원본 채도를 그대로 쓴다(식별은 글자색이 담당 — 배경을 더 진하게 타협해
+     대비를 올리면 파스텔 배경 자체의 채도가 낮아져 색맹 구분성이 무너짐을 검증 스크립트로 확인함.
+     일부 글자색은 흰 배경 대비 3:1 미만이지만 배지는 항상 글자 라벨을 같이 보여주므로 완화됨 —
+     dataviz 스킬 기본 팔레트도 동일하게 이 조건으로 통과 처리).
+     1~3 사용 중(레시피·유틸·기타), 4~8 은 2단계 확장 예비(CONTEXT.md 여행/운동/DIY/공부 등) */
+  --rcp-cat-1-bg: #e1ecf9; --rcp-cat-1-text: #2a78d6; /* 파랑 — 레시피 */
+  --rcp-cat-2-bg: #dff4ec; --rcp-cat-2-text: #1baf7a; /* 청록 — 유틸 */
+  --rcp-cat-3-bg: #fcf2db; --rcp-cat-3-text: #eda100; /* 노랑 — 기타 */
+  --rcp-cat-4-bg: #dbeedb; --rcp-cat-4-text: #008300; /* 초록 — 예비 */
+  --rcp-cat-5-bg: #e6e3f3; --rcp-cat-5-text: #4a3aa7; /* 보라 — 예비 */
+  --rcp-cat-6-bg: #fbe6e5; --rcp-cat-6-text: #e34948; /* 빨강 — 예비 */
+  --rcp-cat-7-bg: #fcedf2; --rcp-cat-7-text: #e87ba4; /* 마젠타 — 예비 */
+  --rcp-cat-8-bg: #fceae3; --rcp-cat-8-text: #eb6834; /* 주황 — 예비 */
+
   /* ── 그림자 (자석 스티커 입체감) ── */
   --rcp-shadow-magnet: 0 2px 3px rgba(45, 70, 50, 0.18);
   --rcp-shadow-postit: 0 1px 2px rgba(0, 0, 0, 0.12);
@@ -97,6 +120,22 @@
     --rcp-warn-bg: #ffec8b;
     --rcp-warn-text: #5c4d00;
     --rcp-danger: #e06a56;
+
+    /* 배지 — 상태(다크, 같은 원리로 dataviz 스킬 검증) */
+    --rcp-status-good-bg: #1a401d; --rcp-status-good-text: #0ca30c;
+    --rcp-status-warning-bg: #50492f; --rcp-status-warning-text: #ffce5c;
+    --rcp-status-serious-bg: #4c4036; --rcp-status-serious-text: #f0a17e;
+    --rcp-status-critical-bg: #49302e; --rcp-status-critical-text: #e78282;
+
+    /* 배지 — 카테고리(다크, 라이트와 같은 8슬롯 순서·같은 CVD 검증 세트) */
+    --rcp-cat-1-bg: #243a4d; --rcp-cat-1-text: #3987e5;
+    --rcp-cat-2-bg: #1d3f33; --rcp-cat-2-text: #199e70;
+    --rcp-cat-3-bg: #44391b; --rcp-cat-3-text: #c98500;
+    --rcp-cat-4-bg: #17391b; --rcp-cat-4-text: #008300;
+    --rcp-cat-5-bg: #37394e; --rcp-cat-5-text: #9085e9;
+    --rcp-cat-6-bg: #4a3331; --rcp-cat-6-text: #e66767;
+    --rcp-cat-7-bg: #462e37; --rcp-cat-7-text: #d55181;
+    --rcp-cat-8-bg: #473023; --rcp-cat-8-text: #d95926;
 
     --rcp-shadow-magnet: 0 2px 4px rgba(0, 0, 0, 0.45);
     --rcp-shadow-postit: 0 1px 2px rgba(0, 0, 0, 0.4);

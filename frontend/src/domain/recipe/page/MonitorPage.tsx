@@ -40,12 +40,12 @@ const STATUS_LABEL: Record<MonitorItem['status'], string> = {
     REMOVED: '삭제됨',
 };
 const STATUS_BADGE: Record<MonitorItem['status'], RcpBadgeVariant> = {
-    WAITING: 'dim',
+    WAITING: 'neutral',
     ANALYZING: 'analyzing',
-    DONE: 'default',
-    TOO_LONG: 'excluded',
-    FAILED: 'danger',
-    REMOVED: 'danger',
+    DONE: 'good',
+    TOO_LONG: 'warning',
+    FAILED: 'critical',
+    REMOVED: 'serious',
 };
 
 /** 진행 시간 기준: ANALYZING 은 분석 시작, 그 외(WAITING 포함)는 등록 시각 */
@@ -161,12 +161,12 @@ export default function MonitorPage() {
             {snapshot !== null && (
                 <>
                     <div className="rcp-summary-row" id="rcp-monitor-summary" aria-label="대기열·워커 요약">
-                        <RcpBadge variant="dim">대기 {snapshot.waitingCount}</RcpBadge>
+                        <RcpBadge variant="neutral">대기 {snapshot.waitingCount}</RcpBadge>
                         <RcpBadge variant="analyzing">분석 중 {snapshot.analyzingCount}</RcpBadge>
-                        <RcpBadge variant={isWorkerStale(snapshot.workerHeartbeatAt, now) ? 'danger' : 'default'}>
+                        <RcpBadge variant={isWorkerStale(snapshot.workerHeartbeatAt, now) ? 'critical' : 'good'}>
                             워커 {workerStatusText(snapshot.workerHeartbeatAt, now)}
                         </RcpBadge>
-                        <RcpBadge variant={snapshot.rateLimitCount > 0 ? 'excluded' : 'dim'}>
+                        <RcpBadge variant={snapshot.rateLimitCount > 0 ? 'warning' : 'neutral'}>
                             일시적 실패(한도·과부하 등) {rateLimitText(snapshot, now)}
                         </RcpBadge>
                     </div>
