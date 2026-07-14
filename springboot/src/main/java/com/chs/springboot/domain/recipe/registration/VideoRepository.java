@@ -19,12 +19,15 @@ public class VideoRepository {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
+    private final GikkaMediaProperties properties;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public VideoRepository(@Qualifier("gikkaJdbcClient") JdbcClient jdbc,
-                           @Qualifier("gikkaTxTemplate") TransactionTemplate tx) {
+                           @Qualifier("gikkaTxTemplate") TransactionTemplate tx,
+                           GikkaMediaProperties properties) {
         this.jdbc = jdbc;
         this.tx = tx;
+        this.properties = properties;
     }
 
     public record Row(String videoId, String url, String platform, String category, String status,
@@ -57,10 +60,10 @@ public class VideoRepository {
 
     /** 영상이 이미 있으면 아무 일도 안 함(메타 조회·분석 0회 — CONTEXT.md 확정). 없으면 새로 생성.
         description(설명란)은 재료가 원문으로 적힌 경우가 많아 분석 시 최우선 활용 (2026-07-13 확정) */
-    public void insertIfAbsent(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta,
-                               int maxVideoMinutes) {
+    public void insertIfAbsent(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta) {
         String status = RegistrationRules.initialStatus(
-                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null), maxVideoMinutes);
+                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null),
+                properties.getMaxVideoMinutes());
         jdbc.sql("""
                         INSERT INTO video (video_id, url, status, title, thumbnail_url, duration_seconds,
                                             description)
@@ -158,10 +161,10 @@ public class VideoRepository {
      * 길이 컷도 새 duration 기준으로 재판정(과거엔 무조건 WAITING — 갱신된 길이가 7분 초과로 바뀌는
      * 경우까지 반영). @return false = 없는 영상 (404)
      */
-    public boolean reanalyze(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta,
-                             int maxVideoMinutes) {
+    public boolean reanalyze(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta) {
         String status = RegistrationRules.initialStatus(
-                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null), maxVideoMinutes);
+                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null),
+                properties.getMaxVideoMinutes());
         return jdbc.sql("""
                         UPDATE video
                         SET status = :status, category = NULL, recipe_json = NULL,
@@ -205,10 +208,10 @@ public class VideoRepository {
      * 안 갱신하면 description 등이 계속 비어있을 수 있음). meta 는 컨트롤러가 existsActive() 로
      * REMOVED 를 "신규"처럼 취급해 미리 조회해 온 것 — 조회 실패 시 기존 값 유지(COALESCE).
      */
-    public void reviveIfRemoved(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta,
-                                int maxVideoMinutes) {
+    public void reviveIfRemoved(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta) {
         String status = RegistrationRules.initialStatus(
-                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null), maxVideoMinutes);
+                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null),
+                properties.getMaxVideoMinutes());
         jdbc.sql("""
                         UPDATE video
                         SET status = :status, queued_at = now(),

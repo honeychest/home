@@ -33,18 +33,16 @@ public class RegistrationController {
     private final RegistrationRepository repository;
     private final VideoRepository videos;
     private final VideoMetadataClient metadata;
-    private final GikkaMediaProperties properties;
     private final GikkaAuthProperties authProperties;
     private final GikkaUserRepository users;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public RegistrationController(RegistrationRepository repository, VideoRepository videos,
-                                  VideoMetadataClient metadata, GikkaMediaProperties properties,
+                                  VideoMetadataClient metadata,
                                   GikkaAuthProperties authProperties, GikkaUserRepository users) {
         this.repository = repository;
         this.videos = videos;
         this.metadata = metadata;
-        this.properties = properties;
         this.authProperties = authProperties;
         this.users = users;
     }
@@ -78,7 +76,7 @@ public class RegistrationController {
         }
         Optional<VideoMetadataClient.VideoMetadata> meta =
                 videos.existsActive(videoId) ? Optional.empty() : metadata.fetchOne(videoId);
-        repository.registerLink(userId, videoId, meta, properties.getMaxVideoMinutes());
+        repository.registerLink(userId, videoId, meta);
         return repository.find(userId, videoId).map(this::toResponse)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "등록 직후 조회 실패"));
     }
@@ -98,7 +96,7 @@ public class RegistrationController {
                 continue;
             }
             boolean linked = repository.registerLink(userId, videoId,
-                    Optional.ofNullable(metaById.get(videoId)), properties.getMaxVideoMinutes());
+                    Optional.ofNullable(metaById.get(videoId)));
             if (linked) {
                 added++;
             }
@@ -165,7 +163,7 @@ public class RegistrationController {
     @PostMapping("/monitor/{videoId}/reanalyze")
     public void monitorReanalyze(@GikkaUserId long userId, @PathVariable String videoId) {
         requireOwner(userId);
-        videos.reanalyze(videoId, metadata.fetchOne(videoId), properties.getMaxVideoMinutes());
+        videos.reanalyze(videoId, metadata.fetchOne(videoId));
     }
 
     /**

@@ -60,11 +60,10 @@ public class RegistrationRepository {
      * (2026-07-13 확정 — 다시 등록되면 다시 볼 수 있어야 함). @return false = 이미 등록됨
      * (컨트롤러에서 409 — 호출 전 exists 로 선확인하는 게 정상 경로라 여기선 방어적 반환일 뿐).
      */
-    public boolean registerLink(long userId, String videoId, Optional<VideoMetadataClient.VideoMetadata> meta,
-                                int maxVideoMinutes) {
+    public boolean registerLink(long userId, String videoId, Optional<VideoMetadataClient.VideoMetadata> meta) {
         return Boolean.TRUE.equals(tx.execute(status -> {
-            videos.insertIfAbsent(videoId, meta, maxVideoMinutes);
-            videos.reviveIfRemoved(videoId, meta, maxVideoMinutes);
+            videos.insertIfAbsent(videoId, meta);
+            videos.reviveIfRemoved(videoId, meta);
             return jdbc.sql("""
                             INSERT INTO registration (user_id, video_id) VALUES (:userId, :videoId)
                             ON CONFLICT (user_id, video_id) DO NOTHING
