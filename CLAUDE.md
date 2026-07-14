@@ -8,6 +8,9 @@ Apply Always : /chs/chs-rules.md
   (공용 훅·순수 모듈 등 "가져다 쓸 것" 모범 패턴과 금지 사항이 정리돼 있음.
   각 폴더의 CLAUDE.md 가 @AGENTS.md 로 임포트하므로 그 폴더 작업 시 자동 로딩됨)
 - recipe(기까) 도메인 작업은 `docs/recipe/CONTEXT.md` 를 읽는 것으로 시작한다.
+- `gikka/README.md` — recipe 의 로컬 모델 페일오버 호스트 서비스(mac-mini 상시 프로세스,
+  yt-dlp·ffmpeg·whisper.cpp·LM Studio 호출) 관련 작업 전에 읽는다. Jenkins/도커 파이프라인
+  대상이 아니라 배포·설정이 별도 절차임에 주의.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence

@@ -178,14 +178,40 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"[gikka-local] {self.address_string()} - {fmt % args}")
 
+    def _read_chunked_body(self):
+        # Spring RestClient(JDK HttpClient)가 Content-Length 없이 chunked 로 보내는
+        # 요청을 지원 (2026-07-14 실측 — Content-Length 만 보면 빈 본문으로 읽혀 실패했음).
+        chunks = []
+        while True:
+            line = self.rfile.readline()
+            if not line:
+                break
+            size_str = line.strip().split(b";", 1)[0]
+            if not size_str:
+                continue
+            chunk_size = int(size_str, 16)
+            if chunk_size == 0:
+                while True:
+                    trailer = self.rfile.readline()
+                    if trailer in (b"\r\n", b"\n", b""):
+                        break
+                break
+            chunks.append(self.rfile.read(chunk_size))
+            self.rfile.readline()  # 청크 데이터 뒤의 CRLF 소비
+        return b"".join(chunks)
+
     def do_POST(self):
         if self.path != "/extract":
             self.send_response(404)
             self.end_headers()
             return
-        length = int(self.headers.get("Content-Length", 0))
+        if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
+            body = self._read_chunked_body()
+        else:
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
         try:
-            req = json.loads(self.rfile.read(length))
+            req = json.loads(body)
             # 단일 워커(RegistrationWorker) 전제이나, 두 앱 인스턴스가 동시에 호출할 가능성을
             # 대비해 직렬화 — LM Studio·whisper 는 한 번에 하나씩만 처리 (2026-07-14 확정)
             with _lock:
