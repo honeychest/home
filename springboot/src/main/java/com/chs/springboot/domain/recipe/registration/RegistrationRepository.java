@@ -85,10 +85,11 @@ public class RegistrationRepository {
                 .query(this::mapRow).optional();
     }
 
-    /** 홈 섬네일: 분석 완료된 요리만 */
+    /** 홈 섬네일: 분석 완료된 영상 전체 (2026-07-14 확정 — 레시피로 한정하지 않음.
+        요리가 아니어도 "최근 분석된 것"을 다시 찾아 꺼내 쓸 수 있어야 한다는 앱의 기본 취지) */
     public List<Row> recentDone(long userId, int limit) {
         return jdbc.sql("SELECT " + JOINED_COLUMNS + " " + JOIN
-                        + "WHERE r.user_id = :userId AND v.status = 'DONE' AND v.category = 'RECIPE' "
+                        + "WHERE r.user_id = :userId AND v.status = 'DONE' "
                         + "ORDER BY r.registered_at DESC LIMIT :limit")
                 .param("userId", userId).param("limit", limit)
                 .query(this::mapRow).list();

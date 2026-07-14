@@ -82,11 +82,11 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
             )}
             <RcpInlineError message={mutation.error} />
 
-            <h2 className="rcp-section-label">최근 분석된 레시피</h2>
+            <h2 className="rcp-section-label">최근 분석된 영상</h2>
             {recent.length === 0 ? (
                 <p className="rcp-empty">분석이 끝난 영상이 여기 섬네일로 쌓여요</p>
             ) : (
-                <div className="rcp-thumb-strip" id="rcp-home-recent" aria-label="최근 분석된 레시피">
+                <div className="rcp-thumb-strip" id="rcp-home-recent" aria-label="최근 분석된 영상">
                     {recent.map((item) => (
                         <a key={item.videoId} className="rcp-thumb" href={item.url} target="_blank" rel="noreferrer">
                             {item.thumbnailUrl

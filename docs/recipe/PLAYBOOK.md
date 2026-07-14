@@ -65,6 +65,16 @@ AI가 만들 때 적용하고, 보고 전에 스스로 검증한다. 어긴 채 
    "빌드 통과"는 검증이 아니다.
 이 목록은 깨짐이 새로 발견될 때마다 항목을 추가하는 살아있는 목록이다.
 
+### 함정 — CSS (2026-07-14 실측, 전 화면 공통)
+- `<ol>`/`<ul>`에 `display: flex`(또는 grid)를 걸면 브라우저가 리스트 번호·불릿(`::marker`)을
+  아예 안 그린다(CSS 스펙 공통 동작, flex/grid 자식은 list-item 박스가 안 됨). 세로 간격은
+  `gap` 대신 `li + li { margin-top: ... }` 로.
+- 이 프로젝트는 전역 `@import "tailwindcss"`(frontend/src/app/style/index.css) 를 쓰는데
+  Tailwind Preflight 가 `ol, ul { list-style: none }` 을 전역으로 깐다 — 번호·불릿이 보여야
+  하는 리스트는 `display:flex` 를 안 걸어도 `list-style: decimal`(또는 `disc` 등)을 그
+  컴포넌트 클래스에 반드시 명시해야 한다. (발견 경위: RcpVideoRow 결과 시트의 조리 순서
+  목록에 번호가 안 보이던 문제 — 두 원인이 겹쳐 있어 첫 번째만 고치고도 안 보였음)
+
 ---
 
 ## 2차: 백엔드 기반 (DB·로그인·API·저장소 교체)

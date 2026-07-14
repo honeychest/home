@@ -474,11 +474,20 @@
 /* 결과 시트(3차) — 상태 설명 문단 / 조리 순서 요약 목록 */
 .rcp-sheet-detail { font-size: var(--rcp-fs-md); color: var(--rcp-text); overflow-wrap: anywhere; }
 .rcp-step-list {
+  /* 2026-07-14 확정 — 번호가 안 보이던 원인 2가지 모두 수정:
+     1) display:flex 였던 걸 되돌림 — flex/grid 컨테이너의 자식은 브라우저가 리스트
+        번호(::marker)를 아예 안 그린다(CSS 스펙 공통 동작).
+     2) Tailwind Preflight 가 전역으로 ol,ul { list-style: none } 을 깔아두므로
+        (frontend/src/app/style/index.css 의 @import "tailwindcss"), list-style 을
+        명시적으로 되살려야 한다 — 안 그러면 flex 만 빼도 여전히 번호가 안 보임.
+     간격은 flex gap 대신 li 사이 margin 으로 */
   margin: 0; padding-left: var(--rcp-space-5);
-  display: flex; flex-direction: column; gap: var(--rcp-space-1);
+  list-style: decimal;
   font-size: var(--rcp-fs-md);
 }
 .rcp-step-list li { overflow-wrap: anywhere; }
+.rcp-step-list li + li { margin-top: var(--rcp-space-1); }
+.rcp-step-list li::marker { font-weight: var(--rcp-fw-heavy); color: var(--rcp-accent); }
 .rcp-stepper {
   display: flex; align-items: center; justify-content: center;
   gap: var(--rcp-space-3);
