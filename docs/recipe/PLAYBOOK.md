@@ -24,7 +24,13 @@
 - 도메인 판정(순수 로직): 프론트 = `data/fridgeShelves.ts`·`data/videoUrl.ts` 패턴
   (순수 모듈 + vitest). 백엔드 = `RegistrationRules`·`FridgeRepository.rankFrequent` 패턴
   (package-private static 순수 함수 + 단위 테스트). 컨트롤러/화면에 판정을 넣지 말 것.
-- 목록 화면 3상태: `items: T[] | null`(null=첫 로딩) + loadError+다시 시도 — RecipesPage 참고.
+- 목록 조회: `page/useQuery.ts` 훅 — 3상태(data=null 첫 로딩 / error / 다시 시도)를 화면마다
+  손으로 만들지 말 것. `reload`=실패 시 문구, `refresh`=조용한 재조회(폴링용),
+  `failure`=원인 그대로(원인별 분기용), `setData`=낙관적 업데이트.
+  (2026-07-15 신설 — 이 항목은 원래 "RecipesPage 를 참고(복제)하라"였고, 그 복제가 실제로
+  RecipesPage 폴링 버그를 낳았다: useEffect 의존성에 items 가 들어가 응답마다 인터벌이
+  재생성돼 주기가 "응답 후 2.5초"로 밀렸고, 같은 의도의 MonitorPage 는 정상이었음.
+  폴링 의존성에는 data 를 넣지 말 것 — "폴링을 켤지"의 판정만 넣는다.)
 - 새 공용 컴포넌트: styleguide 등록 + 긴 글자 스트레스 케이스 의무 (기존 규칙 재확인).
 
 ### 작업 규칙
@@ -122,6 +128,11 @@ AI가 만들 때 적용하고, 보고 전에 스스로 검증한다. 어긴 채 
      (예외: authRepository — 401 이 정상 응답이라 자체 fetch)
   3. 서비스 계층 없음 — 저장소 모듈(예: FridgeRepository)에 SQL·트랜잭션·동작 규칙 집중.
      DB 없이 검증할 로직은 static 순수 함수로 빼서 테스트 (예: rankFrequent).
+     단 "저장소 하나에 다 몰아넣는다"는 뜻은 아니다 — 저장소는 다루는 테이블/책임 단위로 나눈다
+     (2026-07-15 점검: gemini_rate 만 다루는 SQL 이 VideoRepository 안에 섞여 있어
+     `GeminiRateLimiter` 로 분리, 326→261줄. 판단 기준은 "이 SQL 이 그 테이블을 건드리는가").
+     같은 UPDATE 컬럼 목록을 두 메서드가 손으로 나열하고 있으면 상수 하나로 합칠 것
+     (`VideoRepository.CLEAR_ANALYSIS`·`MERGE_METADATA` — V8 사고가 이 중복에서 났다).
   4. 외부 HTTP 호출은 RestClient.Builder 주입으로 만들어 MockRestServiceServer 테스트 시임 확보.
   5. 화면의 조작 핸들러(추가·삭제·수정)는 화면당 하나의 실행기(runMutation — FridgePage 참고)로
      감싼다: 실패 문구·연타 방지·서버 재동기화를 한 곳에. 문구는 프론트 소유 (CONTEXT.md 에러 계약).

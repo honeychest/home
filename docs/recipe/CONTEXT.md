@@ -403,6 +403,64 @@
   카테고리 오분류는 커스텀 필드보다 재분석(영상 단위) + 분석 품질 개선으로 대응하는 게
   우선이라는 결론. registration 은 지금은 최소 스키마(user_id, video_id, registered_at) 유지.
 
+### 아키텍처 점검 2회차 (2026-07-15 확정·구현 완료 — improve-codebase-architecture high)
+- 커밋 4개로 분리: `ecca928`(A 버그·죽은코드·중복) · `1301630`(B 저장소 책임 분리) ·
+  `52fe236`(C 프론트 조회 시임) · `768ab70`(C 상태 분기). **푸시는 안 함** — Jenkins 가 main 을
+  보고 실제 배포하므로 푸시 시점은 사용자 판단.
+- **실제 버그 2건**(둘 다 "눈으로는 안 보이는" 종류라 실사용 검수로는 못 잡던 것):
+  1. 오너 강제 재분석·영상 삭제가 **없는 영상에도 200** 을 주고 아무 일도 안 했음.
+     `VideoRepository.reanalyze` 는 "없는 영상=false" 를 계산해 반환하는데 컨트롤러가 그 값을
+     버리고 있었음(`FridgeController` 는 같은 관용구를 올바로 처리 중이라 명백한 누락).
+     근본 원인은 컨트롤러 테스트가 0건이었던 것 → `RegistrationControllerMonitorTest` 로
+     404/403 계약을 잠금. `VideoRepository.remove` 도 void 라 404 자체가 불가했어서 boolean 화.
+  2. 보관함 폴링 주기가 2.5초 고정이 아니라 **"응답 후 2.5초"로 밀려 있었음**
+     (useEffect 의존성에 items 가 들어가 응답마다 인터벌 재생성). 같은 의도의 MonitorPage 는
+     정상이었음 — 같은 코드를 두 번 쓰고 한쪽만 틀린 전형적 복제 사고.
+- **구조 결정**:
+  - `GeminiRateLimiter` 신설 — `gemini_rate` 테이블만 다루는 4개 메서드를 `VideoRepository`
+    에서 분리(326→261줄). 워커는 이제 "영상 저장소"와 "호출 속도 제어기" 두 협력자를 가짐.
+    2인스턴스 합산 한도를 지키는 핵심 성질(조율을 DB 원자적 UPDATE 에 둠)은 그대로 —
+    이 클래스는 필드가 없다(자바 메모리에 두면 인스턴스마다 따로 세어 한도가 깨짐).
+  - `VideoRepository.CLEAR_ANALYSIS` — 재분석과 영상 삭제가 각자 손으로 나열하던 11개 컬럼
+    초기화를 하나의 정의로(두 SQL 이 문자 단위로 같았음). 앞으로 분석 컬럼 추가 시 한 줄만.
+    단 `markDone`·`markFailure`·`releaseAfterRateLimit` 은 **일부러 여기 안 씀** — "분석 결과를
+    지운다"가 아니라 "한 번의 시도를 끝낸다"는 다른 개념(결과는 오히려 남김).
+  - `VideoRepository.MERGE_METADATA` + `bindMetadata` + `statusFor` — 신규 등록·재분석·REMOVED
+    복구 세 SQL 이 반복하던 COALESCE·param·길이 컷 판정 통합. V8(description) 사고의 원인이
+    이 중복이었음.
+  - `ExtractionResultJson` 신설 — Gemini·로컬에 복제돼 있던 파서 통합. Gemini 에는 자기 고유
+    작업인 봉투 벗기기만 남김. transcriptChars 는 Gemini 응답에 필드가 없어 자연히 null.
+  - 프론트 `useQuery` 신설(`page/useQuery.ts`) — `useMutation`(조작)의 짝이 없어 3상태
+    (data=null/error/다시 시도)가 5개 화면에 복제돼 있었고 `frontend/AGENTS.md` 가 그 복제를
+    "모범: RecipesPage" 로 굳혀두고 있었음(그 문서가 버그의 배경). `error`(표시 문구)와
+    `failure`(원인)를 나눠 MonitorPage 의 403 분기를 훅이 403 을 모른 채 지원.
+- **일부러 안 한 것 (다시 제안하지 말 것)**:
+  - **카테고리 레지스트리 — 만들 필요 없음**. 점검 초기에 "카테고리 추가에 8파일, 병렬 맵이
+    조용히 어긋난다"고 진단했으나 **코드 확인 결과 과장이었음**: cat-4~8 팔레트가 tokens.css·
+    recipe-ui.css·RcpBadge 에 이미 예약돼 있고 `CATEGORY_LABEL`·`CATEGORY_BADGE` 는 이미
+    `Record<VideoCategory,…>` 라 TS 가 누락을 컴파일 에러로 잡는다. 실제로는 3파일이고 그중
+    2개는 이미 강제됨 — 예약 슬롯 설계가 이미 해결해 둔 문제. 진짜 구멍이던
+    `itemBadge`·`itemDetail` 의 if-체인 기본값만 Record 로 바꿔 타입 강제화(임시 상태를 넣어
+    컴파일이 깨지는 것을 실측 확인 후 원복).
+  - MonitorPage 와 RecipesPage 의 `STATUS_LABEL` **공용화 금지** — 라벨이 다른 건 청중이 달라서
+    (오너용 "대기 중" vs 사용자용 "분석대기"). 양쪽 다 이미 Record 라 새 상태에서 각자 컴파일
+    에러가 난다.
+  - FridgePage 의 "자주 사는 재료"를 재료 목록과 같은 `useQuery` 로 **묶지 말 것** — "진입 시
+    1회만 정렬"(2026-07-09 확정) 규칙이 깨져 조작할 때마다 버튼이 재정렬된다.
+  - HomePage 는 `useQuery` 로 전환 안 함 — `recentDone` 실패를 삼키는 게 의도(섬네일 줄은 장식).
+  - 시트 추출(FridgePage useState 11→4)은 **보류**(2026-07-15 사용자 결정) — 동작이 멀쩡하고
+    실사용 문제가 보고된 적 없어 chs-rules "망가지지 않은 부분을 리팩토링하지 말 것"에 걸림.
+  - 훅·컴포넌트 테스트 환경(jsdom + @testing-library/react) **미도입**(2026-07-15 사용자 결정).
+    따라서 `useQuery`·`useMutation` 은 여전히 무테스트 — 프론트 검증은 eslint·build·실사용 검수.
+- **남은 위험(다음 세션이 알아야 할 것)**: `reanalyze`·`remove`·`reviveIfRemoved` 의 SQL 이
+  리터럴에서 문자열 조합으로 바뀌었는데, 이 프로젝트엔 Testcontainers 가 없어 저장소 SQL 을
+  실행 검증할 방법이 원래 없다(기존 공백). 조합 결과 세 문장은 눈으로 확인함. 배포 후
+  모니터링 화면에서 강제 재분석·영상 삭제를 각 1회 눌러 실동작 확인 필요.
+- 테스트 45 → 91건(백엔드 recipe 81 + 프론트 20 중 recipe 몫). 그동안 0건이던
+  `RegistrationWorker` 에 10건 — 특히 "일시적 실패는 시도 횟수를 소모하지 않는다"
+  (`claimNext` 의 +1 을 `releaseAfterRateLimit` 의 -1 이 상쇄)는 핵심 불변식이 주석으로만
+  주장되고 있었음.
+
 ### 확장성 선반영 (데이터 모양에만 — 1단계 UI에는 노출하지 않음)
 2단계(영역 확장·멀티 플랫폼·중앙 DB)에서 스키마를 갈아엎지 않도록,
 저장 데이터와 저장소 인터페이스(미래 API 응답) 모양에 다음 필드를 처음부터 포함한다:

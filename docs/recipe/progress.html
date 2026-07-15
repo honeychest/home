@@ -47,7 +47,18 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-14(추가2) · 이번 세션(신규): Gemini 검증 1회 실패 시 로컬
+  <div class="updated">갱신: 2026-07-15 · 이번 세션(신규): <b>아키텍처 점검 2회차
+    (improve-codebase-architecture high) — 커밋 4개(ecca928 A / 1301630 B / 52fe236 C / 768ab70 C),
+    푸시 안 함.</b> 실제 버그 2건 수정: ①오너 강제 재분석·영상 삭제가 없는 영상에도 200 을 주고
+    아무 일도 안 하던 것(저장소가 반환한 false 를 컨트롤러가 버림 — 컨트롤러 테스트 0건이 근본
+    원인), ②보관함 폴링 주기가 2.5초 고정이 아니라 "응답 후 2.5초"로 밀려 있던 것(useEffect
+    의존성에 items). 구조: GeminiRateLimiter 분리(VideoRepository 326→261줄), 재분석·삭제의
+    11개 컬럼 초기화를 CLEAR_ANALYSIS 하나로, 메타 갱신 3중 중복 통합(V8 사고의 원인),
+    추출기 파서 중복 통합(ExtractionResultJson), 프론트 useQuery 신설(3상태 5중 복제 해소).
+    테스트 45→91건 — 특히 0건이던 RegistrationWorker 에 10건(시도 횟수 상쇄 불변식 고정).
+    "카테고리 레지스트리"는 초기 진단이 과장이었음을 코드로 확인해 안 만듦(예약 슬롯+Record 로
+    이미 해결돼 있었음). 결정·안 한 것·근거 전체는 CONTEXT.md "아키텍처 점검 2회차" 절.
+    이전 세션 기록: Gemini 검증 1회 실패 시 로컬
     TIP/ETC 결과 즉시 채택 + 모니터링에 재시도횟수·다음재시도 카운트다운 추가(V10 마이그레이션).
     5차 확장 1번(프롬프트 안전화)은 이미 구현돼 있었음을 확인해 정정. 이전 세션 기록: 5차
     grill-me — "자주 사는 재료
@@ -79,6 +90,15 @@
 <div class="card alert">
   <h2>지금 알아야 할 것</h2>
   <ul>
+    <li><b>사용자 액션 — 미푸시 커밋 4개가 로컬에 쌓여 있음 (2026-07-15 아키텍처 점검)</b>:
+      ecca928·1301630·52fe236·768ab70. Jenkins 가 main 을 보고 실제 배포하므로 푸시 시점은
+      사용자 판단이라 에이전트가 푸시하지 않았음. 푸시할지, 더 검토할지 결정 필요.</li>
+    <li><b>사용자 액션 — 배포 후 실동작 확인 2가지 (위 커밋을 배포한다면)</b>:
+      `/recipe/monitor` 에서 <b>강제 재분석</b>과 <b>영상 삭제</b>를 각 1회씩 눌러볼 것.
+      이유: 두 동작의 SQL 이 리터럴에서 문자열 조합(CLEAR_ANALYSIS·MERGE_METADATA)으로 바뀌었는데,
+      이 프로젝트엔 Testcontainers 가 없어 저장소 SQL 을 실행 검증할 수단이 원래 없음(기존 공백).
+      조합 결과는 눈으로 확인했으나 실동작 확인이 남음. 실패하면 `docker logs chs-app-1 2>&1 |
+      grep gikka` 로 SQL 오류 확인.</li>
     <li><b>다음 세션 최우선 — 5차 구현 착수</b> (2026-07-14 grill-me 완료, 아직 코드 작업
       시작 전): 순서 1) ETC/TIP 프롬프트 안전화 2) 보관함 검색+gikka 전체 보완 3) 추천
       소스 확장 4) 재료/양념 사전+오너 판정 큐. 착수 배경 — 사용자가 "품질 향상 후 소수
@@ -382,6 +402,22 @@
 <div class="card next">
   <h2>다음 세션이 이어서 할 일</h2>
   <ul>
+    <li><b>가장 먼저 확인할 것 — 배포 후 실검증 (2026-07-14 커밋 b67871a, 배포 여부 미확인)</b>:
+      mac-mini 배포 후 V10 마이그레이션(video.gemini_retry_count) 이 적용됐는지,
+      `/recipe/monitor` 화면에 "다음 재시도까지 N초"·"Gemini 재시도 N회" 가 실제로 뜨는지,
+      그리고 애초 발단이었던 "피씨방 라면 100% 똑같이 먹는법"(video_id: XNDSFBbpHVw) 이
+      결국 DONE 으로 끝났는지 DB로 확인. 안 끝났으면 `docker exec chs-pgvector psql -U gikka
+      -d gikka -c "select status, gemini_retry_count, last_error from video where video_id=
+      'XNDSFBbpHVw';"` 로 원인 재조사.</li>
+    <li><b>2026-07-15 아키텍처 점검 2회차 결과 — 5차 착수 전에 읽을 것</b>: 결정·안 한 것·근거
+      전체는 CONTEXT.md "아키텍처 점검 2회차" 절. 5차 작업에 직접 영향 있는 것만 추리면 —
+      ① 목록 조회 화면을 새로 만들 때 3상태를 손으로 만들지 말고 `page/useQuery.ts` 를 쓸 것
+      (보관함 검색·추천 소스 확장이 전부 목록 화면이라 바로 해당됨. frontend/AGENTS.md 갱신됨).
+      ② 4번(재료 사전 DB화)에서 분석 결과 컬럼을 추가하면 `VideoRepository.CLEAR_ANALYSIS`
+      한 줄만 고치면 재분석·삭제 양쪽에 반영됨(예전처럼 여러 SQL 에 손으로 끼워넣지 말 것).
+      ③ 워커를 건드리면 `RegistrationWorkerTest`(신규 10건)가 지켜줌 — 특히 "일시적 실패는
+      시도 횟수를 소모하지 않는다" 불변식. ④ 카테고리를 늘릴 때 cat-4~8 팔레트가 이미
+      예약돼 있어 CATEGORY_LABEL·CATEGORY_BADGE 만 채우면 됨(TS 가 강제).</li>
     <li><b>다음 세션 최우선 — 5차 구현 착수</b>: 1번(프롬프트 안전화)은 이미 구현돼 있었음을
       확인·정정 완료(2026-07-14). CONTEXT.md "5차 확장" 절·PLAYBOOK.md "5차" 절 순서대로
       2)보관함 검색 3)추천 소스 확장 4)재료 사전+판정 큐부터 시작할 것.</li>
@@ -406,10 +442,17 @@
       (c365af54…) 삭제 가능. 서버 시간대 확인(재료 등록일=오늘) 미완</li>
     <li>4차 재료 사전 메모(2026-07-13 채점 관찰): "물"이 재료로 추출됨 — 기본양념(판정 제외)
       분류의 대표 사례로 사전 설계 시 반영. 추출 프롬프트는 건드리지 않음(원문 저장 원칙)</li>
-    <li>5차 후보 (통합 정리 2026-07-13): styleguide 미등록분(로그인 화면·홈 계정 줄·rcp-inline-error),
-      앱 아이콘 밝은 그린(#2aa257)·모양 다듬기, SQL 동작 자동 테스트(Testcontainers —
-      FridgeRepository·Registration), AIza 키 API 제한 걸기.
-      RcpBadge·RcpListRow 는 styleguide 외 사용처 0 (4차 재사용 후보로 유지)</li>
+    <li>5차 후보 (통합 정리 2026-07-13, 2026-07-15 갱신): styleguide 미등록분(로그인 화면·홈
+      계정 줄·rcp-inline-error), 앱 아이콘 밝은 그린(#2aa257)·모양 다듬기, AIza 키 API 제한 걸기.
+      <b>SQL 동작 자동 테스트(Testcontainers — VideoRepository·FridgeRepository): 2026-07-15
+      점검에서 중요도 올라감</b> — 저장소 4개가 전부 무테스트인데 VideoRepository 는 SKIP LOCKED
+      동시성·시도 횟수 상쇄 불변식에 더해 이번에 문자열 조합으로 바뀐 UPDATE 문까지 안고 있어
+      위험이 여기 몰려 있음. (RcpListRow 는 사용처 0 으로 2026-07-15 삭제됨. RcpBadge 는 보관함·
+      모니터링에서 실사용 중이라 이 항목에서 뺌 — 예전 기록이 낡았던 것)</li>
+    <li>훅·컴포넌트 테스트 환경(jsdom + @testing-library/react) 미도입 — 2026-07-15 사용자 결정.
+      그래서 useQuery·useMutation 은 무테스트 상태이고 프론트 검증은 eslint·build·실사용 검수뿐.
+      다시 제안하려면 "실사용 검수로는 안 보이는 프론트 결함"이 또 나왔을 때 근거로 들 것
+      (이번 폴링 주기 버그가 그 사례 — 화면만 봐서는 절대 안 보임)</li>
     <li>보류(2026-07-13 결정): 비공개 재생목록 지원 — 구글 로그인에 youtube.readonly 스코프 추가로
       가능하나, 미검증 앱은 토큰 7일 만료(매주 재로그인)라 보류. 외부 사용자 확대(6차쯤) 시 재검토.
       함정 메모: '나중에 볼 동영상'(Watch Later)은 권한 있어도 API 미제공. 현행 = 일부공개 안내 방식
@@ -432,7 +475,32 @@
   <details>
     <summary>완료 기록 (펼치기)</summary>
     <ul>
-      <li>2026-07-14 — Gemini 검증 실패 시 즉시 로컬 결과 채택 + 모니터링 가시성 개선(커밋 전):
+      <li>2026-07-15 — <b>아키텍처 점검 2회차 (improve-codebase-architecture high, 커밋 4개·미푸시)</b>:
+        전체 결정·근거는 CONTEXT.md "아키텍처 점검 2회차" 절. 요약 —
+        <b>ecca928 (A)</b> 오너 강제 재분석·삭제가 없는 영상에도 200 을 주던 버그 수정(저장소가
+        반환한 false 를 컨트롤러가 버림 — FridgeController 는 같은 관용구를 올바로 처리 중이라
+        명백한 누락이었고, 컨트롤러 테스트 0건이 근본 원인 → RegistrationControllerMonitorTest
+        7건으로 404/403 계약 고정). 죽은 코드 제거(VideoRepository.exists 호출자 0, RcpListRow
+        사용처 0). 추출기 파서 중복 35줄 통합(ExtractionResultJson).
+        <b>1301630 (B)</b> GeminiRateLimiter 분리(VideoRepository 326→261줄, gemini_rate 만
+        다루는 SQL 이 영상 저장소에 섞여 있었음). RegistrationWorkerTest 10건 신설 — 그동안
+        워커 테스트가 0건이었고 "일시적 실패는 시도 횟수를 소모하지 않는다" 불변식이 주석으로만
+        주장되고 있었음. 재분석·삭제의 11개 컬럼 초기화를 CLEAR_ANALYSIS 하나로, 메타 갱신
+        3중 중복을 MERGE_METADATA+bindMetadata 로 통합(V8 description 사고의 원인이 이 중복).
+        <b>52fe236 (C)</b> useQuery 신설 — 3상태가 5개 화면에 복제돼 있었고 그 복제가
+        RecipesPage 폴링 버그를 낳았음(useEffect 의존성에 items → 응답마다 인터벌 재생성 →
+        주기가 "응답 후 2.5초"로 밀림. MonitorPage 는 정상이었음). frontend/AGENTS.md 가 이
+        복제를 "모범: RecipesPage" 로 굳혀두고 있어 그 항목도 교체.
+        <b>768ab70 (C)</b> itemBadge·itemDetail 의 if-체인 기본값 → Record 로 타입 강제화.
+        <b>정정</b>: 초기 진단 "카테고리 추가에 8파일·병렬 맵 3개가 조용히 어긋난다"는 과장이었음을
+        코드로 확인 — cat-4~8 예약 슬롯 + Record 타입으로 이미 해결돼 있었고 실제로는 3파일·
+        2개는 이미 TS 강제. 그래서 레지스트리는 만들지 않음.
+        시트 추출·훅 테스트 환경은 사용자 결정으로 보류/미도입.
+        테스트 45→91건. 검증: recipe 백엔드 81건·ArchUnit 통과, 프론트 eslint·build·vitest 20건
+        통과. 전체 스위트의 ChatbotAdminControllerSecurityTest 2건 실패는 깨끗한 트리에서
+        재현해 기존 실패임을 확인(recipe 무관).</li>
+      <li>2026-07-14 — Gemini 검증 실패 시 즉시 로컬 결과 채택 + 모니터링 가시성 개선
+        (커밋 완료 b67871a "recipe - 22 gemini 페일오버 처리"):
         계기는 "피씨방 라면 100% 똑같이 먹는법" 영상이 ANALYZING 2분 넘게 안 끝나는 걸 사용자가
         발견 → mac-mini gikka DB 실측 조회로 원인이 Gemini 429/503 반복(rate_limit_count=392)
         이며 로컬로 되돌아가는 안전장치가 없는 사각지대임을 확인. `HybridRecipeExtractor` 가
