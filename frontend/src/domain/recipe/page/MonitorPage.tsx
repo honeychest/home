@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { MonitorItem, MonitorSnapshot } from '../data/monitorTypes';
 import { MONITOR_LIMIT, isForbidden, monitorRepository } from '../data/monitorRepository';
 import { useMutation } from './useMutation';
+import { useQuery } from './useQuery';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
 import RcpBadge from '../ui/RcpBadge';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
@@ -26,6 +27,8 @@ const WORKER_STALE_SECONDS = 20;
 
 const FORBIDDEN_TEXT = '이 화면은 오너 전용이에요';
 const LOAD_ERROR_TEXT = '모니터링 정보를 불러오지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
+// 403 은 "네트워크 문제"가 아니라 접근 거부라 문구가 다르다 — 화면 분기는 query.failure 로 판단
+const loadMessage = (e: unknown) => (isForbidden(e) ? FORBIDDEN_TEXT : LOAD_ERROR_TEXT);
 const ACTION_FAIL_TEXT = '실행하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const REMOVE_CONFIRM_TEXT = (title: string) =>
     `"${title}"을(를) 삭제할까요? 이 영상을 등록한 모든 사용자 목록에서 "삭제됨"으로 표시돼요 `
@@ -84,38 +87,28 @@ const nextRetrySecondsLeft = (nextRetryAt: string | null, nowMs: number): number
 };
 
 export default function MonitorPage() {
-    const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null); // null = 첫 로딩
-    const [loadError, setLoadError] = useState<string | null>(null);
-    const [forbidden, setForbidden] = useState(false);
     const [now, setNow] = useState(() => Date.now());
     const [selected, setSelected] = useState<MonitorItem | null>(null); // 항목 탭 → 액션 시트
 
-    const reload = useCallback(async () => {
-        setSnapshot(await monitorRepository.list(MONITOR_LIMIT));
-        setForbidden(false);
-        setLoadError(null);
-    }, []);
+    const load = useCallback(() => monitorRepository.list(MONITOR_LIMIT), []);
+    const query = useQuery<MonitorSnapshot>(load, loadMessage);
+    const { data: snapshot, error: loadError, reload, refresh } = query;
+    // 접근 거부는 "다시 시도"가 의미 없는 다른 화면이라 원인으로 갈라낸다 (useQuery 는 403 을 모른다)
+    const forbidden = query.failure !== null && isForbidden(query.failure);
 
     // 조작 실행기 (공용 useMutation — 연타 방지·실패 문구·재동기화 한 곳, PLAYBOOK 관례 5)
     const mutation = useMutation(() => ACTION_FAIL_TEXT, reload);
-
-    useEffect(() => {
-        reload().catch((e) => {
-            if (isForbidden(e)) setForbidden(true);
-            else setLoadError(LOAD_ERROR_TEXT);
-        });
-    }, [reload]);
 
     // 목록 재조회 폴링 — 접근 거부 상태면 재시도하지 않음(계속 403 만 반복하지 않게)
     useEffect(() => {
         if (forbidden) return undefined;
         const timer = window.setInterval(() => {
-            reload().catch((e) => {
-                if (isForbidden(e)) setForbidden(true);
-            });
+            // 폴링 실패는 조용히 넘긴다(다음 턴에 다시). 단 403(폴링 도중 권한이 사라진 경우)만은
+            // 화면 자체가 바뀌어야 하므로 reload 로 한 번 더 태워 failure 를 세운다.
+            void refresh().catch((e) => { if (isForbidden(e)) void reload(); });
         }, POLL_MS);
         return () => window.clearInterval(timer);
-    }, [forbidden, reload]);
+    }, [forbidden, refresh, reload]);
 
     // 경과 시간 표시용 초침 — 서버 재조회 없이 화면만 갱신
     useEffect(() => {
@@ -158,9 +151,7 @@ export default function MonitorPage() {
             {loadError && (
                 <div className="rcp-shell-status" role="alert">
                     <span>{loadError}</span>
-                    <RcpButton onClick={() => { setLoadError(null); reload().catch(() => setLoadError(LOAD_ERROR_TEXT)); }}>
-                        다시 시도
-                    </RcpButton>
+                    <RcpButton onClick={() => void reload()}>다시 시도</RcpButton>
                 </div>
             )}
             {!loadError && snapshot === null && <p className="rcp-empty">불러오는 중…</p>}

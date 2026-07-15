@@ -14,8 +14,13 @@
 - 도메인 판정(순수 로직)은 화면이 아니라 data/ 순수 모듈 + vitest 로.
   모범: `data/fridgeShelves.ts`, `data/videoUrl.ts`, `data/registerLink.ts`.
 - API 호출은 도메인 저장소 인터페이스(`data/*Repository.ts`)를 거친다. 화면에서 fetch 직접 호출 금지.
-- 목록 화면 3상태: `items: T[] | null`(null=첫 로딩) + loadError + 다시 시도 버튼.
-  모범: `src/domain/recipe/page/RecipesPage.tsx`.
+- 목록 조회 실행기: `src/domain/recipe/page/useQuery.ts` — "3상태"(data=null 첫 로딩 /
+  error / 다시 시도)를 화면마다 손으로 만들지 말 것. `{ data, error, failure, setData,
+  reload, refresh }` 제공. reload=실패 시 문구, refresh=조용한 재조회(폴링용),
+  failure=원인 그대로(원인별 분기용, 예: MonitorPage 의 403 → 접근 거부 화면),
+  setData=낙관적 업데이트. 모범: `RecommendPage.tsx`(최소), `MonitorPage.tsx`(폴링+403).
+  (2026-07-15 신설 — 이 항목은 원래 "모범: RecipesPage 를 복제하라"였고, 그 복제가 실제로
+  RecipesPage 폴링 버그를 낳았다. 복제 대신 이 훅을 쓴다.)
 - 상태·진행 효과(깜빡임·스핀·스캔 등): `src/shared/ui/samples` 효과 카탈로그에서
   먼저 고른다 (admin > "UI 샘플" 카드에서 실물 열람. 키 예: sample_live_spinner).
   없으면 새 효과를 카탈로그에 등록한 뒤 사용 — 화면 CSS 에 일회성 keyframes 를 만들면 결함.

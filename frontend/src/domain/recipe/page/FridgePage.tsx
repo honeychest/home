@@ -9,6 +9,7 @@ import type { FridgeItem } from '../data/fridgeTypes';
 import { fridgeRepository } from '../data/fridgeRepository';
 import { OLD_THRESHOLD_DAYS, classifyShelves, daysSince, formatDate, shiftDate } from '../data/fridgeShelves';
 import { useMutation } from './useMutation';
+import { useQuery } from './useQuery';
 import RcpChip from '../ui/RcpChip';
 import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
@@ -30,11 +31,11 @@ const sheetMetaText = (item: FridgeItem) => {
 const MUTATION_ERROR_TEXT = '저장하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const LOAD_ERROR_TEXT = '목록을 불러오지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const mutationMessage = () => MUTATION_ERROR_TEXT;
+const loadMessage = () => LOAD_ERROR_TEXT;
 
 export default function FridgePage() {
-    const [items, setItems] = useState<FridgeItem[] | null>(null); // null = 첫 로딩 (빈 상태와 구분)
-    const [loadError, setLoadError] = useState<string | null>(null);
     const [frequentNames, setFrequentNames] = useState<string[]>([]);
+    const [frequentError, setFrequentError] = useState<string | null>(null);
     const [freeInput, setFreeInput] = useState('');
     const [selected, setSelected] = useState<FridgeItem | null>(null); // 스티커 탭 → 액션 시트
     const [addOpen, setAddOpen] = useState(false); // [+ 재료 추가] → 추가 시트
@@ -45,23 +46,26 @@ export default function FridgePage() {
     const [chipEditMode, setChipEditMode] = useState(false);
     const [editName, setEditName] = useState('');
 
-    const reloadItems = useCallback(async () => {
-        setItems(await fridgeRepository.list());
+    const load = useCallback(() => fridgeRepository.list(), []);
+    const query = useQuery<FridgeItem[]>(load, loadMessage);
+    const { data: items, setData: setItems, reload: reloadItems } = query;
+
+    // 자주 사는 재료는 화면 진입 시 한 번만 정렬 — 조작 중 버튼이 자리를 옮기지 않도록
+    // (순위 반영은 다음 화면 방문 때. 2026-07-09 검수 확정). 이 "1회만" 규칙 때문에
+    // 재료 목록(조작마다 재동기화됨)과 같은 useQuery 로 묶을 수 없다 — 묶으면 조작할 때마다
+    // 버튼이 재정렬된다.
+    const loadFrequent = useCallback(() => {
+        fridgeRepository.frequentIngredients(FREQUENT_LIMIT)
+            .then((names) => { setFrequentNames(names); setFrequentError(null); })
+            .catch(() => setFrequentError(LOAD_ERROR_TEXT));
     }, []);
 
-    const loadAll = useCallback(() => {
-        setLoadError(null);
-        reloadItems().catch(() => setLoadError(LOAD_ERROR_TEXT));
-        // 자주 사는 재료는 화면 진입 시 한 번만 정렬 — 조작 중 버튼이 자리를 옮기지 않도록
-        // (순위 반영은 다음 화면 방문 때. 2026-07-09 검수 확정)
-        fridgeRepository.frequentIngredients(FREQUENT_LIMIT)
-            .then(setFrequentNames)
-            .catch(() => setLoadError(LOAD_ERROR_TEXT));
-    }, [reloadItems]);
-
     useEffect(() => {
-        loadAll();
-    }, [loadAll]);
+        loadFrequent();
+    }, [loadFrequent]);
+
+    const loadError = query.error ?? frequentError;
+    const retryLoad = () => { void reloadItems(); loadFrequent(); };
 
     // 조작 실행기 (공용 useMutation — 실패 문구·연타 방지·재동기화 한 곳, PLAYBOOK 관례 5)
     const mutation = useMutation(mutationMessage, reloadItems);
@@ -168,7 +172,7 @@ export default function FridgePage() {
             {loadError && (
                 <div className="rcp-shell-status" role="alert">
                     <span>{loadError}</span>
-                    <RcpButton onClick={loadAll}>다시 시도</RcpButton>
+                    <RcpButton onClick={retryLoad}>다시 시도</RcpButton>
                 </div>
             )}
             {!loadError && items === null && <p className="rcp-empty">불러오는 중…</p>}

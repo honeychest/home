@@ -1,15 +1,17 @@
 // [AGENT] recipe(기까) 추천 탭 — 4차: 냉장고 재료로 지금 만들 수 있는 요리 3단계로 보여줌
 // (CONTEXT.md 4차 확정, 2026-07-14 grill-me). 계산(재료/양념 분류·매칭)은 서버 책임 —
 // 여기는 결과만 렌더한다. 레이아웃은 겹침형 커버플로우(RcpCoverflow, 목업에서 확정한 값).
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ChefHat } from 'lucide-react';
 import type { RecommendItem, RecommendSnapshot } from '../data/recommendTypes';
 import { recommendRepository } from '../data/recommendRepository';
 import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpCoverflow from '../ui/RcpCoverflow';
+import { useQuery } from './useQuery';
 
 const LOAD_ERROR_TEXT = '추천을 불러오지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
+const loadMessage = () => LOAD_ERROR_TEXT;
 const MAX_VISIBLE_CHIPS = 2; // 카드 폭이 좁아 칩이 너무 많으면 사진을 가림 — 나머지는 "+n"
 const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;
 
@@ -63,24 +65,12 @@ function RecommendCard({ item }: { item: RecommendItem }) {
 }
 
 export default function RecommendPage() {
-    const [snapshot, setSnapshot] = useState<RecommendSnapshot | null>(null); // null = 첫 로딩
-    const [loadError, setLoadError] = useState<string | null>(null);
     const [selected, setSelected] = useState<RecommendItem | null>(null); // 카드 탭 → 상세 팝업
+    const load = useCallback(() => recommendRepository.get(), []);
+    const query = useQuery<RecommendSnapshot>(load, loadMessage);
 
-    const reload = useCallback(async () => {
-        setSnapshot(await recommendRepository.get());
-    }, []);
-
-    useEffect(() => {
-        setLoadError(null);
-        reload().catch(() => setLoadError(LOAD_ERROR_TEXT));
-    }, [reload]);
-
-    const retry = () => {
-        setLoadError(null);
-        reload().catch(() => setLoadError(LOAD_ERROR_TEXT));
-    };
-
+    const snapshot = query.data;
+    const loadError = query.error;
     const sections = snapshot ? toSections(snapshot) : [];
     const isEmpty = snapshot !== null && sections.every((s) => s.items.length === 0);
 
@@ -94,7 +84,7 @@ export default function RecommendPage() {
             {loadError && (
                 <div className="rcp-shell-status" role="alert">
                     <span>{loadError}</span>
-                    <RcpButton onClick={retry}>다시 시도</RcpButton>
+                    <RcpButton onClick={() => void query.reload()}>다시 시도</RcpButton>
                 </div>
             )}
             {!loadError && snapshot === null && <p className="rcp-empty">불러오는 중…</p>}

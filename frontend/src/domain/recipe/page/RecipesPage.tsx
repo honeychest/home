@@ -13,6 +13,7 @@ import { registerLink } from '../data/registerLink';
 import { analysisQualityWarning } from '../data/analysisQuality';
 import { parseYoutubePlaylistId, parseYoutubeVideoId } from '../data/videoUrl';
 import { useMutation } from './useMutation';
+import { useQuery } from './useQuery';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
 import RcpBadge from '../ui/RcpBadge';
 import RcpButton from '../ui/RcpButton';
@@ -24,6 +25,7 @@ const POLL_MS = 2500;
 
 // 에러 계약(CONTEXT.md): 사용자 문구는 전부 프론트 소유
 const LOAD_ERROR_TEXT = '목록을 불러오지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
+const loadMessage = () => LOAD_ERROR_TEXT;
 const MUTATION_ERROR_TEXT = '등록하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const INVALID_URL_TEXT = '유튜브 링크를 인식하지 못했어요 — 영상·쇼츠·재생목록 링크를 붙여넣어 주세요';
 const DUPLICATE_TEXT = '이미 등록된 영상이에요';
@@ -103,8 +105,6 @@ const hasActive = (items: RegistrationItem[]) =>
     items.some((i) => i.status === 'WAITING' || i.status === 'ANALYZING');
 
 export default function RecipesPage() {
-    const [items, setItems] = useState<RegistrationItem[] | null>(null); // null = 첫 로딩
-    const [loadError, setLoadError] = useState<string | null>(null);
     const [registerOpen, setRegisterOpen] = useState(false);
     const [urlInput, setUrlInput] = useState('');
     const [justRegistered, setJustRegistered] = useState<string[]>([]); // 이번 시트에서 넣은 것 (확인줄)
@@ -116,9 +116,9 @@ export default function RecipesPage() {
     // 상세 시트의 재료별 있음/없음 표시용 (2026-07-14 확정) — 정확 매칭, 정규화 없음
     const [fridgeNames, setFridgeNames] = useState<Set<string> | null>(null);
 
-    const reload = useCallback(async () => {
-        setItems(await registrationRepository.list());
-    }, []);
+    const load = useCallback(() => registrationRepository.list(), []);
+    const query = useQuery<RegistrationItem[]>(load, loadMessage);
+    const { data: items, setData: setItems, error: loadError, reload, refresh } = query;
 
     useEffect(() => {
         fridgeRepository.list().then((list) => setFridgeNames(new Set(list.map((i) => i.name)))).catch(() => undefined);
@@ -127,18 +127,17 @@ export default function RecipesPage() {
     // 조작 실행기 (공용 useMutation — 실패 문구·연타 방지·재동기화 한 곳, PLAYBOOK 관례 5)
     const mutation = useMutation(mutationMessage, reload);
 
+    // 진행 중 항목이 있는 동안만 폴링 (분석이 다 끝나면 조용해짐).
+    // 의존성은 "폴링을 켤지"의 판정(active)뿐 — items 를 그대로 넣으면 응답이 올 때마다
+    // 인터벌이 재생성돼 주기가 "응답 후 2.5초"로 밀린다 (2026-07-15 수정한 실제 버그).
+    const active = !!items && hasActive(items);
     useEffect(() => {
-        reload().catch(() => setLoadError(LOAD_ERROR_TEXT));
-    }, [reload]);
-
-    // 진행 중 항목이 있는 동안만 폴링 (분석이 다 끝나면 조용해짐)
-    useEffect(() => {
-        if (!items || !hasActive(items)) return undefined;
+        if (!active) return undefined;
         const timer = window.setInterval(() => {
-            reload().catch(() => undefined); // 폴링 실패는 조용히 — 다음 턴에 다시
+            void refresh().catch(() => undefined); // 폴링 실패는 조용히 — 다음 턴에 다시
         }, POLL_MS);
         return () => window.clearInterval(timer);
-    }, [items, reload]);
+    }, [active, refresh]);
 
     const handleRegister = (rawUrl: string) => {
         const url = rawUrl.trim();
@@ -232,9 +231,7 @@ export default function RecipesPage() {
             {loadError && (
                 <div className="rcp-shell-status" role="alert">
                     <span>{loadError}</span>
-                    <RcpButton onClick={() => { setLoadError(null); reload().catch(() => setLoadError(LOAD_ERROR_TEXT)); }}>
-                        다시 시도
-                    </RcpButton>
+                    <RcpButton onClick={() => void reload()}>다시 시도</RcpButton>
                 </div>
             )}
             {!loadError && items === null && <p className="rcp-empty">불러오는 중…</p>}
