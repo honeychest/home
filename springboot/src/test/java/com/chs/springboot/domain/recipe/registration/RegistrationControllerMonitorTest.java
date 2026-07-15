@@ -32,6 +32,7 @@ class RegistrationControllerMonitorTest {
 
     private final RegistrationRepository repository = mock(RegistrationRepository.class);
     private final VideoRepository videos = mock(VideoRepository.class);
+    private final GeminiRateLimiter rateLimiter = mock(GeminiRateLimiter.class);
     private final VideoMetadataClient metadata = mock(VideoMetadataClient.class);
     private final GikkaUserRepository users = mock(GikkaUserRepository.class);
 
@@ -40,7 +41,7 @@ class RegistrationControllerMonitorTest {
         properties.setAllowedEmails(List.of("owner@example.com"));
         when(users.findEmail(OWNER_ID)).thenReturn("owner@example.com");
         when(users.findEmail(STRANGER_ID)).thenReturn("stranger@example.com");
-        return new RegistrationController(repository, videos, metadata, properties, users);
+        return new RegistrationController(repository, videos, rateLimiter, metadata, properties, users);
     }
 
     @Test

@@ -23,12 +23,14 @@ public class RegistrationWorker {
     private static final int TRANSIENT_FAILURE_BACKOFF_SECONDS = 60;
 
     private final VideoRepository videos;
+    private final GeminiRateLimiter rateLimiter;
     private final RecipeExtractor extractor;
     private final GikkaMediaProperties properties;
 
-    public RegistrationWorker(VideoRepository videos, RecipeExtractor extractor,
-                              GikkaMediaProperties properties) {
+    public RegistrationWorker(VideoRepository videos, GeminiRateLimiter rateLimiter,
+                              RecipeExtractor extractor, GikkaMediaProperties properties) {
         this.videos = videos;
+        this.rateLimiter = rateLimiter;
         this.extractor = extractor;
         this.properties = properties;
     }
@@ -38,9 +40,9 @@ public class RegistrationWorker {
         if (properties.getGeminiApiKey().isBlank()) {
             return; // 키 없는 환경(로컬 기본)에서는 워커가 쉰다
         }
-        videos.touchHeartbeat(); // 일할 게 없어도 갱신 — 모니터링 화면의 워커 생존 신호 (2026-07-13 확정)
+        rateLimiter.touchHeartbeat(); // 일할 게 없어도 갱신 — 모니터링 화면의 워커 생존 신호 (2026-07-13 확정)
         videos.requeueStale();
-        if (!videos.tryAcquireGeminiSlot(properties.getGeminiMinIntervalSeconds())) {
+        if (!rateLimiter.tryAcquireSlot(properties.getGeminiMinIntervalSeconds())) {
             return; // 다른 인스턴스가 방금 호출함 — 이번 틱은 쉼
         }
         videos.claimNext().ifPresent(this::analyze);
@@ -66,7 +68,7 @@ public class RegistrationWorker {
             log.info("[gikka] 분석 완료 video={} category={}", item.videoId(), result.category());
         } catch (RecipeExtractor.TransientFailureException e) {
             videos.releaseAfterRateLimit(item.videoId(), e.getMessage());
-            videos.backoffGemini(TRANSIENT_FAILURE_BACKOFF_SECONDS);
+            rateLimiter.backoff(TRANSIENT_FAILURE_BACKOFF_SECONDS);
             log.info("[gikka] Gemini 일시적 실패(한도·과부하·타임아웃 등) — {}초 휴식 후 자동 재개: {}",
                     TRANSIENT_FAILURE_BACKOFF_SECONDS, e.getMessage());
         } catch (Exception e) {

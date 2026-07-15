@@ -12,7 +12,7 @@
 | pattern-rest-seam | 외부 HTTP 호출 — `RestClient.Builder` 주입으로 MockRestServiceServer 테스트 시임 확보 | `registration/GeminiRecipeExtractor.java` |
 | pattern-port-adapter | 외부 시스템(AI·메타 조회 등) 인터페이스 격리 — 구현체 교체로 끝나게 | `RecipeExtractor` / `VideoMetadataClient` |
 | pattern-failover-notify | 외부 의존이 막혔을 때 폴백 전환 + 텔레그램 알림 | `GeminiRecipeExtractor` 페일오버 + `GikkaTelegramNotifier` |
-| pattern-queue-worker | DB 대기열 + 단일 워커 비동기 처리 (2인스턴스 중복 실행 안전) | `registration/RegistrationWorker.java` |
+| pattern-queue-worker | DB 대기열 + 단일 워커 비동기 처리 (2인스턴스 중복 실행 안전) | `registration/RegistrationWorker.java` + `registration/GeminiRateLimiter.java` (호출 속도·백오프·생존 신호를 DB 원자적 UPDATE 로 조율 — 인스턴스 메모리에 두면 합산 한도를 못 지킨다) |
 | pattern-tx-template | 보조 DB(gikka) 트랜잭션 — 스프링 빈 TransactionManager 등록 금지(아래 금지 참조) | `GikkaDataSourceConfig` 의 `gikkaTxTemplate` |
 | pattern-raw-signal | 품질 경고 등 "증상" 표시 — 증상 하나짜리 좁은 컬럼(`has_xxx`, `xxx_warning`) 대신 원인이 될 원시 신호를 목록 컬럼에 저장, 경고 문구는 그 신호 조합을 보는 별도 순수 매핑 함수가 도출 | `registration/RegistrationRules.analysisSignals` + `video.analysis_signals` |
 

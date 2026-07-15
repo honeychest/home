@@ -32,16 +32,18 @@ public class RegistrationController {
 
     private final RegistrationRepository repository;
     private final VideoRepository videos;
+    private final GeminiRateLimiter rateLimiter;
     private final VideoMetadataClient metadata;
     private final GikkaAuthProperties authProperties;
     private final GikkaUserRepository users;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public RegistrationController(RegistrationRepository repository, VideoRepository videos,
-                                  VideoMetadataClient metadata,
+                                  GeminiRateLimiter rateLimiter, VideoMetadataClient metadata,
                                   GikkaAuthProperties authProperties, GikkaUserRepository users) {
         this.repository = repository;
         this.videos = videos;
+        this.rateLimiter = rateLimiter;
         this.metadata = metadata;
         this.authProperties = authProperties;
         this.users = users;
@@ -147,7 +149,7 @@ public class RegistrationController {
     public MonitorSnapshot monitor(@GikkaUserId long userId, @RequestParam int limit) {
         requireOwner(userId);
         VideoRepository.QueueCounts counts = videos.queueCounts();
-        VideoRepository.WorkerStatus worker = videos.workerStatus();
+        GeminiRateLimiter.WorkerStatus worker = rateLimiter.workerStatus();
         List<MonitorResponse> items = repository.listForMonitor(limit).stream()
                 .map(row -> new MonitorResponse(
                         row.userId(), row.email(), row.videoId(), row.url(), row.title(),

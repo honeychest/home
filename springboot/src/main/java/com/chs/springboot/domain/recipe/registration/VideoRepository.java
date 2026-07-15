@@ -1,6 +1,8 @@
 // [AGENT] 영상 분석·대기열 저장소 (2026-07-13 재편 — CONTEXT.md "영상 분석의 테이블 분리")
 // video 테이블 = 분석 결과 원본(video_id 당 1행). 같은 영상이 여러 사용자에게 등록돼도
-// 분석은 1회만 하도록 구조로 보장 — 대기열·워커·요청속도 제어가 전부 이 테이블 기준.
+// 분석은 1회만 하도록 구조로 보장 — 대기열·워커가 이 테이블 기준.
+// Gemini 요청속도 제어·워커 생존 신호는 gemini_rate 테이블이라 GeminiRateLimiter 소관
+// (2026-07-15 분리 — 여기 SQL 은 전부 video 테이블만 건드린다).
 // gikka 전용 JdbcClient·TransactionTemplate 만 사용 (분리 규율 2·8).
 package com.chs.springboot.domain.recipe.registration;
 
@@ -43,6 +45,53 @@ public class VideoRepository {
             + "analysis_signals, gemini_retry_count";
 
     /**
+     * "분석이 남긴 것을 전부 지운다" 의 유일한 정의 — 재분석과 영상 삭제가 이걸 함께 쓴다
+     * (두 동작은 목적이 다르지만 "분석 흔적을 없앤다"는 부분은 정확히 같다).
+     * 분석 결과 컬럼을 새로 만들면 여기 한 줄만 더하면 양쪽에 함께 반영된다.
+     * (2026-07-15 통합 — 이전엔 두 메서드가 각자 11개 컬럼을 손으로 나열해, V9·V10 때
+     * 새 컬럼을 양쪽에 손으로 끼워넣어야 했다. 하나라도 빠뜨리면 낡은 분석 결과가 조용히
+     * 남는데 그걸 잡아줄 장치가 없었음.)
+     * 주의: markDone·markFailure·releaseAfterRateLimit 은 여기 안 쓴다 — 그쪽은 "분석 결과를
+     * 지우는 것"이 아니라 "한 번의 시도를 끝내는" 다른 개념이다 (결과는 오히려 남긴다).
+     */
+    private static final String CLEAR_ANALYSIS = """
+            category = NULL, recipe_json = NULL, summary = NULL, tags = NULL,
+            summary_version = NULL, analysis_signals = NULL, analysis_seconds = NULL,
+            attempt_count = 0, analyzing_started_at = NULL, last_error = NULL,
+            gemini_retry_count = 0
+            """;
+
+    /**
+     * 메타(제목·썸네일·길이·설명란) 갱신 — 메타 조회 실패로 값이 없으면 기존 값 유지(COALESCE),
+     * 즉 조회 실패가 재분석·복구를 막지 않는다. bindMetadata 와 짝이다(파라미터 이름이 걸려 있음).
+     * (2026-07-15 통합 — 이전엔 신규 등록·재분석·복구 세 SQL 이 각자 같은 4줄을 반복했고,
+     * 실제로 V8[description] 때 재분석 경로에 이 갱신을 빠뜨린 채 배포돼 "재분석해도 설명란이
+     * 계속 비어 있다"를 운영에서 발견했다. 이제 메타 필드를 늘릴 때 고칠 곳은
+     * VideoMetadata · 이 조각 · bindMetadata · INSERT 문뿐이다.)
+     */
+    private static final String MERGE_METADATA = """
+            title = COALESCE(:title, title), thumbnail_url = COALESCE(:thumb, thumbnail_url),
+            duration_seconds = COALESCE(:duration, duration_seconds),
+            description = COALESCE(:description, description)
+            """;
+
+    private static JdbcClient.StatementSpec bindMetadata(
+            JdbcClient.StatementSpec spec, Optional<VideoMetadataClient.VideoMetadata> meta) {
+        return spec
+                .param("title", meta.map(VideoMetadataClient.VideoMetadata::title).orElse(null))
+                .param("thumb", meta.map(VideoMetadataClient.VideoMetadata::thumbnailUrl).orElse(null))
+                .param("duration", meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null))
+                .param("description", meta.map(VideoMetadataClient.VideoMetadata::description).orElse(null));
+    }
+
+    /** 길이 컷 판정 — 메타를 새로 받는 세 경로(신규 등록·재분석·REMOVED 복구)가 같은 규칙을 쓴다 */
+    private String statusFor(Optional<VideoMetadataClient.VideoMetadata> meta) {
+        return RegistrationRules.initialStatus(
+                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null),
+                properties.getMaxVideoMinutes());
+    }
+
+    /**
      * 메타 조회 생략 여부 판단용 (2026-07-13 확정 — REMOVED 는 "존재하지만 되살아나야 할" 상태라
      * exists() 만 보면 메타를 영원히 못 채움). REMOVED 는 존재하지 않는 것처럼 취급해 메타를
      * 다시 조회하게 한다.
@@ -56,22 +105,15 @@ public class VideoRepository {
     /** 영상이 이미 있으면 아무 일도 안 함(메타 조회·분석 0회 — CONTEXT.md 확정). 없으면 새로 생성.
         description(설명란)은 재료가 원문으로 적힌 경우가 많아 분석 시 최우선 활용 (2026-07-13 확정) */
     public void insertIfAbsent(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta) {
-        String status = RegistrationRules.initialStatus(
-                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null),
-                properties.getMaxVideoMinutes());
-        jdbc.sql("""
+        bindMetadata(jdbc.sql("""
                         INSERT INTO video (video_id, url, status, title, thumbnail_url, duration_seconds,
                                             description)
                         VALUES (:videoId, :url, :status, :title, :thumb, :duration, :description)
                         ON CONFLICT (video_id) DO NOTHING
-                        """)
+                        """), meta)
                 .param("videoId", videoId)
                 .param("url", "https://www.youtube.com/watch?v=" + videoId)
-                .param("status", status)
-                .param("title", meta.map(VideoMetadataClient.VideoMetadata::title).orElse(null))
-                .param("thumb", meta.map(VideoMetadataClient.VideoMetadata::thumbnailUrl).orElse(null))
-                .param("duration", meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null))
-                .param("description", meta.map(VideoMetadataClient.VideoMetadata::description).orElse(null))
+                .param("status", statusFor(meta))
                 .update();
     }
 
@@ -161,25 +203,11 @@ public class VideoRepository {
      * 경우까지 반영). @return false = 없는 영상 (404)
      */
     public boolean reanalyze(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta) {
-        String status = RegistrationRules.initialStatus(
-                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null),
-                properties.getMaxVideoMinutes());
-        return jdbc.sql("""
-                        UPDATE video
-                        SET status = :status, category = NULL, recipe_json = NULL,
-                            summary = NULL, tags = NULL, summary_version = NULL, analysis_signals = NULL,
-                            attempt_count = 0, analyzing_started_at = NULL, last_error = NULL,
-                            gemini_retry_count = 0, analysis_seconds = NULL, queued_at = now(),
-                            title = COALESCE(:title, title), thumbnail_url = COALESCE(:thumb, thumbnail_url),
-                            duration_seconds = COALESCE(:duration, duration_seconds),
-                            description = COALESCE(:description, description)
-                        WHERE video_id = :videoId
-                        """)
-                .param("status", status)
-                .param("title", meta.map(VideoMetadataClient.VideoMetadata::title).orElse(null))
-                .param("thumb", meta.map(VideoMetadataClient.VideoMetadata::thumbnailUrl).orElse(null))
-                .param("duration", meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null))
-                .param("description", meta.map(VideoMetadataClient.VideoMetadata::description).orElse(null))
+        return bindMetadata(jdbc.sql(
+                        "UPDATE video SET status = :status, queued_at = now(), "
+                        + CLEAR_ANALYSIS + ", " + MERGE_METADATA
+                        + " WHERE video_id = :videoId"), meta)
+                .param("status", statusFor(meta))
                 .param("videoId", videoId).update() > 0;
     }
 
@@ -192,14 +220,8 @@ public class VideoRepository {
      * @return false = 없는 영상 (404)
      */
     public boolean remove(String videoId) {
-        return jdbc.sql("""
-                        UPDATE video
-                        SET status = 'REMOVED', category = NULL, recipe_json = NULL, summary = NULL,
-                            tags = NULL, summary_version = NULL, analysis_signals = NULL, attempt_count = 0,
-                            analyzing_started_at = NULL, last_error = NULL, analysis_seconds = NULL,
-                            gemini_retry_count = 0
-                        WHERE video_id = :videoId
-                        """)
+        return jdbc.sql("UPDATE video SET status = 'REMOVED', " + CLEAR_ANALYSIS
+                        + " WHERE video_id = :videoId")
                 .param("videoId", videoId).update() > 0;
     }
 
@@ -210,22 +232,10 @@ public class VideoRepository {
      * REMOVED 를 "신규"처럼 취급해 미리 조회해 온 것 — 조회 실패 시 기존 값 유지(COALESCE).
      */
     public void reviveIfRemoved(String videoId, Optional<VideoMetadataClient.VideoMetadata> meta) {
-        String status = RegistrationRules.initialStatus(
-                meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null),
-                properties.getMaxVideoMinutes());
-        jdbc.sql("""
-                        UPDATE video
-                        SET status = :status, queued_at = now(),
-                            title = COALESCE(:title, title), thumbnail_url = COALESCE(:thumb, thumbnail_url),
-                            duration_seconds = COALESCE(:duration, duration_seconds),
-                            description = COALESCE(:description, description)
-                        WHERE video_id = :videoId AND status = 'REMOVED'
-                        """)
-                .param("status", status)
-                .param("title", meta.map(VideoMetadataClient.VideoMetadata::title).orElse(null))
-                .param("thumb", meta.map(VideoMetadataClient.VideoMetadata::thumbnailUrl).orElse(null))
-                .param("duration", meta.map(VideoMetadataClient.VideoMetadata::durationSeconds).orElse(null))
-                .param("description", meta.map(VideoMetadataClient.VideoMetadata::description).orElse(null))
+        bindMetadata(jdbc.sql(
+                        "UPDATE video SET status = :status, queued_at = now(), " + MERGE_METADATA
+                        + " WHERE video_id = :videoId AND status = 'REMOVED'"), meta)
+                .param("status", statusFor(meta))
                 .param("videoId", videoId).update();
     }
 
@@ -237,31 +247,6 @@ public class VideoRepository {
                         WHERE status = 'ANALYZING' AND analyzing_started_at < now() - interval '10 minutes'
                         """)
                 .update();
-    }
-
-    /** Gemini 호출 슬롯 획득 — 인스턴스 합산 간격 하한 (원자적 UPDATE, 실패 = 이번 틱 쉼) */
-    public boolean tryAcquireGeminiSlot(int minIntervalSeconds) {
-        return jdbc.sql("""
-                        UPDATE gemini_rate SET last_call_at = now()
-                        WHERE id = 1 AND last_call_at <= now() - make_interval(secs => :interval)
-                        """)
-                .param("interval", minIntervalSeconds).update() > 0;
-    }
-
-    /** 429 후 전 인스턴스 공통 휴식 (last_call_at 을 미래로 밀어 양쪽 다 멈춤) + 발생 이력 기록 */
-    public void backoffGemini(int seconds) {
-        jdbc.sql("""
-                        UPDATE gemini_rate
-                        SET last_call_at = now() + make_interval(secs => :secs),
-                            rate_limit_count = rate_limit_count + 1, last_rate_limited_at = now()
-                        WHERE id = 1
-                        """)
-                .param("secs", seconds).update();
-    }
-
-    /** 워커 생존 신호 — 일할 게 없어도 틱마다 갱신 (last_call_at 은 429 로 미래로 밀리기도 해서 별도 분리) */
-    public void touchHeartbeat() {
-        jdbc.sql("UPDATE gemini_rate SET heartbeat_at = now() WHERE id = 1").update();
     }
 
     /** 대기열 크기 요약 — LIMIT 없는 전체 카운트 (모니터링 "밀려서 느린가" 판단용) */
@@ -276,24 +261,6 @@ public class VideoRepository {
                         FROM video
                         """)
                 .query((rs, i) -> new QueueCounts(rs.getInt("waiting"), rs.getInt("analyzing")))
-                .single();
-    }
-
-    /** 워커 생존·429 이력 — gemini_rate 단일 행. nextRetryAt: backoffGemini 가 last_call_at 을
-        미래로 밀어둔 값 그대로 — 지금 백오프 중이면 "다음 재시도 가능 시각", 아니면 과거 시각
-        (2026-07-14 확정, 모니터링 화면 카운트다운용) */
-    public record WorkerStatus(OffsetDateTime heartbeatAt, int rateLimitCount, OffsetDateTime lastRateLimitedAt,
-                               OffsetDateTime nextRetryAt) {
-    }
-
-    public WorkerStatus workerStatus() {
-        return jdbc.sql("SELECT heartbeat_at, rate_limit_count, last_rate_limited_at, last_call_at "
-                        + "FROM gemini_rate WHERE id = 1")
-                .query((rs, i) -> new WorkerStatus(
-                        rs.getObject("heartbeat_at", OffsetDateTime.class),
-                        rs.getInt("rate_limit_count"),
-                        rs.getObject("last_rate_limited_at", OffsetDateTime.class),
-                        rs.getObject("last_call_at", OffsetDateTime.class)))
                 .single();
     }
 
