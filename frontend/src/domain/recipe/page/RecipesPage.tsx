@@ -56,24 +56,34 @@ const CATEGORY_BADGE: Record<VideoCategory, RcpBadgeVariant> = {
     레이아웃 일관성이 깨짐 (2026-07-14 재확정: "완료" 대신 "레시피"로 문구만 교체) */
 const itemLabel = (item: RegistrationItem): string =>
     item.status === 'DONE' ? CATEGORY_LABEL[item.category ?? 'ETC'] : STATUS_LABEL[item.status];
+/** 상태 → 배지 색 (2026-07-15: if-체인에서 표로 — 아래 STATUS_DETAIL 과 같은 이유).
+    카테고리 팔레트와 절대 안 겹치는 예약색만 쓴다 (2026-07-14 재설계, dataviz CVD 검증) */
+const STATUS_BADGE: Record<Exclude<RegistrationStatus, 'DONE'>, RcpBadgeVariant> = {
+    WAITING: 'neutral',
+    ANALYZING: 'analyzing',
+    TOO_LONG: 'warning',
+    FAILED: 'critical',
+    REMOVED: 'serious',
+};
 /** 배지 색: 완료 항목은 카테고리 팔레트, 나머지는 상태 팔레트 — 서로 절대 안 겹치는
     두 체계 (2026-07-14 재설계, dataviz 스킬 CVD 검증. 예전 "채움/테두리" 구분은 폐지) */
-const itemBadge = (item: RegistrationItem): RcpBadgeVariant => {
-    if (item.status === 'DONE') return CATEGORY_BADGE[item.category ?? 'ETC'];
-    if (item.status === 'ANALYZING') return 'analyzing';
-    if (item.status === 'FAILED') return 'critical';
-    if (item.status === 'REMOVED') return 'serious';
-    if (item.status === 'TOO_LONG') return 'warning';
-    return 'neutral'; // WAITING
+const itemBadge = (item: RegistrationItem): RcpBadgeVariant =>
+    item.status === 'DONE' ? CATEGORY_BADGE[item.category ?? 'ETC'] : STATUS_BADGE[item.status];
+/** 상태 → 결과 시트의 설명 문구.
+    (2026-07-15: if-체인에서 표로 바꿈 — 체인은 끝에 기본값이 있어서 상태가 새로 생기면
+    조용히 빈 설명·회색 배지가 됐다. Record 로 두면 새 상태의 문구·색을 정하지 않는 한
+    컴파일이 안 된다 — STATUS_LABEL·CATEGORY_* 가 이미 쓰던 방식과 같게 맞춤) */
+const STATUS_DETAIL: Record<Exclude<RegistrationStatus, 'DONE'>, string> = {
+    WAITING: '차례를 기다리고 있어요. 분석이 끝나면 자동으로 바뀌어요.',
+    ANALYZING: '영상을 분석하고 있어요. 잠시만요.',
+    TOO_LONG: '7분이 넘는 영상이라 분석하지 않았어요 (기록만 남아요).',
+    FAILED: '분석에 여러 번 실패했어요.',
+    REMOVED: '이 영상은 시스템에서 제거됐어요.',
 };
-/** 결과 시트의 상태 설명 — 완료된 요리는 추출 내용을 보여주므로 설명 불필요 */
+/** 결과 시트의 상태 설명 — 완료된 요리는 추출 내용을 보여주므로 설명 불필요(null) */
 const itemDetail = (item: RegistrationItem): string | null => {
-    if (item.status === 'WAITING') return '차례를 기다리고 있어요. 분석이 끝나면 자동으로 바뀌어요.';
-    if (item.status === 'ANALYZING') return '영상을 분석하고 있어요. 잠시만요.';
-    if (item.status === 'TOO_LONG') return '7분이 넘는 영상이라 분석하지 않았어요 (기록만 남아요).';
-    if (item.status === 'FAILED') return '분석에 여러 번 실패했어요.';
-    if (item.status === 'REMOVED') return '이 영상은 시스템에서 제거됐어요.';
-    if (item.status === 'DONE' && item.category !== 'RECIPE') {
+    if (item.status !== 'DONE') return STATUS_DETAIL[item.status];
+    if (item.category !== 'RECIPE') {
         return `요리가 아니라 ${CATEGORY_LABEL[item.category ?? 'ETC']}(으)로 분류했어요.`;
     }
     return null;
