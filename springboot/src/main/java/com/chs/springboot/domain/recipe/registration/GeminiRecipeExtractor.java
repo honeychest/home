@@ -135,38 +135,16 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                 "required", List.of("category"));
     }
 
-    /** Gemini 응답 봉투 파싱 — HTTP 없이 검증하는 순수 판정 (테스트: GeminiRecipeExtractorTest) */
+    /** Gemini 응답 봉투(candidates[0]…parts[0].text) 를 벗겨 공용 파서에 넘긴다 — 봉투 모양은
+        Gemini 만의 사정이라 여기 남고, 알맹이 파싱은 ExtractionResultJson 이 소유.
+        transcriptChars 는 Gemini 응답에 없어 null 이 되고, Hybrid 가 로컬 결과에서 이어붙인다 */
     static ExtractionResult parseEnvelope(JsonNode response) {
         String text = response.path("candidates").path(0).path("content").path("parts").path(0)
                 .path("text").asText("");
         try {
-            JsonNode json = MAPPER.readTree(text);
-            String category = json.path("category").asText("ETC");
-            List<String> tags = toList(json.path("tags")); // 검색 태그는 전 분류 공통 (2026-07-13 확정)
-            if (!"RECIPE".equals(category)) {
-                return new ExtractionResult(category, null, null, null, null,
-                        json.path("summary").asText(null), tags, null);
-            }
-            return new ExtractionResult(
-                    category,
-                    json.path("name").asText(null),
-                    toList(json.path("ingredients")),
-                    json.hasNonNull("cookMinutes") ? json.get("cookMinutes").asInt() : null,
-                    toList(json.path("steps")),
-                    null, // RECIPE 요약은 name·steps 가 대신함
-                    tags, null); // transcriptChars 는 Hybrid 가 로컬 시도 결과에서 이어붙임
+            return ExtractionResultJson.parse(MAPPER.readTree(text));
         } catch (Exception e) {
             throw new IllegalStateException("Gemini 응답 파싱 실패: " + text, e);
         }
-    }
-
-    private static List<String> toList(JsonNode array) {
-        List<String> list = new ArrayList<>();
-        for (JsonNode node : array) {
-            if (!node.asText().isBlank()) {
-                list.add(node.asText().trim());
-            }
-        }
-        return list;
     }
 }

@@ -8,7 +8,7 @@
 
 | 키 | 의도 (언제 쓰나) | 모범 실물 (recipe 는 `domain/recipe/` 아래) |
 |---|---|---|
-| pattern-pure-rules | 임계값·분류·매칭 등 순수 판정. 컨트롤러/저장소에 인라인 금지 — static 순수 함수 + 단위 테스트 | `registration/RegistrationRules.java`, `fridge/FridgeRepository.rankFrequent`, `GeminiRecipeExtractor.parseEnvelope` |
+| pattern-pure-rules | 임계값·분류·매칭 등 순수 판정. 컨트롤러/저장소에 인라인 금지 — static 순수 함수 + 단위 테스트 | `registration/RegistrationRules.java`, `fridge/FridgeRepository.rankFrequent`, `registration/ExtractionResultJson.java` |
 | pattern-rest-seam | 외부 HTTP 호출 — `RestClient.Builder` 주입으로 MockRestServiceServer 테스트 시임 확보 | `registration/GeminiRecipeExtractor.java` |
 | pattern-port-adapter | 외부 시스템(AI·메타 조회 등) 인터페이스 격리 — 구현체 교체로 끝나게 | `RecipeExtractor` / `VideoMetadataClient` |
 | pattern-failover-notify | 외부 의존이 막혔을 때 폴백 전환 + 텔레그램 알림 | `GeminiRecipeExtractor` 페일오버 + `GikkaTelegramNotifier` |

@@ -6,7 +6,6 @@ import { useState } from 'react';
 import RcpButton from '../ui/RcpButton';
 import RcpChip from '../ui/RcpChip';
 import RcpBadge from '../ui/RcpBadge';
-import RcpListRow from '../ui/RcpListRow';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpShelf from '../ui/RcpShelf';
 import RcpVideoRow from '../ui/RcpVideoRow';
@@ -165,13 +164,6 @@ export default function StyleguidePage() {
             </RcpShelf>
             <Label>{'.rcp-sticker(신선) / .rcp-sticker-old(14일+) / .rcp-sticker-expiring(임박 포스트잇)'}</Label>
 
-            <h2 className="rcp-section-label">목록 행 — RcpListRow (.rcp-list-row)</h2>
-            <RcpListRow
-                name="두부"
-                badge={<RcpBadge variant="expiring">임박</RcpBadge>}
-                meta="6월 24일"
-            />
-
             <h2 className="rcp-section-label">입력 — .rcp-input</h2>
             <input className="rcp-input" placeholder="재료 이름" />
 
@@ -199,13 +191,6 @@ export default function StyleguidePage() {
             <div className="rcp-chip-group" style={{ marginTop: 'var(--rcp-space-2)' }}>
                 <RcpChip on onToggle={() => {}}>Hähnchenbrustfilet</RcpChip>
                 <RcpChip on={false} onToggle={() => {}}>아주아주 길게 적어본 재료 이름</RcpChip>
-            </div>
-            <div style={{ marginTop: 'var(--rcp-space-2)' }}>
-                <RcpListRow
-                    name="Extra virgin olive oil from the Mediterranean coast 아주 긴 재료명"
-                    badge={<RcpBadge variant="expiring">bald ablaufend</RcpBadge>}
-                    meta="12월 31일"
-                />
             </div>
             <div style={{ marginTop: 'var(--rcp-space-2)' }}>
                 <RcpVideoRow

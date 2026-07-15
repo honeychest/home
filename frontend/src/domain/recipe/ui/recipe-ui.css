@@ -1,7 +1,7 @@
 /* [AGENT] recipe(기까) UI 킷 스타일 — tokens.css 변수만 사용 (임의 값 금지)
    클래스 이름 규칙: rcp-<컴포넌트>[-<부위>][-<상태>]  (사용자가 지시할 때 이 이름을 그대로 사용)
    목록: rcp-app, rcp-screen, rcp-screen-header, rcp-tab-bar, rcp-tab, rcp-btn,
-         rcp-chip, rcp-list-row, rcp-badge, rcp-input, rcp-sheet, rcp-section-label, rcp-empty */
+         rcp-chip, rcp-badge, rcp-input, rcp-sheet, rcp-section-label, rcp-empty */
 
 /* ── 앱 루트·화면 골격 ── */
 .rcp-app {
@@ -90,22 +90,6 @@
   box-shadow: none;
 }
 
-/* ── 목록 행: rcp-list-row > rcp-list-row-name / -meta / -actions ── */
-.rcp-list-row {
-  display: flex; align-items: center; gap: var(--rcp-space-2);
-  background: var(--rcp-surface);
-  border: 1px solid var(--rcp-line);
-  border-radius: var(--rcp-radius-lg);
-  box-shadow: var(--rcp-shadow-row);
-  padding: var(--rcp-space-3);
-  margin-bottom: var(--rcp-space-2);
-}
-.rcp-list-row-name {
-  flex: 1; font-size: var(--rcp-fs-md); font-weight: var(--rcp-fw-bold); min-width: 0;
-  overflow-wrap: anywhere; /* 다국어 대비: 띄어쓰기 없는 긴 단어도 행 안에서 줄바꿈 */
-}
-.rcp-list-row-meta { font-size: var(--rcp-fs-xs); color: var(--rcp-text-faint); white-space: nowrap; }
-.rcp-list-row-actions { display: flex; gap: var(--rcp-space-1); }
 .rcp-icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 36px; height: 36px;

@@ -88,19 +88,4 @@ class LocalRecipeExtractorTest {
         assertThrows(LocalRecipeExtractor.LocalUnavailableException.class,
                 () -> disabled.extract("https://www.youtube.com/watch?v=abc", null));
     }
-
-    @Test
-    @DisplayName("봉투 파싱은 순수 함수 — HTTP 없이 직접 검증")
-    void parsesEnvelopeWithoutHttp() throws Exception {
-        var json = new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
-                {"category":"RECIPE","name":"김치찌개","ingredients":["김치"],"steps":["끓인다"]}
-                """);
-
-        var result = LocalRecipeExtractor.parse(json);
-
-        assertEquals("RECIPE", result.category());
-        assertEquals("김치찌개", result.name());
-        assertEquals(List.of("김치"), result.ingredients());
-        assertNull(result.cookMinutes());
-    }
 }

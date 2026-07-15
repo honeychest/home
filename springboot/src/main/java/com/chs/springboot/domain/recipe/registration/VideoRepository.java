@@ -42,12 +42,6 @@ public class VideoRepository {
             + "recipe_json, summary, tags, attempt_count, analysis_seconds, last_error, queued_at, "
             + "analysis_signals, gemini_retry_count";
 
-    public boolean exists(String videoId) {
-        return jdbc.sql("SELECT COUNT(*) FROM video WHERE video_id = :videoId")
-                .param("videoId", videoId)
-                .query(Integer.class).single() > 0;
-    }
-
     /**
      * 메타 조회 생략 여부 판단용 (2026-07-13 확정 — REMOVED 는 "존재하지만 되살아나야 할" 상태라
      * exists() 만 보면 메타를 영원히 못 채움). REMOVED 는 존재하지 않는 것처럼 취급해 메타를
@@ -195,9 +189,10 @@ public class VideoRepository {
      * 다른 사용자 목록에서도 흔적("삭제됨")이 보이게 한다(조용히 사라지지 않음).
      * registration 연결은 안 건드림. 재분석하면(사용자 재분석 버튼이든 재등록이든) 그냥
      * 평소 파이프라인을 다시 타므로 별도 복구 로직이 필요 없다.
+     * @return false = 없는 영상 (404)
      */
-    public void remove(String videoId) {
-        jdbc.sql("""
+    public boolean remove(String videoId) {
+        return jdbc.sql("""
                         UPDATE video
                         SET status = 'REMOVED', category = NULL, recipe_json = NULL, summary = NULL,
                             tags = NULL, summary_version = NULL, analysis_signals = NULL, attempt_count = 0,
@@ -205,7 +200,7 @@ public class VideoRepository {
                             gemini_retry_count = 0
                         WHERE video_id = :videoId
                         """)
-                .param("videoId", videoId).update();
+                .param("videoId", videoId).update() > 0;
     }
 
     /**

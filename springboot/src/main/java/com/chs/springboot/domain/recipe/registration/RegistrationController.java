@@ -170,7 +170,9 @@ public class RegistrationController {
     @PostMapping("/monitor/{videoId}/reanalyze")
     public void monitorReanalyze(@GikkaUserId long userId, @PathVariable String videoId) {
         requireOwner(userId);
-        videos.reanalyze(videoId, metadata.fetchOne(videoId));
+        if (!videos.reanalyze(videoId, metadata.fetchOne(videoId))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "없는 영상");
+        }
     }
 
     /**
@@ -181,7 +183,9 @@ public class RegistrationController {
     @PostMapping("/monitor/{videoId}/remove")
     public void monitorRemove(@GikkaUserId long userId, @PathVariable String videoId) {
         requireOwner(userId);
-        videos.remove(videoId);
+        if (!videos.remove(videoId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "없는 영상");
+        }
     }
 
     private void requireOwner(long userId) {
