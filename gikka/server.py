@@ -53,6 +53,14 @@ PROMPT_TEMPLATE = """\
      재료 표기를 최우선으로 사용하세요 (창작자가 직접 적은 텍스트가 가장 정확합니다).
      설명란에 없는 재료만 화면·음성에서 보완하세요. 영상에 나온 이름 그대로 쓰고,
      임의로 바꾸지 마세요. 양념(소금, 간장 등)도 포함. 수량·단위는 빼고 이름만.
+     아래 셋은 반드시 지키세요 (2026-07-16 실측에서 전부 어긴 사례가 나왔습니다):
+     (1) 설명란에 "재료 : A, B, C" 같은 목록이 있으면 그 항목을 하나도 빠뜨리지 말고
+         전부 넣으세요. 설명란에 재료가 적혀 있는데 목록이 비어 있으면 틀린 답입니다.
+     (2) steps 에 언급한 재료는 반드시 ingredients 에도 넣으세요. 조리 순서에는
+         나오는데 재료 목록에 없으면 그 자체로 틀린 답입니다.
+     (3) 요리 이름이 가리키는 주재료를 빠뜨리지 마세요 (예: 떡볶이의 떡,
+         단호박 튀김의 단호박). 단, 그 재료를 실제로 안 쓰는 영상이면(예: 양념장만
+         만드는 영상) 넣지 마세요 — 영상에 실제로 쓰인 것만 적는 원칙이 우선입니다.
    - cookMinutes: 예상 조리 시간(분). 영상에서 알 수 없으면 생략.
    - steps: 조리 순서 요약. 각 단계를 짧은 한 문장으로, 3~7개.
 3. RECIPE 가 아닌 경우에만:
@@ -135,7 +143,10 @@ def build_payload(frames, transcript, description):
         with open(frame_path, "rb") as img:
             b64 = base64.b64encode(img.read()).decode()
         content.append({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64}})
-    return {"model": LM_STUDIO_MODEL, "messages": [{"role": "user", "content": content}], "max_tokens": 800}
+    # max_tokens: 800 → 2000 (2026-07-16). 한국어 재료 12개+단계 5문장+태그 8개면 800 이 빠듯해
+    # 잘릴 여지가 있었다(잘리면 JSON 이 안 닫혀 parse_model_json 이 예외 → Gemini 로 전체 폴백).
+    # 이번에 발견된 "재료 빈 목록" 증상의 원인은 아니었지만(빈 배열은 잘림이 아님) 여유를 둔다.
+    return {"model": LM_STUDIO_MODEL, "messages": [{"role": "user", "content": content}], "max_tokens": 2000}
 
 
 def call_local_model(payload):

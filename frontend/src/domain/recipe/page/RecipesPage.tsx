@@ -11,7 +11,7 @@ import { DuplicateVideoError } from '../data/registrationTypes';
 import { registrationRepository } from '../data/registrationRepository';
 import { fridgeRepository } from '../data/fridgeRepository';
 import { registerLink } from '../data/registerLink';
-import { analysisQualityWarning } from '../data/analysisQuality';
+import { analysisQualityWarning, needsReview } from '../data/analysisQuality';
 import { parseYoutubePlaylistId, parseYoutubeVideoId } from '../data/videoUrl';
 import { useMutation } from './useMutation';
 import { useQuery } from './useQuery';
@@ -92,6 +92,11 @@ const itemDetail = (item: RegistrationItem): string | null => {
     return null;
 };
 const TOO_LONG_NOTICE = '7분이 넘는 영상이라 분석하지 않아요 — 목록에 기록만 남겼어요';
+
+/** 품질 경고가 붙은 항목의 배지·필터 이름 (2026-07-16 확정 — 사용자 제보: "레시피가 많아져서
+    하나하나 눌러서 확인하기는 힘들어". 시트를 열어야만 보이던 경고를 목록까지 끌어올린 것).
+    분류·상태 라벨과 겹치지 않는 이름이어야 한다 — 같은 필터 자리를 쓰므로 */
+const REVIEW_LABEL = '확인 필요';
 
 // 카드 제목: AI가 추출한 요리 이름이 원본 영상 제목보다 "무슨 요리인지" 더 잘 드러남
 // (2026-07-14 확정 — 이전엔 저장만 하고 목록엔 안 보여주고 있었음)
@@ -234,9 +239,15 @@ export default function RecipesPage() {
             return acc;
         }, [])
         : [];
+    // "확인 필요"는 분류·상태와 다른 축이라(레시피이면서 동시에 확인 필요일 수 있음) 따로 센다.
+    // 맨 앞에 둔다 — 사용자가 가장 먼저 처리해야 할 것이므로
+    const reviewCount = items?.filter(needsReview).length ?? 0;
+    if (reviewCount > 0) summary.unshift({ label: REVIEW_LABEL, variant: 'warning', count: reviewCount });
     // 요약 배지 필터 적용 — summary 자체는 항상 전체 items 기준으로 집계되므로(위),
     // 필터가 걸려도 활성 배지는 그대로 남아 다시 탭하면 해제할 수 있다
-    const displayedItems = (items && activeFilter) ? items.filter((item) => itemLabel(item) === activeFilter) : items ?? [];
+    const matchesFilter = (item: RegistrationItem, filter: string) =>
+        filter === REVIEW_LABEL ? needsReview(item) : itemLabel(item) === filter;
+    const displayedItems = (items && activeFilter) ? items.filter((item) => matchesFilter(item, activeFilter)) : items ?? [];
 
     return (
         <main className="rcp-screen rcp-screen-with-fab" id="rcp-recipes-page">
@@ -282,7 +293,14 @@ export default function RecipesPage() {
                                 key={item.videoId}
                                 title={itemTitle(item)}
                                 thumbnailUrl={item.thumbnailUrl}
-                                badge={<RcpBadge variant={itemBadge(item)}>{itemLabel(item)}</RcpBadge>}
+                                // 품질 경고는 분류 배지와 다른 축이라 함께 보여준다 — 목록만 훑어도
+                                // 검수 대상이 보이게 (2026-07-16). trailing 이 세로 flex 라 자연히 쌓인다
+                                badge={(
+                                    <>
+                                        {needsReview(item) && <RcpBadge variant="warning">{REVIEW_LABEL}</RcpBadge>}
+                                        <RcpBadge variant={itemBadge(item)}>{itemLabel(item)}</RcpBadge>
+                                    </>
+                                )}
                                 meta={formatRegisteredAt(item.registeredAt)}
                                 onClick={() => setSelected(item)}
                             />
