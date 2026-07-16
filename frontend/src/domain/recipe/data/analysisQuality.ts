@@ -6,25 +6,25 @@
 // 지어낸 사례 — 프롬프트만으로는 못 막는다고 실측 확인, 대신 "이 분석은 근거가 부실했다"는
 // 사실을 사용자에게 알려주는 쪽으로 방향을 잡았다 (CONTEXT.md "5차 확장" 절).
 //
-// 2026-07-16 확장 — 추출 결과 자체를 보는 판정 2종 추가. 근거: 사용자가 "떡볶이에 떡이 없다"를
-// 우연히 발견했고 "레시피가 많아져 하나하나 눌러 확인하기 힘들다"고 제보. DB 조사 결과 RECIPE
-// 116건 중 재료 0개 1건, 4개 이하 20건. 이 판정들은 analysisSignals 와 달리 이미 저장된
-// recipe 만 보면 되므로 마이그레이션·재분석 없이 과거 데이터에도 그대로 적용된다.
+// 2026-07-16 확장 — 추출 결과 자체를 보는 판정 추가. 근거: 사용자가 "떡볶이에 떡이 없다"를
+// 우연히 발견했고 "레시피가 많아져 하나하나 눌러 확인하기 힘들다"고 제보. 이 판정은
+// analysisSignals 와 달리 이미 저장된 recipe 만 보면 되므로 마이그레이션·재분석 없이
+// 과거 데이터에도 그대로 적용된다.
+//
+// 재료 개수 임계값("N개 이하면 의심")은 만들었다가 실측으로 폐기했다 (2026-07-16, 같은 날).
+// 4개 이하 17건의 정체를 실제로 열어보니 ["라면","MSG"](제목이 "재료 딱 하나로 라면 맛있게
+// 끓일 수 있다고?"), ["안성탕면","라면 스프"], ["짜파게티","물","계란"] 처럼 재료가 적은 게
+// 정답인 라면·간단 요리가 거의 전부였다. 임계값을 정할 때 개수 분포만 보고 그 레시피가
+// 뭔지 안 본 게 실수였고, 근거였던 유일한 오답("오직! 고추장…")은 재분석으로 고쳐졌다.
+// 정상 17건에 경고를 띄우면 배지를 무시하게 되어 진짜 경고까지 안 보게 된다(경고 피로).
+// → 다시 만들지 말 것. 재료 개수는 그 레시피가 틀렸다는 증거가 되지 못한다.
+//    "떡볶이인데 떡이 없다"류의 진짜 검출은 재료 사전이 필요해 5차 4번으로 이월 (CONTEXT.md).
 import type { RegistrationItem } from './registrationTypes';
 
 /** 이 신호가 없으면 "음성 인식 내용이 거의 없었다"는 뜻 (RegistrationRules.MIN_TRANSCRIPT_CHARS 기준) */
 const TRANSCRIPT_SIGNAL = 'TRANSCRIPT';
 
-/**
- * 이 개수 이하면 "재료가 적게 잡혔다"고 보고 검수를 유도한다 (2026-07-16 확정).
- * 4로 정한 근거는 실제 분포 — 재료가 빠진 게 확인된 사례("오직! 고추장…" 은 떡·간장·설탕 누락)가
- * 4개 지점에 있었고, 정상인 "떡볶이 양념 레시피"(양념만 만드는 영상이라 떡이 없는 게 정답)는
- * 6개라 안 걸린다. 이건 "틀렸다"가 아니라 "확인해 보라"는 신호라 다소 넉넉한 편이 낫다.
- */
-export const FEW_INGREDIENTS_THRESHOLD = 4;
-
 const EXTRACTION_FAILED_TEXT = '재료를 하나도 못 찾았어요 — 분석이 제대로 안 됐어요. 재분석이 필요해요.';
-const FEW_INGREDIENTS_TEXT = '재료가 적게 잡혔어요 — 원본 영상과 다를 수 있으니 확인해 주세요.';
 const NO_TRANSCRIPT_TEXT = '이 영상은 음성 인식 내용이 적어 분석이 부정확할 수 있어요. 원본 영상으로 확인해 주세요.';
 
 type QualityInput = Pick<RegistrationItem, 'status' | 'analysisSignals' | 'recipe'>;
@@ -35,18 +35,14 @@ type QualityInput = Pick<RegistrationItem, 'status' | 'analysisSignals' | 'recip
  * "모른다"와 "부족했다"를 구분해야 과거 데이터 전체가 경고투성이가 되지 않는다.
  *
  * 심각한 것부터 반환한다 (한 항목에 배지는 하나뿐이라 가장 급한 것을 보여줘야 함):
- * 추출 실패 → 재료 부족 → 음성 없음.
+ * 추출 실패 → 음성 없음.
  */
 export function analysisQualityWarning(item: QualityInput): string | null {
     if (item.status !== 'DONE') return null;
-    // 추출 결과를 직접 보는 판정 (RECIPE 만 — TIP/ETC 는 애초에 재료가 없는 게 정상)
-    if (item.recipe) {
-        if (item.recipe.ingredients.length === 0 || item.recipe.steps.length === 0) {
-            return EXTRACTION_FAILED_TEXT;
-        }
-        if (item.recipe.ingredients.length <= FEW_INGREDIENTS_THRESHOLD) {
-            return FEW_INGREDIENTS_TEXT;
-        }
+    // 추출 결과를 직접 보는 판정 (RECIPE 만 — TIP/ETC 는 애초에 재료가 없는 게 정상).
+    // "하나도 없음"만 본다 — 개수가 적은 것은 정상 레시피와 구분이 안 된다(위 폐기 기록 참고)
+    if (item.recipe && (item.recipe.ingredients.length === 0 || item.recipe.steps.length === 0)) {
+        return EXTRACTION_FAILED_TEXT;
     }
     if (item.analysisSignals === null) return null;
     if (item.analysisSignals.includes(TRANSCRIPT_SIGNAL)) return null;

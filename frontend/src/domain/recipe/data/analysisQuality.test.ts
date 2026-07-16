@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ExtractedRecipe } from './registrationTypes';
 import { analysisQualityWarning, needsReview } from './analysisQuality';
 
-/** 경고가 안 붙는 정상 레시피 (재료 5개 = 임계값 4 초과) */
+/** 경고가 안 붙는 정상 레시피 */
 const goodRecipe = (over: Partial<ExtractedRecipe> = {}): ExtractedRecipe => ({
     name: '떡볶이',
     ingredients: ['밀떡', '어묵', '대파', '고추장', '설탕'],
@@ -51,22 +51,16 @@ describe('analysisQualityWarning — 추출 결과 기반 (2026-07-16)', () => {
             .toContain('재료를 하나도 못 찾았어요');
     });
 
-    it('재료가 임계값(4개) 이하면 검수 유도 경고 — "오직! 고추장…" 영상이 떡 누락된 채 4개였음', () => {
-        const warning = analysisQualityWarning({
-            ...done, recipe: goodRecipe({ ingredients: ['어묵', '대파', '식용유', '고추장'] }),
-        });
-        expect(warning).toContain('재료가 적게 잡혔어요');
+    // 재료 개수 임계값은 실측으로 폐기했다 (2026-07-16) — 재료가 적은 게 정답인 라면·간단
+    // 요리가 전부 걸려 경고 피로만 만들었다. 아래 두 케이스가 그 회귀 방지선이다.
+    it('재료가 적어도(2개) 경고하지 않는다 — "재료 딱 하나로 라면" 처럼 적은 게 정답인 레시피가 실재', () => {
+        expect(analysisQualityWarning({ ...done, recipe: goodRecipe({ ingredients: ['라면', 'MSG'] }) }))
+            .toBeNull();
     });
 
-    it('재료가 임계값을 넘으면 경고 없음 — 양념만 만드는 정상 영상(6개)이 오탐되지 않아야 한다', () => {
-        expect(analysisQualityWarning({
-            ...done, recipe: goodRecipe({ ingredients: ['고춧가루', '설탕', '소금', '후추', '물엿', '물'] }),
-        })).toBeNull();
-    });
-
-    it('추출 실패가 재료 부족보다 우선한다 (배지는 하나뿐 — 가장 급한 것)', () => {
-        expect(analysisQualityWarning({ ...done, recipe: goodRecipe({ ingredients: [] }) }))
-            .toContain('재료를 하나도 못 찾았어요');
+    it('재료 1개짜리도 경고하지 않는다 — 개수는 오답의 증거가 못 된다', () => {
+        expect(analysisQualityWarning({ ...done, recipe: goodRecipe({ ingredients: ['안성탕면'] }) }))
+            .toBeNull();
     });
 
     it('신호가 null(과거 데이터)이어도 추출 결과 판정은 그대로 작동한다 — 소급 적용이 이 판정의 목적', () => {
