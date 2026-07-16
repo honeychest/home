@@ -16,16 +16,31 @@ Spring 의 `LocalRecipeExtractor` 가 `host.docker.internal:8765` 로 호출한�
 brew install yt-dlp ffmpeg whisper-cpp
 ```
 
-## 배포
+## 배포 — 이제 자동 (2026-07-16 변경)
+`server.py` 는 **복사하지 않는다.** launchd 가 저장소 체크아웃
+(`/Users/honey/devcontext/project/lab/gikka/server.py`)을 직접 돌리고, Jenkins 의
+`Deploy Gikka Local` stage 가 `gikka/` 변경을 감지해 재기동한다 → **푸시하면 반영된다.**
+
+> 왜 바꿨나: 예전엔 `cp server.py ~/gikka-local/server.py` 로 뜬 **사본**을 돌렸다. 저장소만
+> 갱신되고 사본은 그대로 남아, `transcriptChars`(품질 경고의 근거)를 안 보내는 옛 코드가 계속
+> 돌았고 **DONE 125건 전부 품질 경고가 한 번도 작동하지 않았다**(2026-07-16 발견). 사본이라는
+> 개념 자체를 없애 이 사고 유형을 원천 차단했다. 사본을 다시 만들지 말 것.
+
+### 최초 1회만 (mac-mini 에서 손으로 — `~/Library/LaunchAgents` 는 홈이라 Jenkins 밖)
 ```bash
-mkdir -p ~/gikka-local/models
-cp server.py ~/gikka-local/server.py
+mkdir -p ~/gikka-local/models   # 모델·로그 자리 (코드는 여기 두지 않는다)
 cp com.gikka.local-extractor.plist ~/Library/LaunchAgents/
 # whisper 모델(turbo, ~1.6GB) — huggingface.co/ggerganov/whisper.cpp 에서 받아 models/ 로
 curl -sL -o ~/gikka-local/models/ggml-large-v3-turbo.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
 
-launchctl load ~/Library/LaunchAgents/com.gikka.local-extractor.plist
+launchctl bootout  gui/$(id -u)/com.gikka.local-extractor 2>/dev/null || true
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.gikka.local-extractor.plist
+```
+
+### 수동 재기동 (plist 를 바꿨을 때만 — 코드 변경은 Jenkins 가 함)
+```bash
+launchctl kickstart -k gui/$(id -u)/com.gikka.local-extractor
 ```
 
 ## 확인

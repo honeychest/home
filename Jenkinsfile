@@ -9,6 +9,7 @@ pipeline {
         booleanParam(name: 'BACKEND_ONLY',  defaultValue: false, description: 'Backend 강제 배포')
         booleanParam(name: 'FRONTEND_ONLY', defaultValue: false, description: 'Frontend 강제 배포')
         booleanParam(name: 'NEXUS_ONLY',    defaultValue: false, description: 'Nexus 강제 배포')
+        booleanParam(name: 'GIKKA_ONLY',    defaultValue: false, description: 'gikka 로컬 추출기 강제 재기동')
     }
 
     stages {
@@ -42,6 +43,7 @@ pipeline {
                     env.DEPLOY_BACK  = changed.contains('springboot/') ? 'true' : 'false'
                     env.DEPLOY_FRONT = changed.contains('frontend/')   ? 'true' : 'false'
                     env.DEPLOY_NEXUS = changed.contains('nexus/')      ? 'true' : 'false'
+                    env.DEPLOY_GIKKA = changed.contains('gikka/')      ? 'true' : 'false'
                     env.GIT_SHORT    = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                 }
             }
@@ -154,6 +156,25 @@ pipeline {
             }
             steps {
                 sh 'cd /Users/honey/devcontext/project/lab/springboot && docker compose pull nexus && docker compose up -d nexus'
+            }
+        }
+
+        // gikka 로컬 추출기(mac-mini 호스트 상시 프로세스)는 도커가 아니라 launchd 가 띄운다.
+        // launchd 가 체크아웃의 server.py 를 직접 돌리므로(사본 없음 — plist 주석 참고)
+        // Sync Local 의 git pull 이면 파일은 이미 최신이고, 재기동만 하면 반영된다.
+        // 이 stage 가 없던 동안 gikka/ 변경은 아무리 푸시해도 반영되지 않았다 (2026-07-16 발견).
+        stage('Deploy Gikka Local') {
+            when {
+                allOf {
+                    branch 'main'
+                    anyOf {
+                        environment name: 'DEPLOY_GIKKA', value: 'true'
+                        expression { return params.GIKKA_ONLY }
+                    }
+                }
+            }
+            steps {
+                sh 'launchctl kickstart -k gui/$(id -u)/com.gikka.local-extractor'
             }
         }
     }

@@ -4,10 +4,15 @@
 <dict>
     <key>Label</key>
     <string>com.gikka.local-extractor</string>
+    <!-- 저장소 체크아웃(Jenkins 의 Sync Local 이 git pull 하는 그 경로)의 server.py 를 직접 돌린다.
+         이전엔 ~/gikka-local/server.py 라는 손으로 뜬 사본을 돌렸는데, 저장소만 갱신되고 사본은
+         그대로 남아 두 달치 코드가 조용히 안 반영됐다 (2026-07-16 발견 — transcriptChars 를
+         안 보내 품질 경고 기능이 125/125 한 번도 작동 못 함). 사본을 없애 그 사고를 원천 차단.
+         모델·로그는 여전히 ~/gikka-local 아래(WorkingDirectory) — 저장소에 둘 것이 아니므로. -->
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>/Users/honey/gikka-local/server.py</string>
+        <string>/Users/honey/devcontext/project/lab/gikka/server.py</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

@@ -23,6 +23,11 @@
 admin > "백엔드 패턴"에서 열람. 패턴 등록·변경 시 표와 이 원장 두 곳을 함께 갱신한다.
 
 ## 금지
+- **배포 대상 코드를 손으로 복사한 사본으로 돌리기** — 저장소만 갱신되고 사본은 그대로 남아
+  조용히 어긋난다. 2026-07-16 실제 사고: mac-mini launchd 가 `~/gikka-local/server.py` 사본을
+  돌아 품질 경고 기능이 **DONE 125건 전부 한 번도 작동 안 함**. 프로세스는 체크아웃 경로를
+  직접 실행하고, 배포는 Jenkinsfile stage 로. 도커 밖 호스트 프로세스도 예외 없음
+  (`gikka/README.md`·`docs/recipe/CONTEXT.md` "gikka 로컬 서비스 배포 — 사본 금지").
 - `domain/recipe` ↔ 다른 패키지 상호 import (ArchUnit 이 빌드에서 차단 — 규칙 완화 금지.
   공용 코드가 필요하면 recipe 패키지 안으로 복사해 소유).
 - recipe 쪽 TransactionManager 스프링 빈 등록 (부트 기본 자동 구성이 꺼져 기존 도메인
