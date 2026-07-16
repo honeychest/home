@@ -35,7 +35,12 @@ WHISPER_MODEL = os.environ.get("GIKKA_LOCAL_WHISPER_MODEL",
 LM_STUDIO_URL = os.environ.get("GIKKA_LOCAL_LM_STUDIO_URL", "http://localhost:2345/v1/chat/completions")
 LM_STUDIO_MODEL = os.environ.get("GIKKA_LOCAL_LM_STUDIO_MODEL", "Mac-mini-LLM")
 PORT = int(os.environ.get("GIKKA_LOCAL_PORT", "8765"))
-TARGET_FRAMES = 12
+# 12 → 24 (2026-07-16 실측). 12장이면 53초 영상에서 약 4초 간격이라 "떡을 넣는 순간"이
+# 프레임 사이로 빠져 모델이 주재료를 아예 못 보는 일이 있었다("떡볶이인데 떡이 없다" 제보의
+# 남은 2건이 정확히 이것). 같은 영상을 전사(음성)는 그대로 둔 채 프레임만 24장으로 올리자
+# 2건 다 떡이 잡혔고, 덤으로 표기가 정확해지고(설탕→황설탕, 어묵→사각어묵) 없는 재료를
+# 지어내던 것도(후추장) 사라졌다 — 화면을 덜 본 모델이 빈칸을 상상으로 메우고 있었던 셈.
+TARGET_FRAMES = 24
 MIN_FRAME_INTERVAL_SECONDS = 2
 MAX_FRAME_INTERVAL_SECONDS = 30
 TEMP_DIR_PREFIX = "gikka-local-"
