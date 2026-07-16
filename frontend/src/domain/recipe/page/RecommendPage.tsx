@@ -5,9 +5,9 @@ import { useCallback, useState } from 'react';
 import { ChefHat } from 'lucide-react';
 import type { RecommendItem, RecommendSnapshot } from '../data/recommendTypes';
 import { recommendRepository } from '../data/recommendRepository';
-import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpCoverflow from '../ui/RcpCoverflow';
+import RcpLoadError from '../ui/RcpLoadError';
 import { useQuery } from './useQuery';
 
 const LOAD_ERROR_TEXT = '추천을 불러오지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
@@ -81,12 +81,7 @@ export default function RecommendPage() {
                 <p className="rcp-screen-subtitle">냉장고 재료로 지금 만들 수 있는 요리를 보여줘요</p>
             </header>
 
-            {loadError && (
-                <div className="rcp-shell-status" role="alert">
-                    <span>{loadError}</span>
-                    <RcpButton onClick={() => void query.reload()}>다시 시도</RcpButton>
-                </div>
-            )}
+            <RcpLoadError message={loadError} onRetry={() => void query.reload()} />
             {!loadError && snapshot === null && <p className="rcp-empty">불러오는 중…</p>}
 
             {!loadError && isEmpty && (

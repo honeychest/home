@@ -1,7 +1,8 @@
 /* [AGENT] recipe(기까) UI 킷 스타일 — tokens.css 변수만 사용 (임의 값 금지)
    클래스 이름 규칙: rcp-<컴포넌트>[-<부위>][-<상태>]  (사용자가 지시할 때 이 이름을 그대로 사용)
-   목록: rcp-app, rcp-screen, rcp-screen-header, rcp-tab-bar, rcp-tab, rcp-btn,
-         rcp-chip, rcp-badge, rcp-input, rcp-sheet, rcp-section-label, rcp-empty */
+   목록: rcp-app, rcp-screen, rcp-screen-header, rcp-tab-bar, rcp-tab, rcp-btn, rcp-fab,
+         rcp-chip, rcp-badge, rcp-input, rcp-sheet, rcp-section-label, rcp-empty,
+         rcp-inline-error(조작 실패) / rcp-load-error(화면 안 조회 실패) / rcp-shell-status(셸 전용) */
 
 /* ── 앱 루트·화면 골격 ── */
 .rcp-app {
@@ -18,6 +19,11 @@
   overflow-y: auto;
   padding: var(--rcp-space-4) var(--rcp-space-4)
            calc(var(--rcp-tab-height) + var(--rcp-space-6));
+}
+/* FAB 를 띄우는 화면에만 — 떠 있는 버튼이 마지막 항목을 덮지 않도록 그 높이만큼 바닥을 더 비운다.
+   (FAB 는 position:fixed 라 흐름에서 빠져 있어 스스로 자리를 안 만든다) */
+.rcp-screen-with-fab {
+  padding-bottom: calc(var(--rcp-tab-height) + var(--rcp-touch) + var(--rcp-space-8));
 }
 .rcp-screen-header { margin-bottom: var(--rcp-space-4); }
 .rcp-screen-title { font-size: var(--rcp-fs-xl); font-weight: var(--rcp-fw-heavy); }
@@ -65,6 +71,28 @@
 .rcp-btn-ghost { background: var(--rcp-accent-soft); color: var(--rcp-accent); }
 .rcp-btn-danger { background: transparent; color: var(--rcp-danger); }
 .rcp-btn:disabled { opacity: 0.45; }
+
+/* ── 떠 있는 주 동작 버튼: rcp-fab (RcpFab) ──
+   목록이 길어져도 자리가 안 변하는 우하단(엄지 닿는 곳)에 그 화면의 주 동작 하나만 둔다.
+   목록 끝에 놓인 버튼은 항목이 쌓일수록 스크롤 바닥으로 밀려나 못 찾게 된다 (2026-07-16 실사용 제보).
+   쓰는 화면은 .rcp-screen-with-fab 을 함께 걸어야 마지막 항목이 안 가려진다.
+   z-index 45 = 탭 바(40) 위, 하단 시트(50) 아래 — 시트가 열리면 FAB 이 덮이는 게 맞다 */
+.rcp-fab {
+  position: fixed;
+  right: var(--rcp-space-4);
+  bottom: calc(var(--rcp-tab-height) + var(--rcp-space-4) + env(safe-area-inset-bottom));
+  z-index: 45;
+  border-radius: var(--rcp-radius-pill);
+  box-shadow: var(--rcp-shadow-magnet);
+  /* 다국어 대비: 라벨이 길어지면 왼쪽으로 늘어나되 화면 밖으로는 안 나간다 (킷 공통 규칙) */
+  max-width: calc(100vw - var(--rcp-space-4) * 2);
+}
+/* .rcp-btn 은 flex 컨테이너라 말줄임이 안 먹는다 — 라벨을 감싼 자식에 건다 */
+.rcp-fab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .rcp-btn-full { width: 100%; } /* 화면 폭 전체 버튼 (예: 냉장고의 [+ 재료 추가]) */
 
 /* ── 자석 스티커 칩: rcp-chip + rcp-chip-on / rcp-chip-off ── */
@@ -626,6 +654,21 @@
   text-align: center;
 }
 
+/* ── 조회 실패 안내 (화면 안): rcp-load-error (RcpLoadError) ──
+   useQuery.error + reload 자리. 아래 .rcp-shell-status 와 혼동 금지 —
+   그건 셸(RecipeApp)이 화면 전체를 차지할 때만 쓰는 100dvh 짜리다. 화면 안에 그걸 쓰면
+   화면 하나만큼 부풀고(냉장고·보관함·모니터), overflow:hidden 인 추천 화면에선 잘렸다
+   (2026-07-16 점검에서 4곳 전부 이 클래스로 교정) */
+.rcp-load-error {
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: var(--rcp-space-3);
+  padding: var(--rcp-space-6) var(--rcp-space-4);
+  color: var(--rcp-text-sub);
+  font-size: var(--rcp-fs-md);
+  text-align: center;
+}
+
 /* ── 홈 계정 줄 (2차 — 로그인 상태를 눈에 보이게) ── */
 .rcp-account {
   display: flex; align-items: center; justify-content: space-between;
@@ -682,7 +725,9 @@
   font-size: var(--rcp-fs-xs); color: var(--rcp-danger); overflow-wrap: anywhere;
 }
 
-/* ── 앱 셸 로딩/에러 (2차 — API 전환으로 지연·실패가 실제로 생김) ── */
+/* ── 앱 셸 로딩/에러 (2차 — API 전환으로 지연·실패가 실제로 생김) ──
+   RecipeApp(셸) 전용 — 화면이 아직 없을 때 뷰포트 전체를 채우는 용도라 100dvh 다.
+   화면 안(.rcp-screen 아래)의 조회 실패에는 절대 쓰지 말 것 → 위 .rcp-load-error */
 .rcp-shell-status {
   min-height: 100dvh;
   display: flex; flex-direction: column;

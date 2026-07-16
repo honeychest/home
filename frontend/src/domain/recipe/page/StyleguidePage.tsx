@@ -11,6 +11,8 @@ import RcpShelf from '../ui/RcpShelf';
 import RcpVideoRow from '../ui/RcpVideoRow';
 import RcpCoverflow from '../ui/RcpCoverflow';
 import RcpInlineError from '../ui/RcpInlineError';
+import RcpLoadError from '../ui/RcpLoadError';
+import RcpFab from '../ui/RcpFab';
 import { ChefHat } from 'lucide-react';
 
 const COVERFLOW_SAMPLE = [
@@ -80,6 +82,16 @@ export default function StyleguidePage() {
             <RcpButton variant="ghost" onClick={() => {}}>고스트 버튼</RcpButton>
             <Label>{'<RcpButton variant="danger"> (.rcp-btn-danger)'}</Label>
             <RcpButton variant="danger" onClick={() => {}}>삭제 버튼</RcpButton>
+
+            <h2 className="rcp-section-label">떠 있는 주 동작 버튼 — RcpFab (.rcp-fab)</h2>
+            <Label>{'<RcpFab onClick> — 세로로 길어지는 목록 화면의 주 동작 하나만. 목록 끝에 놓으면 항목이 쌓일수록 스크롤 바닥으로 밀려나 못 찾는다(2026-07-16 보관함 제보). 쓰는 화면은 .rcp-screen-with-fab 을 함께 걸 것 — 안 걸면 마지막 항목을 덮는다'}</Label>
+            <p style={{ fontSize: 'var(--rcp-fs-sm)', color: 'var(--rcp-text-sub)' }}>
+                이 화면 오른쪽 아래에 떠 있는 그것 — 스크롤해도 안 따라 내려가는지 확인해 보세요.
+                (긴 글자 스트레스 테스트 겸용: 라벨이 길어지면 왼쪽으로 늘어나다 화면 끝에서 말줄임)
+            </p>
+            <RcpFab id="rcp-styleguide-fab" onClick={() => {}}>
+                + Video zur Sammlung hinzufügen (아주 긴 라벨)
+            </RcpFab>
 
             <h2 className="rcp-section-label">자석 스티커 칩 — RcpChip (눌러보세요)</h2>
             <Label>{'<RcpChip on> (.rcp-chip-on) / <RcpChip> (.rcp-chip-off)'}</Label>
@@ -171,6 +183,10 @@ export default function StyleguidePage() {
             <Label>{'<RcpInlineError message> — useMutation.error 를 그대로 전달, null 이면 안 그림'}</Label>
             <RcpInlineError message="저장하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요" />
 
+            <h2 className="rcp-section-label">조회 실패 안내 — RcpLoadError (.rcp-load-error)</h2>
+            <Label>{'<RcpLoadError message onRetry> — useQuery 의 error·reload 를 그대로 전달, null 이면 안 그림. RcpInlineError(조작 실패)와 짝이다. 화면 안에서는 .rcp-shell-status(100dvh, 셸 전용)를 쓰지 말 것 — 화면 하나만큼 부풀거나(냉장고·보관함) 잘렸다(추천)'}</Label>
+            <RcpLoadError message="목록을 불러오지 못했어요 — 네트워크 확인 후 다시 시도해 주세요" onRetry={() => {}} />
+
             <h2 className="rcp-section-label">하단 시트 — RcpBottomSheet (.rcp-sheet)</h2>
             <RcpButton variant="ghost" onClick={() => setSheetOpen(true)}>시트 열어보기</RcpButton>
             <RcpBottomSheet open={sheetOpen} title="시트 제목" onClose={() => setSheetOpen(false)}>
@@ -210,6 +226,12 @@ export default function StyleguidePage() {
             </div>
             <div style={{ marginTop: 'var(--rcp-space-2)' }}>
                 <RcpInlineError message="Fehler beim Speichern — bitte Netzwerkverbindung prüfen und erneut versuchen 아주 길게 이어지는 오류 문구도 줄바꿈되어야 정상" />
+            </div>
+            <div style={{ marginTop: 'var(--rcp-space-2)' }}>
+                <RcpLoadError
+                    message="Liste konnte nicht geladen werden — bitte Netzwerkverbindung prüfen und erneut versuchen 아주 길게 이어지는 조회 실패 문구도 줄바꿈되고 버튼은 안 짓눌려야 정상"
+                    onRetry={() => {}}
+                />
             </div>
 
             <h2 className="rcp-section-label">하단 탭 바 — RcpTabBar (.rcp-tab-bar)</h2>

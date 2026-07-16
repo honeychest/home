@@ -14,6 +14,7 @@ import RcpChip from '../ui/RcpChip';
 import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpInlineError from '../ui/RcpInlineError';
+import RcpLoadError from '../ui/RcpLoadError';
 import RcpShelf from '../ui/RcpShelf';
 
 const FREQUENT_LIMIT = 12;
@@ -169,12 +170,7 @@ export default function FridgePage() {
             </header>
             {errorLine}
 
-            {loadError && (
-                <div className="rcp-shell-status" role="alert">
-                    <span>{loadError}</span>
-                    <RcpButton onClick={retryLoad}>다시 시도</RcpButton>
-                </div>
-            )}
+            <RcpLoadError message={loadError} onRetry={retryLoad} />
             {!loadError && items === null && <p className="rcp-empty">불러오는 중…</p>}
 
             <section id="rcp-fridge-shelves" aria-label="냉장고 재료 선반">

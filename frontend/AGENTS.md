@@ -9,7 +9,16 @@
   직접 catch 허용 — 모범: `ShareTargetPage.tsx` (결함 아님, 고치지 말 것).
 - 공용 훅·컴포넌트가 다른 도메인에서 필요하면 import 하지 말고 그 도메인 안으로
   복사해 소유한다 (도메인 격리 — springboot 의 recipe 격리 규칙과 동일 사상).
-- 실패 문구 표시 줄: `src/domain/recipe/ui/RcpInlineError.tsx`.
+- 실패 문구 표시 줄: `src/domain/recipe/ui/RcpInlineError.tsx` (조작 실패 = useMutation.error).
+- 조회 실패 + 다시 시도 블록: `src/domain/recipe/ui/RcpLoadError.tsx` (useQuery 의 error·reload 를
+  그대로 전달 — RcpInlineError 의 짝). 화면 안에서 `.rcp-shell-status` 를 쓰지 말 것 —
+  그건 셸(RecipeApp) 전용 100dvh 라 화면 안에 넣으면 화면 하나만큼 부풀고(냉장고·보관함·모니터),
+  `overflow:hidden` 인 추천 화면에선 잘렸다 (2026-07-16 점검에서 4곳 전부 교정).
+- 목록이 세로로 길어지는 화면의 주 동작 버튼: `src/domain/recipe/ui/RcpFab.tsx` (떠 있는 우하단).
+  목록 끝에 `.rcp-btn-full` 을 놓지 말 것 — 항목이 쌓일수록 스크롤 바닥으로 밀려나 못 찾는다
+  (2026-07-16 보관함 실사용 제보). 쓰는 화면에 `.rcp-screen-with-fab` 을 함께 건다.
+  경계: 냉장고처럼 내용이 세로로 안 늘어나는 화면(선반=가로 스크롤)은 지금의 목록 아래
+  전체폭 버튼이 맞다 — 바꾸지 말 것 (2026-07-09 확정).
 - 영상/재생목록 등록 분기: `src/domain/recipe/data/registerLink.ts` (영상 우선 규칙의 단일 원본).
 - 도메인 판정(순수 로직)은 화면이 아니라 data/ 순수 모듈 + vitest 로.
   모범: `data/fridgeShelves.ts`, `data/videoUrl.ts`, `data/registerLink.ts`.

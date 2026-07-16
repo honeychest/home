@@ -70,6 +70,7 @@
   --rcp-radius-md: 10px;             /* 스티커 칩·버튼 */
   --rcp-radius-lg: 14px;             /* 카드·목록 행 */
   --rcp-radius-xl: 22px;             /* 시트 상단 */
+  --rcp-radius-pill: 999px;          /* 완전한 알약 — 떠 있는 버튼(FAB) 처럼 "면 위에 얹힌" 것 */
 
   /* ── 간격 (4 단위) ── */
   --rcp-space-1: 4px;

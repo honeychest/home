@@ -19,6 +19,7 @@ import RcpBadge from '../ui/RcpBadge';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpButton from '../ui/RcpButton';
 import RcpInlineError from '../ui/RcpInlineError';
+import RcpLoadError from '../ui/RcpLoadError';
 
 const POLL_MS = 2000;
 const TICK_MS = 1000; // 경과 시간 표시 갱신 — 목록 재조회와 별개
@@ -148,12 +149,7 @@ export default function MonitorPage() {
                 <p className="rcp-screen-subtitle">전 사용자 대기열을 실시간으로 추적해요 (오너 전용)</p>
             </header>
 
-            {loadError && (
-                <div className="rcp-shell-status" role="alert">
-                    <span>{loadError}</span>
-                    <RcpButton onClick={() => void reload()}>다시 시도</RcpButton>
-                </div>
-            )}
+            <RcpLoadError message={loadError} onRetry={() => void reload()} />
             {!loadError && snapshot === null && <p className="rcp-empty">불러오는 중…</p>}
 
             {snapshot !== null && (

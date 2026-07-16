@@ -4,6 +4,7 @@
 // 진행 중(대기/분석 중) 항목이 있으면 폴링으로 목록을 갱신 — 백엔드(DB 대기열+단일 워커)에서도 같은 방식.
 // 조작은 공용 실행기(useMutation) — 실패 문구·연타 방지·재동기화 한 곳 (PLAYBOOK 관례 5).
 // 등록 분기(영상 우선)는 registerLink 공용 모듈 — 홈·공유 수신과 같은 단일 원본.
+// 붙여넣기(버튼·입력창 둘 다)는 즉시 등록으로 이어진다 — pasteAndRegister 한 곳.
 import { useCallback, useEffect, useState } from 'react';
 import type { RegistrationItem, RegistrationStatus, VideoCategory } from '../data/registrationTypes';
 import { DuplicateVideoError } from '../data/registrationTypes';
@@ -18,7 +19,9 @@ import type { RcpBadgeVariant } from '../ui/RcpBadge';
 import RcpBadge from '../ui/RcpBadge';
 import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
+import RcpFab from '../ui/RcpFab';
 import RcpInlineError from '../ui/RcpInlineError';
+import RcpLoadError from '../ui/RcpLoadError';
 import RcpVideoRow from '../ui/RcpVideoRow';
 
 const POLL_MS = 2500;
@@ -183,13 +186,18 @@ export default function RecipesPage() {
         });
     };
 
+    /** 붙여넣기 = 바로 등록 (홈 최종 UX "1탭" 지향). 붙여넣기 버튼과 입력창 직접 붙여넣기의 단일 원본 —
+        어느 쪽으로 들어와도 입력창엔 붙여넣은 링크 전체가 남고(실패 시 재시도 배려) 즉시 분석이 시작된다 */
+    const pasteAndRegister = (text: string) => {
+        setUrlInput(text);
+        handleRegister(text);
+    };
+
     // 클립보드 읽기는 https 에서만 존재 — 없으면 버튼 자체를 숨김 (품질 기본선 6: 비보안 컨텍스트 폴백)
     const canPaste = typeof navigator !== 'undefined' && !!navigator.clipboard?.readText;
     const handlePaste = async () => {
         try {
-            const text = await navigator.clipboard.readText();
-            setUrlInput(text);
-            handleRegister(text); // 붙여넣기 = 바로 등록 (홈 최종 UX "1탭" 지향)
+            pasteAndRegister(await navigator.clipboard.readText());
         } catch {
             mutation.setError(PASTE_FAIL_TEXT);
         }
@@ -231,19 +239,14 @@ export default function RecipesPage() {
     const displayedItems = (items && activeFilter) ? items.filter((item) => itemLabel(item) === activeFilter) : items ?? [];
 
     return (
-        <main className="rcp-screen" id="rcp-recipes-page">
+        <main className="rcp-screen rcp-screen-with-fab" id="rcp-recipes-page">
             <header className="rcp-screen-header">
                 <h1 className="rcp-screen-title">보관함</h1>
                 <p className="rcp-screen-subtitle">쇼츠 링크를 넣으면 재료와 조리법을 꺼내드려요</p>
             </header>
             {errorLine}
 
-            {loadError && (
-                <div className="rcp-shell-status" role="alert">
-                    <span>{loadError}</span>
-                    <RcpButton onClick={() => void reload()}>다시 시도</RcpButton>
-                </div>
-            )}
+            <RcpLoadError message={loadError} onRetry={() => void reload()} />
             {!loadError && items === null && <p className="rcp-empty">불러오는 중…</p>}
 
             {items !== null && (
@@ -270,7 +273,7 @@ export default function RecipesPage() {
                         {displayedItems.length === 0 && (
                             <p className="rcp-empty">
                                 {items.length === 0
-                                    ? '아직 등록한 영상이 없어요. 아래 [+ 영상 등록]으로 시작해 보세요.'
+                                    ? '아직 등록한 영상이 없어요. 오른쪽 아래 [+ 영상 등록]으로 시작해 보세요.'
                                     : '이 필터에 해당하는 항목이 없어요.'}
                             </p>
                         )}
@@ -286,9 +289,11 @@ export default function RecipesPage() {
                         ))}
                     </section>
 
-                    <RcpButton className="rcp-btn-full" id="rcp-register-button" onClick={openRegisterSheet}>
+                    {/* 목록 끝이 아니라 떠 있는 자리 — 영상이 몇 개든 위치가 안 변한다
+                        (2026-07-16 확정: 목록이 길어질수록 등록 버튼을 못 찾겠다는 실사용 제보) */}
+                    <RcpFab id="rcp-register-button" onClick={openRegisterSheet}>
                         + 영상 등록
-                    </RcpButton>
+                    </RcpFab>
                 </>
             )}
 
@@ -324,6 +329,17 @@ export default function RecipesPage() {
                         placeholder="유튜브 링크 (영상·쇼츠·재생목록)"
                         value={urlInput}
                         onChange={(e) => setUrlInput(e.target.value)}
+                        // 붙여넣는 순간 바로 분석 (2026-07-16 확정) — 앱이 클립보드를 몰래 읽는 게 아니라
+                        // 사용자가 붙여넣은 것을 브라우저가 알려주는 이벤트라, 읽기 API 가 없는
+                        // http 개발 서버(붙여넣기 버튼이 사라지는 그 환경)에서도 동작한다.
+                        // 붙여넣은 링크로 입력창 전체를 갈아끼운다 — 버튼 경로와 같은 규칙.
+                        // (직접 타이핑·부분 수정은 [등록] 버튼이 그대로 담당)
+                        onPaste={(e) => {
+                            const text = e.clipboardData.getData('text');
+                            if (!text.trim()) return;
+                            e.preventDefault();
+                            pasteAndRegister(text);
+                        }}
                         inputMode="url"
                     />
                     <RcpButton type="submit" disabled={!urlInput.trim()}>등록</RcpButton>
