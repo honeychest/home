@@ -9,6 +9,7 @@ import RcpInlineError from '../ui/RcpInlineError';
 
 // 에러 계약(CONTEXT.md): 문구는 프론트 소유
 const NO_LINK_TEXT = '공유된 내용에서 유튜브 링크를 찾지 못했어요';
+const UNAVAILABLE_TEXT = '비공개이거나 삭제된 영상이에요 — 다른 영상을 공유해 주세요';
 const FAIL_TEXT = '등록하지 못했어요 — 보관함 탭에서 다시 시도해 주세요';
 
 export default function ShareTargetPage() {
@@ -28,6 +29,10 @@ export default function ShareTargetPage() {
             const outcome = await registerLink(link);
             if (outcome.kind === 'invalid') {
                 setError(NO_LINK_TEXT);
+                return;
+            }
+            if (outcome.kind === 'unavailable') {
+                setError(UNAVAILABLE_TEXT);
                 return;
             }
             goQueue();

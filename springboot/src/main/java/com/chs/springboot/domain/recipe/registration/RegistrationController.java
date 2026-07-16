@@ -81,8 +81,21 @@ public class RegistrationController {
         if (repository.exists(userId, videoId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 등록된 영상");
         }
-        Optional<VideoMetadataClient.VideoMetadata> meta =
-                videos.existsActive(videoId) ? Optional.empty() : metadata.fetchOne(videoId);
+        // 이미 video 테이블에 있는(다른 사용자가 등록했던) 영상은 재조회 없이 연결만 — 그때 이미 검증됨.
+        // 신규 영상만 메타를 조회하고, 없으면(㉠ 비공개·삭제·잘못된 ID) 등록을 막는다.
+        // 조회 자체가 실패하면(㉡ 순간 장애) 멀쩡한 영상을 영구 거부하지 않도록 메타 없이 등록 허용.
+        Optional<VideoMetadataClient.VideoMetadata> meta;
+        if (videos.existsActive(videoId)) {
+            meta = Optional.empty();
+        } else {
+            try {
+                meta = Optional.of(metadata.fetchOne(videoId).orElseThrow(() ->
+                        new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                "비공개·삭제된 영상이거나 잘못된 링크")));
+            } catch (VideoMetadataClient.TransientMetadataException e) {
+                meta = Optional.empty(); // ㉡ — 등록은 허용, 워커가 분석 시도
+            }
+        }
         repository.registerLink(userId, videoId, meta);
         return repository.find(userId, videoId).map(this::toResponse)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "등록 직후 조회 실패"));
@@ -95,11 +108,22 @@ public class RegistrationController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "재생목록 링크 인식 불가"));
         List<String> videoIds = metadata.playlistVideoIds(playlistId);
         List<String> unknownVideoIds = videoIds.stream().filter(id -> !videos.existsActive(id)).toList();
-        Map<String, VideoMetadataClient.VideoMetadata> metaById =
-                RegistrationRules.metadataById(metadata.fetch(unknownVideoIds));
+        Map<String, VideoMetadataClient.VideoMetadata> metaById;
+        try {
+            metaById = RegistrationRules.metadataById(metadata.fetch(unknownVideoIds));
+        } catch (VideoMetadataClient.TransientMetadataException e) {
+            // ㉡ 조회 호출 실패 — 메타 없이 강행하면 그 사이 비공개된 영상까지 조용히 등록된다.
+            // 일괄 등록은 재실행이 안전(이미 등록된 건 건너뜀)하니 깔끔히 실패시키고 재시도하게 한다.
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "잠시 후 다시 시도해 주세요");
+        }
         int added = 0;
         for (String videoId : videoIds) {
             if (repository.exists(userId, videoId)) {
+                continue;
+            }
+            // 신규인데 메타가 없으면 = 비공개·삭제된 영상(㉠) — 조용히 건너뛴다 (added 에 안 셈).
+            // 이미 video 에 있는 영상은 메타 없이도 연결 (register 와 같은 규칙).
+            if (metaById.get(videoId) == null && !videos.existsActive(videoId)) {
                 continue;
             }
             boolean linked = repository.registerLink(userId, videoId,

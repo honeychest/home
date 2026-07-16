@@ -4,7 +4,7 @@
 // 재생목록 일괄은 재생목록 자체 링크(v= 없음)로만.
 // 문구는 화면 소유 (에러 계약) — 이 모듈은 결과(outcome)만 돌려주고, 각 화면이 문구·이동을 정한다.
 import type { RegistrationItem } from './registrationTypes';
-import { DuplicateVideoError } from './registrationTypes';
+import { DuplicateVideoError, UnavailableVideoError } from './registrationTypes';
 import type { RegistrationRepository } from './registrationRepository';
 import { registrationRepository } from './registrationRepository';
 import { parseYoutubePlaylistId, parseYoutubeVideoId } from './videoUrl';
@@ -12,6 +12,7 @@ import { parseYoutubePlaylistId, parseYoutubeVideoId } from './videoUrl';
 export type RegisterOutcome =
     | { kind: 'invalid' }                                   // 유튜브 링크 아님 — 저장소 호출 없음
     | { kind: 'duplicate' }                                 // 이미 등록된 영상 (화면마다 정상/안내 선택)
+    | { kind: 'unavailable' }                               // 비공개·삭제된 영상 (등록 시점 차단, 2026-07-16)
     | { kind: 'video'; item: RegistrationItem }             // 영상 1개 등록됨 (TOO_LONG 즉시 안내용 item 포함)
     | { kind: 'playlist'; added: number };                  // 재생목록 일괄 — 추가된 수
 
@@ -30,6 +31,7 @@ export async function registerLink(
         return { kind: 'playlist', added: await repo.registerPlaylist(url) };
     } catch (e) {
         if (e instanceof DuplicateVideoError) return { kind: 'duplicate' };
+        if (e instanceof UnavailableVideoError) return { kind: 'unavailable' };
         throw e; // 네트워크 등 진짜 실패 — 화면의 실행기(useMutation)가 문구 처리
     }
 }

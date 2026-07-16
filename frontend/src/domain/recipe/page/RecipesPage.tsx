@@ -32,6 +32,7 @@ const loadMessage = () => LOAD_ERROR_TEXT;
 const MUTATION_ERROR_TEXT = '등록하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const INVALID_URL_TEXT = '유튜브 링크를 인식하지 못했어요 — 영상·쇼츠·재생목록 링크를 붙여넣어 주세요';
 const DUPLICATE_TEXT = '이미 등록된 영상이에요';
+const UNAVAILABLE_TEXT = '비공개이거나 삭제된 영상이에요 — 다른 링크를 넣어 주세요';
 const PASTE_FAIL_TEXT = '클립보드를 읽지 못했어요 — 직접 붙여넣어 주세요';
 
 const STATUS_LABEL: Record<Exclude<RegistrationStatus, 'DONE'>, string> = {
@@ -170,6 +171,10 @@ export default function RecipesPage() {
             }
             if (outcome.kind === 'duplicate') {
                 mutation.setError(DUPLICATE_TEXT); // 이 화면에서는 안내 문구로 (홈·공유는 정상 통과)
+                return;
+            }
+            if (outcome.kind === 'unavailable') {
+                mutation.setError(UNAVAILABLE_TEXT);
                 return;
             }
             setUrlInput(''); // 성공했을 때만 비움 (실패 시 입력 유지 — 재시도 배려)

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { registerLink } from './registerLink';
 import type { RegistrationRepository } from './registrationRepository';
 import type { RegistrationItem } from './registrationTypes';
-import { DuplicateVideoError } from './registrationTypes';
+import { DuplicateVideoError, UnavailableVideoError } from './registrationTypes';
 
 const item = (over: Partial<RegistrationItem> = {}): RegistrationItem => ({
     videoId: 'aaaaaaaaaaa',
@@ -70,6 +70,15 @@ describe('registerLink — 영상 우선 등록 규칙', () => {
         const outcome = await registerLink('https://youtu.be/aaaaaaaaaaa', repo);
 
         expect(outcome.kind).toBe('duplicate');
+    });
+
+    it('비공개·삭제된 영상은 unavailable — 등록 시점 차단 (2026-07-16)', async () => {
+        const repo = fakeRepo({
+            register: async () => { throw new UnavailableVideoError('u'); },
+        });
+        const outcome = await registerLink('https://youtu.be/aaaaaaaaaaa', repo);
+
+        expect(outcome.kind).toBe('unavailable');
     });
 
     it('네트워크 등 진짜 실패는 그대로 던진다 — 실행기(useMutation)가 문구 처리', async () => {

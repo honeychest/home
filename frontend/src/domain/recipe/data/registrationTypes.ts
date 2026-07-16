@@ -62,3 +62,13 @@ export class DuplicateVideoError extends Error {
         this.name = 'DuplicateVideoError';
     }
 }
+
+/** 비공개·삭제된 영상 — API 구현체는 404 를 이 에러로 변환한다 (2026-07-16, 문구는 화면 소유).
+    링크 형식은 맞는데(클라이언트 파서 통과) 유튜브에서 영상을 못 찾는 경우 = 등록 시점 비공개/삭제.
+    주의: 이미 등록·분석된 뒤에 나중에 비공개로 바뀐 건 여기서 못 잡는다(등록 시점 검사라서) */
+export class UnavailableVideoError extends Error {
+    constructor(videoId: string) {
+        super(`unavailable video: ${videoId}`);
+        this.name = 'UnavailableVideoError';
+    }
+}

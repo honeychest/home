@@ -3,7 +3,7 @@
 // 이전 목 구현은 git 이력 참고. 진행 반영은 화면 폴링(list 재호출) — 서버 대기열(DB+단일 워커)과 합치.
 // 401(세션 만료)은 http.ts 공용 시임이 처리 — 이 파일과 화면은 인증을 모른다.
 import type { RegistrationItem } from './registrationTypes';
-import { DuplicateVideoError } from './registrationTypes';
+import { DuplicateVideoError, UnavailableVideoError } from './registrationTypes';
 import { HttpError, jsonBody, request } from './http';
 
 export interface RegistrationRepository {
@@ -34,6 +34,8 @@ export function createApiRegistrationRepository(): RegistrationRepository {
                 return await request<RegistrationItem>(BASE, { method: 'POST', ...jsonBody({ url }) });
             } catch (e) {
                 if (e instanceof HttpError && e.status === 409) throw new DuplicateVideoError(url);
+                // 404 = 비공개·삭제된 영상 (링크 형식은 클라이언트가 이미 검증했으므로 형식 오류가 아님)
+                if (e instanceof HttpError && e.status === 404) throw new UnavailableVideoError(url);
                 throw e;
             }
         },

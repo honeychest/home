@@ -14,6 +14,7 @@ const RECENT_LIMIT = 10;
 
 // 에러 계약(CONTEXT.md): 사용자 문구는 프론트 소유
 const INVALID_URL_TEXT = '복사된 내용이 유튜브 링크가 아니에요 — 영상을 공유·복사한 뒤 눌러 주세요';
+const UNAVAILABLE_TEXT = '비공개이거나 삭제된 영상이에요 — 다른 링크를 복사해 주세요';
 const REGISTER_FAIL_TEXT = '등록하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const PASTE_FAIL_TEXT = '클립보드를 읽지 못했어요 — 보관함 탭에서 직접 붙여넣어 주세요';
 const UNTITLED_VIDEO_TEXT = '제목 없는 영상';
@@ -60,6 +61,10 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
         const outcome = await registerLink(text);
         if (outcome.kind === 'invalid') {
             mutation.setError(INVALID_URL_TEXT);
+            return;
+        }
+        if (outcome.kind === 'unavailable') {
+            mutation.setError(UNAVAILABLE_TEXT);
             return;
         }
         navigate('../recipes'); // 등록 결과·진행률은 대기열이 있는 보관함 탭에서 이어 봄

@@ -49,9 +49,15 @@ public class YoutubeMetadataClient implements VideoMetadataClient {
                 for (JsonNode item : body.path("items")) {
                     result.add(toMetadata(item));
                 }
+                // 200 인데 특정 videoId 가 items 에 없으면 = 그 영상이 비공개·삭제·잘못된 ID (㉠).
+                // 그건 예외가 아니라 "없음"이라는 정상 응답이라 여기서 아무것도 안 한다 —
+                // 결과 목록에서 빠지는 것 자체가 신호다 (호출자가 등록 차단으로 처리).
             } catch (Exception e) {
-                // 메타 조회 실패가 등록을 막으면 안 됨 (제목·길이 없이 등록 → 워커가 분석은 시도)
-                log.warn("[gikka] YouTube 메타 조회 실패 (등록은 계속): {}", e.getMessage());
+                // 조회 호출 자체가 실패(㉡ — HTTP 오류·네트워크·타임아웃). 이건 "영상이 없다"가
+                // 아니라 "지금 못 물어봤다"라 삼키면 안 된다: 삼키면 멀쩡한 영상이 "없음"으로 둔갑해
+                // 부당하게 차단된다 (2026-07-16 — 이전엔 삼키고 등록을 강행해 반대 문제였음).
+                log.warn("[gikka] YouTube 메타 조회 호출 실패 (일시적): {}", e.getMessage());
+                throw new TransientMetadataException(e.getMessage());
             }
         }
         return result;
