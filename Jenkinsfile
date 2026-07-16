@@ -163,6 +163,11 @@ pipeline {
         // launchd 가 체크아웃의 server.py 를 직접 돌리므로(사본 없음 — plist 주석 참고)
         // Sync Local 의 git pull 이면 파일은 이미 최신이고, 재기동만 하면 반영된다.
         // 이 stage 가 없던 동안 gikka/ 변경은 아무리 푸시해도 반영되지 않았다 (2026-07-16 발견).
+        //
+        // 주의 (2026-07-16 실측): Jenkins 는 push 웹훅을 받으면 그 시점 브랜치의 Jenkinsfile 로
+        // 파이프라인을 정의한 뒤 Sync Local(git pull)을 돈다. 그래서 stage 정의 자체가 처음
+        // 들어오는 커밋(예: 이 stage 를 신설한 recipe - 24)은 옛 정의로 실행돼 한 박자 늦는다 —
+        // 그 커밋만 수동 재기동이 필요하고, 이후 gikka/ 변경부터는 자동으로 잡힌다.
         stage('Deploy Gikka Local') {
             when {
                 allOf {
