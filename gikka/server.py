@@ -23,7 +23,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
 
 YT_DLP = os.environ.get("GIKKA_LOCAL_YT_DLP", "/opt/homebrew/bin/yt-dlp")
@@ -197,9 +197,50 @@ def extract(video_url, description):
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def health():
+    """지금 도는 프로세스가 스스로 관측한 사실만 돌려준다 (2026-07-16 신설).
+
+    계기: 하루에 같은 종류의 사고가 두 번 났다. (1) 저장소는 최신인데 launchd 는 손으로 뜬
+    사본을 돌고 있었고, (2) deno 는 설치돼 있는데 launchd 의 최소 PATH 라 yt-dlp 가 못 찾았다.
+    둘 다 "설정상 맞는데 실제 도는 환경은 다르다"라서, 설정 파일을 아무리 봐도 안 보였다.
+    그래서 여기서는 설정값이 아니라 **이 프로세스의 실제 상태**를 보고한다 — 실행 중인 파일의
+    절대경로, 이 프로세스가 받은 PATH 에서 실제로 찾아지는 도구들.
+
+    판정("정상/비정상")과 문구는 여기서 하지 않는다 — 사실만 나르고 판단은 프론트가 한다
+    (springboot/AGENTS.md 의 pattern-raw-signal 과 같은 사상).
+
+    주의: _lock 을 잡지 말 것. /extract 는 영상당 수십 초~수 분 락을 쥐는데, health 가 같은
+    락을 기다리면 "분석 중일 때만 상태 조회가 멎는" 최악의 동작이 된다 — 정작 알고 싶은 때다.
+    """
+    return {
+        "serverPath": os.path.realpath(__file__),  # 사본을 돌고 있으면 여기서 드러난다
+        "targetFrames": TARGET_FRAMES,
+        "lmStudioModel": LM_STUDIO_MODEL,
+        "whisperModelExists": os.path.isfile(WHISPER_MODEL),
+        # shutil.which 는 이 프로세스가 실제로 받은 PATH 로 찾는다 — deno 사고를 잡는 지점.
+        # yt-dlp·ffmpeg 는 절대경로로 부르므로 그 경로의 존재 여부로 본다(찾는 방식이 다르므로).
+        "ytDlpExists": os.path.isfile(YT_DLP),
+        "ffmpegExists": os.path.isfile(FFMPEG),
+        "whisperCliExists": os.path.isfile(WHISPER_CLI),
+        "denoOnPath": shutil.which("deno") is not None,
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        print(f"[gikka-local] {self.address_string()} - {fmt % args}")
+        print(f"[gikka-local] {self.address_string()} - {fmt % args}", flush=True)
+
+    def do_GET(self):
+        if self.path != "/health":
+            self.send_response(404)
+            self.end_headers()
+            return
+        body = json.dumps(health(), ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _read_chunked_body(self):
         # Spring RestClient(JDK HttpClient)가 Content-Length 없이 chunked 로 보내는
@@ -245,7 +286,9 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         except Exception as e:
-            print(f"[gikka-local] 처리 실패: {e}")
+            # flush 필수 — 파일로 리다이렉트되면 블록 버퍼링이라 실패가 로그에 한참 안 뜬다
+            # (2026-07-16: 방금 실패한 요청이 로그에 안 보여 "요청이 안 갔나" 하고 헤맸음)
+            print(f"[gikka-local] 처리 실패: {e}", flush=True)
             body = json.dumps({"error": str(e)}).encode("utf-8")
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
@@ -255,8 +298,14 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     sweep_orphaned_temp_dirs()
-    server = HTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"[gikka-local] listening on :{PORT} (model={LM_STUDIO_MODEL}, whisper={WHISPER_MODEL})")
+    # ThreadingHTTPServer 로 바꾼 이유 (2026-07-16): 이전엔 HTTPServer(단일 스레드)가 요청을
+    # 직렬화했는데, /extract 가 영상당 수십 초~수 분을 쥐고 있어서 그동안 /health 가 통째로
+    # 막혔다 — 상태를 알고 싶은 순간이 바로 분석 중일 때이므로 쓸모가 없어진다.
+    # 자원 경합(LM Studio·whisper) 방지는 원래부터 _lock 이 담당하고 있어서(직렬화 장치가
+    # 두 겹이었다) 스레드로 바꿔도 /extract 는 여전히 한 번에 하나씩만 돈다.
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    print(f"[gikka-local] listening on :{PORT} (model={LM_STUDIO_MODEL}, whisper={WHISPER_MODEL})",
+          flush=True)
     server.serve_forever()
 
 

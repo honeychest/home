@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { MonitorItem, MonitorSnapshot } from '../data/monitorTypes';
 import { MONITOR_LIMIT, isForbidden, monitorRepository } from '../data/monitorRepository';
+import { localExtractorStatus } from '../data/localExtractorStatus';
 import { useMutation } from './useMutation';
 import { useQuery } from './useQuery';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
@@ -43,6 +44,13 @@ const STATUS_LABEL: Record<MonitorItem['status'], string> = {
     FAILED: '실패',
     REMOVED: '삭제됨',
 };
+/** 로컬 추출기 상태 → 배지 색. 상태 팔레트만 쓴다(카테고리 색과 절대 혼용 금지 — 2026-07-14 재설계) */
+const LOCAL_BADGE: Record<ReturnType<typeof localExtractorStatus>['level'], RcpBadgeVariant> = {
+    ok: 'good',
+    warning: 'warning',
+    down: 'critical',
+};
+
 const STATUS_BADGE: Record<MonitorItem['status'], RcpBadgeVariant> = {
     WAITING: 'neutral',
     ANALYZING: 'analyzing',
@@ -168,7 +176,16 @@ export default function MonitorPage() {
                                 다음 재시도까지 {nextRetrySecondsLeft(snapshot.nextRetryAt, now)}초
                             </RcpBadge>
                         )}
+                        {/* 로컬 추출기 실물 상태 (2026-07-16) — "설정은 맞는데 실제 환경이 다른"
+                            사고를 하루에 두 번 겪고 신설. 판정은 localExtractorStatus 순수 모듈 */}
+                        <RcpBadge variant={LOCAL_BADGE[localExtractorStatus(snapshot.localExtractor).level]}>
+                            {localExtractorStatus(snapshot.localExtractor).label}
+                        </RcpBadge>
                     </div>
+
+                    {localExtractorStatus(snapshot.localExtractor).problems.map((problem) => (
+                        <p className="rcp-monitor-error" role="alert" key={problem}>{problem}</p>
+                    ))}
 
                     <section id="rcp-monitor-list" aria-label="전 사용자 분석 대기열">
                         {snapshot.items.length === 0 && <p className="rcp-empty">대기열이 비어 있어요.</p>}

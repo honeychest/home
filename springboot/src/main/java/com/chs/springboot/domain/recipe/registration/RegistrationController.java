@@ -36,11 +36,16 @@ public class RegistrationController {
     private final VideoMetadataClient metadata;
     private final GikkaAuthProperties authProperties;
     private final GikkaUserRepository users;
+    /** 오너 모니터의 로컬 추출기 상태 표시용 — Hybrid(@Primary)가 아니라 로컬 구현체를 직접 받는다.
+        "로컬이 지금 쓸 수 있는 상태인가"는 라우팅과 무관한 로컬 자신의 사실이므로 (2026-07-16) */
+    private final LocalRecipeExtractor localExtractor;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public RegistrationController(RegistrationRepository repository, VideoRepository videos,
                                   GeminiRateLimiter rateLimiter, VideoMetadataClient metadata,
-                                  GikkaAuthProperties authProperties, GikkaUserRepository users) {
+                                  GikkaAuthProperties authProperties, GikkaUserRepository users,
+                                  LocalRecipeExtractor localExtractor) {
+        this.localExtractor = localExtractor;
         this.repository = repository;
         this.videos = videos;
         this.rateLimiter = rateLimiter;
@@ -139,8 +144,12 @@ public class RegistrationController {
     /** 프론트 MonitorSnapshot 과 1:1 — 대기열 크기·워커 생존·429 이력 + 항목 목록 한 번에 (2026-07-13 확정).
         nextRetryAt: Gemini 백오프 중이면 다음 재시도 가능 시각, 아니면 과거 시각 (2026-07-14 확정 —
         모니터링 화면의 카운트다운 표시용, gemini_rate.last_call_at 재사용) */
+    /** localExtractor: 호스트 서비스가 스스로 보고한 사실 그대로(JSON 통과). 서비스가 죽었거나
+        /health 가 없는 옛 버전이면 null — 그 null 자체가 "지금 로컬을 못 쓴다"는 사실이다.
+        판정·문구는 프론트가 한다 (pattern-raw-signal) */
     public record MonitorSnapshot(int waitingCount, int analyzingCount, String workerHeartbeatAt,
                                   int rateLimitCount, String lastRateLimitedAt, String nextRetryAt,
+                                  com.fasterxml.jackson.databind.JsonNode localExtractor,
                                   List<MonitorResponse> items) {
     }
 
@@ -164,6 +173,7 @@ public class RegistrationController {
                 worker.rateLimitCount(),
                 worker.lastRateLimitedAt() == null ? null : worker.lastRateLimitedAt().toString(),
                 worker.nextRetryAt() == null ? null : worker.nextRetryAt().toString(),
+                localExtractor.health(),
                 items);
     }
 

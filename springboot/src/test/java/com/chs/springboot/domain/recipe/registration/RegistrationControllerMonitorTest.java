@@ -35,13 +35,16 @@ class RegistrationControllerMonitorTest {
     private final GeminiRateLimiter rateLimiter = mock(GeminiRateLimiter.class);
     private final VideoMetadataClient metadata = mock(VideoMetadataClient.class);
     private final GikkaUserRepository users = mock(GikkaUserRepository.class);
+    /** health() 는 mock 기본값 null 을 돌려준다 = "로컬 못 씀" — 이 테스트의 관심사(404/403 계약)와 무관 */
+    private final LocalRecipeExtractor localExtractor = mock(LocalRecipeExtractor.class);
 
     private RegistrationController controller() {
         GikkaAuthProperties properties = new GikkaAuthProperties();
         properties.setAllowedEmails(List.of("owner@example.com"));
         when(users.findEmail(OWNER_ID)).thenReturn("owner@example.com");
         when(users.findEmail(STRANGER_ID)).thenReturn("stranger@example.com");
-        return new RegistrationController(repository, videos, rateLimiter, metadata, properties, users);
+        return new RegistrationController(repository, videos, rateLimiter, metadata, properties, users,
+                localExtractor);
     }
 
     @Test

@@ -25,6 +25,27 @@ export interface MonitorItem {
     geminiRetryCount: number;
 }
 
+/**
+ * mac-mini 호스트 서비스가 스스로 관측해 보고한 사실 (2026-07-16 신설).
+ * 설정값이 아니라 "지금 도는 프로세스의 실제 상태"다 — 하루에 두 번, 설정은 맞는데 실제
+ * 환경이 다른 사고가 났기 때문(저장소는 최신인데 launchd 는 손으로 뜬 사본을 돌고 있었고,
+ * deno 는 설치돼 있는데 launchd 의 최소 PATH 라 yt-dlp 가 못 찾았다).
+ * 스냅샷의 localExtractor 가 null 이면 서비스가 죽었거나 /health 없는 옛 버전 — 그 null
+ * 자체가 "지금 로컬을 못 쓴다(전부 Gemini 로 간다)"는 사실이다.
+ */
+export interface LocalExtractorHealth {
+    /** 실행 중인 server.py 의 절대경로 — 사본을 돌고 있으면 여기서 드러난다 */
+    serverPath: string;
+    targetFrames: number;
+    lmStudioModel: string;
+    whisperModelExists: boolean;
+    ytDlpExists: boolean;
+    ffmpegExists: boolean;
+    whisperCliExists: boolean;
+    /** 이 프로세스가 받은 PATH 에서 deno 가 찾아지는가 — 없으면 yt-dlp 가 deprecated 경로로 돈다 */
+    denoOnPath: boolean;
+}
+
 /** 전 사용자 대기열 스냅샷 — 대기열 크기·워커 생존·429 이력 + 항목 목록 (2026-07-13 확정) */
 export interface MonitorSnapshot {
     waitingCount: number;
@@ -35,5 +56,7 @@ export interface MonitorSnapshot {
     lastRateLimitedAt: string | null;
     /** Gemini 백오프 중이면 다음 재시도 가능 시각, 아니면 과거 시각 (2026-07-14 확정, 카운트다운용) */
     nextRetryAt: string | null;
+    /** null = 로컬 추출기를 지금 못 씀 (죽었거나 /health 없는 옛 버전) → 전부 Gemini 로 간다 */
+    localExtractor: LocalExtractorHealth | null;
     items: MonitorItem[];
 }
