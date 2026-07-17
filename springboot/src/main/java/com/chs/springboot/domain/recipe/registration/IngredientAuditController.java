@@ -26,6 +26,8 @@ import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
 import com.chs.springboot.domain.recipe.user.GikkaUserRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,6 +37,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/recipe/llm")
 public class IngredientAuditController {
+
+    private static final Logger log = LoggerFactory.getLogger(IngredientAuditController.class);
 
     private final IngredientDictionaryRepository dictionary;
     private final IngredientAuditor auditor;
@@ -81,6 +85,7 @@ public class IngredientAuditController {
                     .filter(p -> isUseful(p, byName))
                     .toList();
         } catch (RecipeExtractor.TransientFailureException e) {
+            log.warn("Gemini 일시적 실패: {} - {}", "일시적 실패(원인불명)", e.getMessage());
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Gemini 일시적 실패", e);
         }
     }

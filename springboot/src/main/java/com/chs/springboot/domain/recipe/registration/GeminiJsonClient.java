@@ -12,6 +12,8 @@ import java.util.Map;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -22,6 +24,7 @@ import org.springframework.web.client.RestClient;
 @Component
 public class GeminiJsonClient {
 
+    private static final Logger log = LoggerFactory.getLogger(GeminiJsonClient.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final RestClient rest;
@@ -53,14 +56,17 @@ public class GeminiJsonClient {
                     .body(JsonNode.class);
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
+                log.warn("Gemini 일시적 실패: {} - {}", "429 한도초과", e.getMessage());
                 throw new RecipeExtractor.TransientFailureException(e.getMessage());
             }
             throw e; // 404(모델 폐쇄) 등은 호출자 정책으로
         } catch (HttpServerErrorException e) {
             // 503 "high demand" 등 Gemini 쪽 일시적 과부하 (2026-07-13 실측)
+            log.warn("Gemini 일시적 실패: {} - {}", "503 과부하", e.getMessage());
             throw new RecipeExtractor.TransientFailureException(e.getMessage());
         } catch (ResourceAccessException e) {
             // 응답 지연 타임아웃 — 실측상 일시적 현상
+            log.warn("Gemini 일시적 실패: {} - {}", "타임아웃", e.getMessage());
             throw new RecipeExtractor.TransientFailureException(e.getMessage());
         }
         return unwrap(response);
