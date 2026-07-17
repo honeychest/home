@@ -8,12 +8,14 @@
 // 바로 구분하기 위함): "밀려서 느린가(대기열 크기)" vs "멈췄나(워커 생존)" vs "일시적 실패 때문인가
 // (한도·과부하·타임아웃 이력 — 2026-07-13 실측으로 429 외 503·타임아웃도 같은 통계에 포함)".
 // 항목 탭 → 시트(강제 재분석·영상 삭제)는 2026-07-13 추가 확정 — 오너 전용 강제 동작은 흩어지지
-// 않게 이 화면 한 곳에 모은다(CONTEXT.md "오너 전용 강제 동작 정책").
+// 않게 운영자 모드 한 곳에 모은다(CONTEXT.md "오너 전용 강제 동작 정책").
+// 이 화면은 운영자 모드의 "대기열" 탭이다 — 재료 사전은 형제 탭(DictionaryPage)으로 분리됐다
+// (2026-07-17: 한 화면에 대기열 + 사전 243행이 같이 쌓여 스크롤로는 못 썼음. 탭이 나뉘면서
+// 사전을 보는 동안 이 화면의 2초 폴링이 아예 안 도는 이득도 함께 생김 — 언마운트되므로).
 import { useCallback, useEffect, useState } from 'react';
 import type { MonitorItem, MonitorSnapshot } from '../data/monitorTypes';
 import { MONITOR_LIMIT, isForbidden, monitorRepository } from '../data/monitorRepository';
 import { localExtractorStatus } from '../data/localExtractorStatus';
-import DictionaryPanel from './DictionaryPanel';
 import { useMutation } from './useMutation';
 import { useQuery } from './useQuery';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
@@ -99,7 +101,6 @@ const nextRetrySecondsLeft = (nextRetryAt: string | null, nowMs: number): number
 export default function MonitorPage() {
     const [now, setNow] = useState(() => Date.now());
     const [selected, setSelected] = useState<MonitorItem | null>(null); // 항목 탭 → 액션 시트
-    const [showDict, setShowDict] = useState(false); // 재료 사전 관리 — 펼칠 때만 마운트(매 폴링 조회 방지)
 
     const load = useCallback(() => monitorRepository.list(MONITOR_LIMIT), []);
     const query = useQuery<MonitorSnapshot>(load, loadMessage);
@@ -221,16 +222,6 @@ export default function MonitorPage() {
                     </section>
                 </>
             )}
-
-            <button
-                type="button"
-                className="rcp-btn rcp-btn-ghost rcp-btn-full rcp-dict-toggle"
-                aria-expanded={showDict}
-                onClick={() => setShowDict((v) => !v)}
-            >
-                {showDict ? '재료 사전 닫기' : '재료 사전 관리 열기'}
-            </button>
-            {showDict && <DictionaryPanel />}
 
             <RcpBottomSheet
                 open={selected !== null}

@@ -12,7 +12,7 @@ export interface MutationRunner {
     /** 화면이 직접 문구를 넣거나 지울 때 (예: 링크 인식 실패는 저장소 호출 전에 표시) */
     setError(text: string | null): void;
     /** 조작 진행 중 — 버튼 disabled·"…중" 라벨용. 즉시 끝나는 조작은 안 써도 된다
-        (한 틱 깜빡여 오히려 산만하다). 초 단위로 걸리는 조작에만 쓸 것 — 모범: DictionaryPanel
+        (한 틱 깜빡여 오히려 산만하다). 초 단위로 걸리는 조작에만 쓸 것 — 모범: DictionaryPage
         의 [AI 점검](동기 LLM 호출이라 10초 이상. 표시가 없으면 고장으로 보인다) */
     busy: boolean;
 }

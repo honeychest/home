@@ -1,12 +1,17 @@
 // [AGENT] recipe(기까) 앱 골격 — /recipe/* 전체를 감싸는 셸
-// 하단 탭 4개(홈/추천/냉장고/레시피) + PWA manifest('기까') 주입 + 로그인 게이트(2차).
-// 로컬 개발은 백엔드 dev 폴백으로 로그인 화면 없이 통과, 배포(https)에서만 GIS 버튼이 보인다.
+// 하단 탭 4개(홈/추천/냉장고/보관함) + PWA manifest('기까') 주입 + 로그인 게이트(2차).
+// 운영자 모드(/recipe/monitor/*)에서만 탭 묶음이 통째로 바뀐다 (2026-07-17 확정) — 오너 전용
+// 기능이 대기열·사전 두 화면으로 나뉘어 자기 탭이 필요해졌고, 일반 탭(홈·냉장고…)을 그대로 두면
+// 운영자 모드에서 빠져나가는 길이 "일반 탭 아무거나 누르기"뿐이라 [나가기]를 명시적으로 둔다.
 import { useCallback, useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Activity, BookMarked, LogOut } from 'lucide-react';
+import type { RcpTab } from '../ui/RcpTabBar';
 import RcpTabBar from '../ui/RcpTabBar';
 import RcpButton from '../ui/RcpButton';
 import { authRepository } from '../data/authRepository';
 import { setSessionExpiredHandler } from '../data/http';
+import DictionaryPage from './DictionaryPage';
 import FridgePage from './FridgePage';
 import HomePage from './HomePage';
 import LoginPage from './LoginPage';
@@ -17,6 +22,15 @@ import ShareTargetPage from './ShareTargetPage';
 import StyleguidePage from './StyleguidePage';
 import '../style/tokens.css';
 import '../ui/recipe-ui.css';
+
+const MONITOR_PATH = '/recipe/monitor';
+/** 운영자 모드 탭 — [나가기]는 항상 홈으로 (모니터 진입 경로가 홈의 오너 링크 하나라
+    "왔던 곳으로"와 결과가 같고, 뒤로가기와 달리 새로고침·PWA 재시작에도 동작이 안 갈린다) */
+const MONITOR_TABS: RcpTab[] = [
+    { to: MONITOR_PATH, label: '대기열', Icon: Activity },
+    { to: `${MONITOR_PATH}/dictionary`, label: '사전', Icon: BookMarked },
+    { to: '/recipe/home', label: '나가기', Icon: LogOut },
+];
 
 /** 기까 전용 문서 메타(제목·manifest·테마색)를 recipe 안에서만 적용하고 나가면 원복 */
 function useGikkaDocumentMeta() {
@@ -55,6 +69,7 @@ type AuthState =
 export default function RecipeApp() {
     useGikkaDocumentMeta();
     const [auth, setAuth] = useState<AuthState>({ phase: 'loading' });
+    const inMonitor = useLocation().pathname.startsWith(MONITOR_PATH);
 
     const checkSession = useCallback(() => {
         setAuth({ phase: 'loading' });
@@ -121,11 +136,13 @@ export default function RecipeApp() {
                 <Route path="share" element={<ShareTargetPage />} />
 
                 <Route path="styleguide" element={<StyleguidePage />} />
-                {/* 탭 바에 없음(오너 전용 직접 진입) — 접근 통제는 백엔드 403(허용 목록 재사용)이 실제 경계 */}
+                {/* 운영자 모드 — 일반 탭 바에 없음(홈의 오너 링크로 진입).
+                    접근 통제는 백엔드 403(허용 목록 재사용)이 실제 경계 */}
                 <Route path="monitor" element={<MonitorPage />} />
+                <Route path="monitor/dictionary" element={<DictionaryPage />} />
                 <Route path="*" element={<Navigate to="fridge" replace />} />
             </Routes>
-            <RcpTabBar />
+            <RcpTabBar tabs={inMonitor ? MONITOR_TABS : undefined} />
         </div>
     );
 }

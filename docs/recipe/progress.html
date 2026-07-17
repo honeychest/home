@@ -47,15 +47,34 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-17 · <b>이번 세션 — 5차 4) grill-me + 슬라이스1 A·B·C 구현(커밋 전).</b>
-    재료 사전 DB화를 그룹 매칭·오너 관리/AI 점검까지 재설계(4차 "정규화 안 함" 뒤집음, 안전 비대칭
-    = tier 자동확정/그룹 병합은 오너 확정만, 수직 슬라이스·증거 게이트로 범위 축소). 이어서 슬라이스1
-    <b>A(V11 사전+classify DB화)·B(monitor 오너 사전관리+AI 점검)·C(추출 confidentSeasonings 자동확정)</b>
-    구현 + <b>improve-codebase-architecture 점검 반영(후보 1·2)</b> 완료(백엔드 recipe 102·프론트 vitest
-    34·build·lint). 남은 것 = 커밋 → 배포 → 폰 검증(양념 즉효 = 증거 게이트 판정). 상세는 CONTEXT.md
-    "5차-4 사전·매칭 재설계" 절 · 아래 "다음 세션이 이어서 할 일".
+  <div class="updated">갱신: 2026-07-17 · <b>이번 세션 — 운영자 모드 화면 재설계(사용자 실사용 지적). 커밋 전.</b>
+    <br>· <b>사용자 지적 2건이 계기</b>: ㉠ 모니터 한 화면에 대기열 + 사전 243행이 쌓여 못 씀,
+    ㉡ AI 제안이 별도 블록이라 같은 재료가 두 곳에 나오고 "제안대로 적용/무시" 둘뿐 —
+    <b>제안을 다른 값으로 바꿔 확정하는 경로가 없었다</b>. 결론 = 재료 목록 하나에 현재 선택과
+    AI 제안을 같이 보여준다. 단일 원본 = CONTEXT.md "운영자 모드 화면 구조" 절.
+    <br>· <b>운영자 모드 = 자체 하단 탭</b>(대기열 / 사전 / 나가기). <code>/recipe/monitor</code>(대기열) +
+    <code>/recipe/monitor/dictionary</code>(사전) 두 화면으로 분리 — 덤으로 사전을 보는 동안 2초 폴링이 안 돈다.
+    <code>RcpTabBar</code> 가 <code>tabs</code> 를 주입받게 일반화(탭 바 두 벌 안 만듦), [나가기]는 항상 홈으로.
+    <br>· <b>사전 화면</b>: 행 하나 = 재료 하나(확정=그린 실선 / AI 제안=노랑 점선이 같은 행에),
+    상태 칩 6종 + 검색(검색 중엔 칩 무시하고 전체에서 찾음), <b>즉시 저장 유지</b>(일괄 저장 도입 안 함 —
+    미저장 상태를 안 만든다), 확인창은 <b>[제안 전체 적용]에만</b>. 판정은 <code>data/dictionaryFilter.ts</code>
+    순수 모듈 + vitest 13건. 프론트 vitest 47·build 통과. <b>남은 것 = 폰 검증 → 슬라이스2.</b>
+    <br><b>이전 세션 — [AI 점검] 오류 원인규명(nginx) + 기본양념 + 증거 게이트 통과.
+    전부 커밋·푸시·배포 완료(394450e, nginx 반영·V12 적용 확인함).</b>
+    <br>· <b>[AI 점검] 오류는 코드가 아니라 nginx 였다</b> — <code>location /api</code> 의 15초 타임아웃이
+    24.7초 응답을 504 로 끊고 있었다(백엔드는 정상 완료라 로그가 텅 비어 진단이 어려웠음).
+    전용 경로 <code>/api/recipe/llm/**</code> 로 분리 + thinkingBudget=0(24.7→10.9초) + 503 매핑 + [점검 중…] 표시.
+    <b>인계 메모의 "responseSchema 가 ARRAY라 400" 가설은 실측으로 기각</b>(같은 스키마 직접 호출이 200 —
+    그대로 고쳤으면 증상이 남았을 것). 단일 원본 = CONTEXT.md "AI 점검 동기 호출(임시)" 절.
+    <br>· <b>증거 게이트 통과 — 슬라이스2 착수 확정</b>: 배포 전 실데이터 시뮬레이션으로 답이 나옴
+    (냉장고 20개·완료 레시피 115개·AI 점검 실제 호출). 위로 올라오는 레시피 <b>슬라이스1만 8개 →
+    슬라이스2까지 33개</b>, 기본양념까지 더하면 <b>완전가능 0→9</b>. 근거는 CONTEXT.md 증거 게이트 절.
+    <br>· <b>기본양념(V12)</b> 신설 — "완전 가능" 섹션이 구조적으로 항상 0이었다(115개 중 48개가 "물"을
+    재료로 적는데 냉장고엔 물이 없음). + <b>[제안 전체 적용]</b>(제안 83건을 한 번에) + <b>추천 카드 배지→테두리</b>
+    (배지가 요리 이름을 통째로 가리던 버그). 백엔드 recipe 110·프론트 vitest 34·build·lint 통과.
+    <br>· <b>남은 것 = 3단계(슬라이스2 + 추천 레이아웃)</b> · 폰 검증. 아래 "다음 세션이 이어서 할 일".
     <b>이전 세션 요약</b> (근거·결정 전체는 CONTEXT.md 각 절 — 여기는 포인터만):
-    <br>· <b>5차 2)검색 + 3)추천 확장 구현</b>(커밋 전 — 배포·폰 검증 남음): 검색 = 내 보관함 우선 +
+    <br>· <b>5차 2)검색 + 3)추천 확장 구현</b>(커밋·배포 완료 — 폰 검증 남음): 검색 = 내 보관함 우선 +
     gikka 전체 보완 + "내 보관함에 담기"(재분석 없이 연결만). 추천 = 후보를 gikka 전체 완료 RECIPE 로
     확장(냉장고 매칭은 내 것 기준, 콜드스타트 대응). 백엔드 recipe 90·프론트 vitest 34 통과.
     <br>· <b>떡볶이 제보 큰 세션</b>(recipe-24~31, 푸시·배포 완료): 배포 사본 사고 제거(Jenkins gikka
@@ -69,26 +88,38 @@
 
 <div class="card">
   <h2>현재 단계</h2>
-  <div class="phase-now"><span>5차: 품질 향상 + 다중 사용자 준비 (1 프롬프트·2 검색·3 추천 완료 — 4 재료 사전 남음)</span><span>75%</span></div>
-  <div class="bar"><div style="width:75%"></div></div>
+  <div class="phase-now"><span>5차: 품질 향상 + 다중 사용자 준비 (1 프롬프트·2 검색·3 추천 완료 — 4 재료 사전: 슬라이스1·기본양념 배포, 슬라이스2 남음)</span><span>85%</span></div>
+  <div class="bar"><div style="width:85%"></div></div>
 </div>
 
 <div class="card alert">
   <h2>지금 알아야 할 것</h2>
   <ul>
-    <li><b>사용자 액션 — nginx 에 <code>location ^~ /api/recipe/llm/</code> 블록 반영 (안 하면 [AI 점검]이 계속 504)</b>:
-      저장소 백업 <code>chs/server/nginx/devcontext.conf</code> 에 블록이 들어가 있다 — 그걸 mac-mini
-      <code>/opt/homebrew/etc/nginx/servers/devcontext.conf</code> 의 <code>location /api</code> 앞에 넣고
-      <code>nginx -t</code>(문법 검사만) → <code>nginx -s reload</code>(무중단 워커 교체). 근거는 CONTEXT.md
-      "AI 점검 동기 호출(임시)" 절. <b>곁가지 발견</b>: 백업 사본이 2026-05-30 이후 서버와 어긋나 있었다
-      (<code>/api</code> 10s→15s, <code>/api/chat</code> 60s 블록 신설, <code>try_files</code> 변경이 전부 백포트 안 됨).
-      이번에 서버 실물 기준으로 맞춰뒀으니, 앞으로 서버에서 직접 고치면 이 백업도 함께 고칠 것.</li>
+    <li><b>사용자 액션 — 폰 검증 (운영자 모드 재설계분은 아직 미배포 — 배포 후 가능)</b>:
+      /recipe/monitor → 하단 <b>[사전]</b> 탭 → <b>[AI 점검]</b>(10초쯤 걸리고 "점검 중…" 표시됨.
+      끝나면 "제안" 칩으로 자동 이동, 제안이 붙은 값은 <b>노랑 점선</b>) → <b>[제안 N개 전체 적용]</b>
+      (확인창 1번) → 하단 <b>[나가기]</b> → 추천 탭 확인.
+      <b>기대값(실측 시뮬레이션): "양념만 부족" 8개.</b> "완전 가능"은 <b>아직 0이 정상</b> —
+      기본양념만으로는 0→2 수준이고 그룹 매칭(3단계)과 함께여야 9가 된다(CONTEXT.md "기본양념" 절).
+      기대와 다르면 그 자체가 새 정보다.</li>
+    <li><b>nginx — 저장소에 안 남는다(주의)</b>: <code>chs/server/nginx/devcontext.conf</code> 는
+      <code>/chs/</code> gitignore 대상이라 <b>커밋에 안 실린다</b>. 다른 PC의 새 세션은 이 파일을 못 본다 —
+      재구성이 필요하면 CONTEXT.md "AI 점검 동기 호출(임시)" 절의 블록 정의를 보고 서버 실물
+      (<code>/opt/homebrew/etc/nginx/servers/devcontext.conf</code>, 156줄)을 기준으로 삼을 것.
+      현재 <b>서버 반영 완료 확인함</b>(2026-07-17). <b>곁가지 발견</b>: 백업 사본이 2026-05-30 이후 서버와
+      어긋나 있었다(<code>/api</code> 10s→15s, <code>/api/chat</code> 60s 블록 신설, <code>try_files</code> 변경이
+      전부 백포트 안 됨). 서버 실물 기준으로 맞춰뒀으니, 앞으로 서버를 직접 고치면 이 백업도 함께 고칠 것.</li>
     <li><b>사용자 액션 — /recipe/monitor "강제 재분석"·"영상 삭제" 실동작 미검증</b>: SQL 이 문자열
       조합으로 바뀐 뒤 Testcontainers 부재로 실행 검증 수단이 없음. 실제 지울 영상이 생기면 버튼으로
       눌러 확인(실패 시 `docker logs chs-app-1 2>&1 | grep gikka`).</li>
     <li><b>폰에서 지켜볼 것</b>: (1) "음성 인식 적음" 경고가 5건에 뜨는데 재료는 충실(8~13개) —
-      과하면 MIN_TRANSCRIPT_CHARS(현재 10) 조정·폐기 검토(임계값 사고류 오탐 가능성). (2) 이번 세션
-      검색·추천(5차 2·3) 배포·폰 검증(아래 "다음 할 일").</li>
+      과하면 MIN_TRANSCRIPT_CHARS(현재 10) 조정·폐기 검토(임계값 사고류 오탐 가능성). (2) 추천 카드의
+      <b>내 보관함 = 그린 테두리</b>(배지 폐기 — 이름을 가렸음). (3) 5차 2·3(검색·추천 확장) 폰 검증.</li>
+    <li><b>추출 품질 곁가지(안 건드림)</b>: 사전 243개에 수량이 붙은 이름이 11개 섞여 있다
+      ("물 200ml", "계란 2개", "다진 마늘 1스푼", "올리브유 듬뿍"). 추출 프롬프트가 "수량·단위는 빼고
+      이름만"이라 했는데 안 지켜진 사례. <b>다만 4.5%로 작고, match_key 그룹이 이걸 함께 흡수하므로
+      별도 대응은 불필요하다고 판단</b>(프롬프트를 고쳐도 이미 쌓인 것엔 소급이 안 되지만 그룹은 소급됨).
+      오인식 추정도 있음("쭈유(참기름)", "튀김어댕(튀김)", "스프(건대기, 문말 스프)").</li>
     <li><b>이월 설계(안 만듦, 필요 시 착수)</b>:
       ① <b>사후 비공개 감지</b> — 설계 확정, CONTEXT.md "사후 비공개 감지" 절이 단일 원본(주기적 일괄
       videos.list 50개 묶음 + source_unavailable 플래그, 분석내용 보존·REMOVED 재사용 금지 + 유튜브 유닛
@@ -374,8 +405,12 @@
           recommendTypes.inLibrary, RecommendPage 카드 제목행에 "내 보관함" 배지(겹침 방지 flex,
           rcp-coverflow-title 클래스 신설) + 팝업 담기 버튼(registerByVideoId 재사용, 담은 뒤 재조회).
           백엔드 recipe 90 통과, 프론트 build·tsc·vitest 34·eslint 통과</li>
-        <li class="todo">4) 재료/양념 사전 DB화 + LLM 확신도 필드 + 오너 판정 큐
-          (PENDING/SKIPPED/CONFIRMED, `/recipe/monitor`에 통합)</li>
+        <li class="todo">4) 재료/양념 사전 — <b>슬라이스1 완료·배포(f8c4d8a)</b>: V11 사전 DB화 +
+          classify() DB 조회 + 오너 사전관리(/recipe/monitor) + AI 점검 + 추출 confidentSeasonings 자동확정.
+          <b>2단계 완료·배포(394450e)</b>: 기본양념 V12(CONFIRMED_BASIC — "완전 가능"이 구조적으로 0이던 문제) +
+          [제안 전체 적용] + AI 점검 3분류 + AI 점검 nginx 504 수정(전용 경로 /api/recipe/llm/**) +
+          추천 카드 배지→테두리. <b>남은 것 = 3단계: 슬라이스2(match_key 그룹 매칭 + 병합 UI +
+          AI 병합 제안) + 추천 레이아웃(내 것 5 + 남의 것 5, 3줄)</b> — 아래 "다음 세션이 이어서 할 일"</li>
         <li class="todo">보류: 콘텐츠 신고 버튼(범위 제외, CONTEXT.md 참고 기록만) ·
           앱 아이콘 색 갱신(#1f7a3d→#2aa257) · styleguide 미등록분 · Testcontainers · AIza 키 제한</li>
       </ul>
@@ -397,35 +432,30 @@
       ③ 워커를 건드리면 `RegistrationWorkerTest`(신규 10건)가 지켜줌 — 특히 "일시적 실패는
       시도 횟수를 소모하지 않는다" 불변식. ④ 카테고리를 늘릴 때 cat-4~8 팔레트가 이미
       예약돼 있어 CATEGORY_LABEL·CATEGORY_BADGE 만 채우면 됨(TS 가 강제).</li>
-    <li><b>다음 세션 최우선 — 5차 4) 슬라이스1 배포 → 폰 검증 (슬라이스1 은 이미 커밋·배포됨 f8c4d8a)</b>
-      (grill-me·설계 원본은 CONTEXT.md "5차-4 사전·매칭 재설계" 절, PLAYBOOK "5차" 절 요약).
-      <b>[AI 점검] 오류는 원인 규명·수정 완료</b> — 코드가 아니라 <b>nginx</b> 였다(`location /api` 의
-      15초 타임아웃이 24.7초 응답을 504 로 끊음). 전용 경로 <code>/api/recipe/llm/**</code> 로 분리 +
-      thinkingBudget=0(10.9초) + 503 매핑 + [점검 중…] 표시. 전체 근거·승격 조건은 CONTEXT.md
-      <b>"AI 점검 동기 호출(임시)"</b> 절이 단일 원본. (인계 메모의 "responseSchema 가 ARRAY 라 400"
-      가설은 <b>실측으로 기각</b> — 같은 스키마 직접 호출이 200. 그대로 고쳤으면 증상이 남았을 것.)
-      <br><b>1) 사용자 액션 — nginx 반영</b>: <code>chs/server/nginx/devcontext.conf</code> 의
-      <code>location ^~ /api/recipe/llm/</code> 블록을 mac-mini
-      <code>/opt/homebrew/etc/nginx/servers/devcontext.conf</code> 에 넣고 <code>nginx -t &amp;&amp;
-      nginx -s reload</code>. <b>코드 배포보다 먼저</b> 하면 틈이 없다(새 경로가 아직 없어도 무해).
-      <b>주의</b>: gikka/server.py 는 mac-mini 별도 배포(Jenkins gikka stage) — 푸시만으로
-      로컬 프롬프트가 안 바뀌면 confidentSeasonings 가 로컬엔 안 실림(사본 금지 사고 교훈).
-      <br><b>2) 배포·폰 검증(양념 즉효 = 증거 게이트의 판정 데이터)</b>: V11 은 gikka 에 이미 실행됨(기존
-      추출 재료 <b>243개가 PENDING 으로 이미 쌓여 있음</b>) → /recipe/monitor "재료 사전 관리 열기"에서 굴소스·각종 장/소스를
-      [양념]으로 확정(또는 [AI 점검]으로 제안받아 반영) → 추천에서 그 레시피가 "재료 부족"에서 "양념만
-      부족/완전 가능"으로 올라오는지 확인. 새로 분석되는 영상은 C 로 확신 양념이 자동 확정되는지도 확인.
-      <br><b>3) 증거 게이트 — 2026-07-17 열림, 슬라이스2 착수 확정</b>: 배포 전에 <b>실데이터로 시뮬레이션</b>해
-      답이 나왔다(냉장고 20개·완료 레시피 115개·AI 점검 실제 호출). 위로 올라오는 레시피가
-      <b>슬라이스1만 8개 → 슬라이스2까지 33개(4배)</b>, 기본양념까지 더하면 <b>완전가능이 처음으로 0→9</b>.
-      막힌 107개 상당수가 "냉장고에 밀떡이 있는데 레시피는 '밀떡(어묵떡)' 이라 안 잡힘"류였다.
-      전체 근거·표는 CONTEXT.md "5차-4 사전·매칭 재설계"의 증거 게이트 절 + "기본양념" 절.
-      <br><b>남은 것 = 슬라이스2 구현</b>: monitor 그룹 병합 관리 + AI 점검을 병합 제안까지 확장(병합은
-      오너 확정만) + match() 를 match_key 비교로 교체. 스키마에 match_key(자기자신)는 이미 있어 확장 비용 낮음.
-      <b>라면스프는 라면 그룹에 넣는다</b>(포함 관계 — 실측으로 확정, CONTEXT.md 참고).
-      추천 레이아웃도 함께: <b>섹션당 내 보관함 5 + 남의 것 5 = 10개씩 3줄</b>(지금은 MAX_PER_SECTION=5 로
-      섞여서 5개. bucket() 이 "내 것"을 몰라 시그니처 변경 필요 — inLibrary 를 컨트롤러가 나중에 붙이는 구조).</li>
-    <li><b>5차 4) 슬라이스1 A·B·C 구현 내역(2026-07-17, 커밋 전)</b> — 백엔드 recipe 98·프론트
-      build·tsc(recipe clean)·vitest 34·lint 통과. 파일:
+    <li><b>다음 세션 최우선 — 5차 4) 3단계: 슬라이스2(그룹 매칭) + 추천 레이아웃</b>
+      (설계 원본은 CONTEXT.md "5차-4 사전·매칭 재설계" 절, PLAYBOOK "5차" 절 요약).
+      <b>1·2단계는 커밋·푸시·배포 완료(394450e)</b> — nginx 반영·V12 적용·컨테이너 재기동 전부 확인함.
+      증거 게이트는 <b>이미 열렸다</b>(실데이터 시뮬레이션: 슬라이스1만 8개 → 슬라이스2까지 33개,
+      기본양념까지 더하면 완전가능 0→9). <b>사용자 확정 사항이므로 다시 묻지 말 것.</b>
+      <br><b>㉮ match_key 그룹 매칭</b>: <code>RecommendRules.match()</code> 를 정확 이름 대신
+      match_key 비교로 교체(<code>classify()</code> 는 이미 사전 DB 조회라 손댈 것 없음).
+      스키마에 match_key 컬럼은 이미 있고 전부 자기 이름이라, 안 묶인 상태 = 현행 동작 그대로 =
+      안전하게 배포 가능. <b>냉장고 이름도 match_key 로 정규화해야 한다</b>(양쪽 다 안 하면 무의미).
+      <br><b>㉯ monitor 그룹 병합 관리 UI</b>: DictionaryPanel 에 그룹(match_key) 편집.
+      <b>안전 비대칭 규칙 필수</b> — 쪼개기(기본=자기자신)는 자동/안전, <b>묶기는 오직 오너 확정만</b>
+      (LLM 은 제안까지. 파프리카→파, 진간장→간장 오병합을 사람 손 없이 막는 게 요체).
+      [제안 전체 적용] 패턴(<code>/dictionary/classify-batch</code>)을 그룹에도 재사용할 것 —
+      제안이 수십 건이라 한 건씩 탭하면 못 쓴다(2026-07-17 실측).
+      <br><b>㉰ AI 점검을 병합 제안까지 확장</b>: 지금은 BASIC/SEASONING/MAIN 3분류만 제안
+      (<code>IngredientAuditor</code>). 여기에 "이 이름은 어느 그룹에 속하나"를 더한다.
+      <b>라면스프는 라면 그룹에 넣는다</b>(포함 관계 — 등가류가 아니지만 실측 이득이 압도적이라
+      확정. 후레이크·건더기스프도 같은 그룹. CONTEXT.md 증거 게이트 절의 근거를 반드시 읽을 것).
+      실측 기준 그룹 = 라면 22 · 스프 14 · 떡 9 · 계란 9 · 고춧가루 6 · 파 · 국수면 · 참치 · 어묵 · 밥.
+      <br><b>㉱ 추천 레이아웃</b>: <b>섹션당 내 보관함 5 + 남의 것 5 = 10개씩, 3줄</b>(사용자 확정).
+      지금은 <code>MAX_PER_SECTION=5</code> 로 섞여서 5개. <b>bucket() 이 "내 것"을 모르는 게 걸림돌</b> —
+      inLibrary 는 <code>RecommendController.toItems</code> 가 myVideoIds 로 나중에 붙이는 구조라
+      bucket() 시그니처 변경이 필요하다(순수 함수 유지 — myVideoIds 를 인자로 받게).</li>
+    <li><b>5차 4) 슬라이스1 A·B·C 구현 내역(2026-07-17, 커밋·배포 완료 f8c4d8a)</b> — 파일:
       <br>· <b>A(기반)</b>: V11__ingredient_dictionary.sql(테이블+양념 19+별칭 시드+기존 추출 이름 backfill),
       IngredientDictionaryRepository(seasoningNames·all·upsertPending·confirmSeasoningIfPending·updateStatus),
       RecommendRules.classify/match 가 양념 집합을 인자로(순수 유지, 상수 제거), RecommendController 주입.
@@ -449,17 +479,20 @@
       한 곳으로. 추출기는 프롬프트·스키마·페일오버만, 감사기는 프롬프트·스키마·순수 parse 만 소유.
       신규 GeminiJsonClientTest(언랩·429 매핑)·IngredientAuditorTest(순수 parse). 봉투 언랩이 seam 으로
       빠져 감사기 parse 가 HTTP 없이 테스트 가능해짐.</li>
-    <li><b>2)·3) 배포 후 폰 실검증(완료 아님, 커밋 전)</b>: 검색 — 요리 이름·태그로 내 보관함/이런
+    <li><b>2)·3) 폰 실검증(배포됨, 검증 완료 아님)</b>: 검색 — 요리 이름·태그로 내 보관함/이런
       것도 있어요 두 섹션, "내 보관함에 담기" 즉시 반영(others→mine). 추천 — gikka 전체로 넓어져
-      남의 레시피가 뜨는지, 내 것에만 "내 보관함" 배지(카드 제목 옆 겹침 없이), 남의 것 팝업 담기
-      버튼 → 담으면 배지가 붙는지, 라이트/다크 배지 가독성. 저장소 SQL 은 gikka DB 없이 여기서
-      실행 검증 불가(Testcontainers 부재) — 실제 데이터 폰 검증이 유일한 확인 수단.
-      (styleguide 커버플로우에 inLibrary 배지 변형 추가는 미등록 — 필요 시 5차 잔여로.)</li>
+      남의 레시피가 뜨는지, <b>내 것에만 그린 테두리</b>(2026-07-17 — 배지는 폐기됨. 배지가 좁은 카드에서
+      요리 이름을 통째로 가리는 게 실사용에서 발견돼 <code>.rcp-coverflow-card-mine</code> inset 테두리로
+      교체. styleguide 에 변형 등록 완료), 남의 것 팝업 담기 버튼 → 담으면 테두리가 붙는지,
+      라이트/다크 가독성. 저장소 SQL 은 gikka DB 없이 여기서 실행 검증 불가(Testcontainers 부재) —
+      실제 데이터 폰 검증이 유일한 확인 수단.</li>
     <li>함정 메모(개발): `./gradlew test` 전체는 기존 결함 테스트(ChatbotAdminControllerSecurityTest 등,
       recipe 무관)로 실패 — recipe 는 `--tests "com.chs.springboot.domain.recipe.*"` 로 통과 확인.
       로컬 8080 에 구버전 앱이 떠 있으면 새 API 404 — bootRun 전 java 종료.</li>
-    <li>4번 재료 사전 메모(2026-07-13 채점 관찰): "물"이 재료로 추출됨 — 기본양념(판정 제외)
-      분류의 대표 사례로 사전 설계 시 반영. 추출 프롬프트는 건드리지 않음(원문 저장 원칙)</li>
+    <li><s>4번 재료 사전 메모(2026-07-13 채점 관찰): "물"이 재료로 추출됨 — 기본양념(판정 제외)
+      분류의 대표 사례로 사전 설계 시 반영.</s> <b>2026-07-17 구현 완료</b> — V12 CONFIRMED_BASIC.
+      관찰이 정확했다: 실측 결과 "물"이 완료 레시피 115개 중 48개에 있어 "완전 가능" 섹션을
+      혼자서 막고 있었다. 추출 프롬프트는 여전히 안 건드림(원문 저장 원칙 — 사전이 판정을 소유).</li>
     <li>5차 후보 (통합 정리 2026-07-13, 2026-07-15 갱신): styleguide 미등록분(로그인 화면·홈
       계정 줄·rcp-inline-error), 앱 아이콘 밝은 그린(#2aa257)·모양 다듬기, AIza 키 API 제한 걸기.
       <b>SQL 동작 자동 테스트(Testcontainers — VideoRepository·FridgeRepository): 2026-07-15

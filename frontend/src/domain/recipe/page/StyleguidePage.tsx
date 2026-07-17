@@ -236,9 +236,49 @@ export default function StyleguidePage() {
                 />
             </div>
 
+            <h2 className="rcp-section-label">재료 사전 행 — .rcp-dict-row (오너 전용 화면)</h2>
+            <Label>{'.rcp-dict-action(안 고른 값) / .rcp-dict-action-on(지금 확정된 값) / .rcp-dict-action-proposed(AI 제안 — 아직 확정 아님)'}</Label>
+            <p style={{ fontSize: 'var(--rcp-fs-sm)', color: 'var(--rcp-text-sub)' }}>
+                확정(그린 실선)과 제안(노랑 점선)은 절대 같은 색이면 안 됩니다 — 색과 모양 둘 다로
+                구분해야 색맹에서도 읽힙니다. 탭하면 즉시 저장이라 "미저장" 상태는 없습니다.
+                긴 글자 스트레스 테스트 겸용: 재료명이 길어지면 이름만 줄바꿈되고 버튼은 안 짓눌립니다.
+            </p>
+            <div className="rcp-dict-filters">
+                {['손볼 것 12', '제안 83', '전체 243'].map((label, i) => (
+                    <button type="button" key={label} className={`rcp-dict-action ${i === 0 ? 'rcp-dict-action-on' : ''}`.trim()}>
+                        {label}
+                    </button>
+                ))}
+            </div>
+            <div className="rcp-dict-list">
+                {[
+                    { name: '굴소스', badge: '미판정', on: -1, proposed: 1 },
+                    { name: '아주아주 길게 적어본 재료 이름 (긴 글자 스트레스 테스트)', badge: '주재료 확정', on: 2, proposed: -1 },
+                ].map((row) => (
+                    <div className="rcp-dict-row" key={row.name}>
+                        <span className="rcp-dict-name">{row.name}</span>
+                        <RcpBadge variant={row.on === -1 ? 'neutral' : 'good'}>{row.badge}</RcpBadge>
+                        <div className="rcp-dict-actions">
+                            {['기본', '양념', '주재료', '보류'].map((label, i) => (
+                                <button
+                                    type="button"
+                                    key={label}
+                                    className={`rcp-dict-action ${i === row.on ? 'rcp-dict-action-on' : ''} ${i === row.proposed ? 'rcp-dict-action-proposed' : ''}`.trim()}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
             <h2 className="rcp-section-label">하단 탭 바 — RcpTabBar (.rcp-tab-bar)</h2>
             <p style={{ fontSize: 'var(--rcp-fs-sm)', color: 'var(--rcp-text-sub)' }}>
-                이 화면 아래에 떠 있는 그것. 탭: 홈 / 추천 / 냉장고 / 보관함.
+                이 화면 아래에 떠 있는 그것. 기본 탭: 홈 / 추천 / 냉장고 / 보관함.
+                <br />
+                {'<RcpTabBar tabs={...}> 로 탭 묶음을 통째로 갈아끼웁니다 — 운영자 모드'}
+                (/recipe/monitor/*)가 대기열 / 사전 / 나가기 를 씁니다. 탭 바를 두 벌 만들지 말 것.
             </p>
         </main>
     );
