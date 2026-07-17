@@ -30,6 +30,7 @@ class IngredientAuditControllerTest {
 
     private final IngredientDictionaryRepository dictionary = mock(IngredientDictionaryRepository.class);
     private final IngredientAuditor auditor = mock(IngredientAuditor.class);
+    private final LocalIngredientAuditor localAuditor = mock(LocalIngredientAuditor.class);
     private final GikkaUserRepository users = mock(GikkaUserRepository.class);
 
     private IngredientAuditController controller() {
@@ -37,7 +38,7 @@ class IngredientAuditControllerTest {
         properties.setAllowedEmails(List.of("owner@example.com"));
         when(users.findEmail(OWNER_ID)).thenReturn("owner@example.com");
         when(users.findEmail(STRANGER_ID)).thenReturn("stranger@example.com");
-        return new IngredientAuditController(dictionary, auditor, properties, users);
+        return new IngredientAuditController(dictionary, auditor, localAuditor, properties, users);
     }
 
     @Test
@@ -51,17 +52,34 @@ class IngredientAuditControllerTest {
     }
 
     @Test
-    @DisplayName("일시적 실패(429·503·타임아웃)는 503 — 500 으로 새지 않는다")
-    void transientFailureBecomes503() {
+    @DisplayName("Gemini 일시적 실패(429·503·타임아웃)에 로컬도 안 되면 503 — 500 으로 새지 않는다")
+    void transientFailureBecomes503WhenLocalAlsoUnavailable() {
         when(dictionary.all()).thenReturn(List.of(new IngredientDictionaryRepository.Entry(
                 "굴소스", "굴소스", IngredientDictionaryRepository.STATUS_PENDING)));
         when(auditor.audit(anyList()))
                 .thenThrow(new RecipeExtractor.TransientFailureException("429 quota"));
+        when(localAuditor.audit(anyList()))
+                .thenThrow(new LocalRecipeExtractor.LocalUnavailableException("service down", null));
 
         ResponseStatusException e = assertThrows(ResponseStatusException.class,
                 () -> controller().auditDictionary(OWNER_ID));
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, e.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Gemini 일시적 실패면 로컬(gikka-local)로 폴백 — 성공하면 같은 필터를 거쳐 반환한다")
+    void transientFailureFallsBackToLocal() {
+        when(dictionary.all()).thenReturn(List.of(
+                entry("굴소스", IngredientDictionaryRepository.STATUS_PENDING)));
+        when(auditor.audit(anyList()))
+                .thenThrow(new RecipeExtractor.TransientFailureException("503 overloaded"));
+        when(localAuditor.audit(List.of("굴소스")))
+                .thenReturn(List.of(tier("굴소스", IngredientAuditor.TIER_SEASONING)));
+
+        List<IngredientAuditor.Proposal> proposals = controller().auditDictionary(OWNER_ID);
+
+        assertEquals(List.of("굴소스"), proposals.stream().map(IngredientAuditor.Proposal::name).toList());
     }
 
     private static IngredientDictionaryRepository.Entry entry(String name, String status) {

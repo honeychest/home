@@ -88,6 +88,40 @@ PROMPT_TEMPLATE = """\
 
 DESCRIPTION_SUFFIX = "\n\n영상 설명란 원문:\n{description}"
 
+# 재료 사전 감사 프롬프트 — IngredientAuditor.PROMPT(springboot)과 동일한 지시 (일관성 유지).
+# Gemini 가 429/503/타임아웃일 때 IngredientAuditController 가 여기로 폴백한다 (2026-07-18 확정).
+AUDIT_PROMPT = """\
+아래는 요리 레시피에서 추출된 재료 이름 목록입니다. 각 이름에 대해 두 가지를 판정하세요.
+
+[1] tier — BASIC / SEASONING / MAIN 중 하나.
+- BASIC: 어느 집에나 늘 있는 상비 양념. 물·소금·설탕·간장·식용유·후추·참기름·통깨·
+  다진마늘·고춧가루·식초 같은 것. "장 보러 갈 필요가 없는" 것만.
+- SEASONING: 양념·조미료지만 없을 수 있어 사러 가야 하는 것.
+  고추장·굴소스·두반장·액젓·물엿·마요네즈 같은 것.
+- MAIN: 그 외 실제 식재료(고기·채소·두부·면·떡 등).
+확실하지 않으면 MAIN 으로 두세요(안전 기본값 — 양념으로 잘못 빼면 레시피가 추천에서
+사라지지만, 주재료로 두면 "부족 재료"로 보일 뿐이라 덜 위험합니다).
+
+[2] mergeInto — 이 이름을 흡수할 대표 이름. 묶을 필요가 없으면 빈 문자열.
+같은 것이 여러 이름으로 흩어져 있으면 대표 하나로 묶습니다. 냉장고에 대표가 있으면
+멤버도 있는 것으로 칩니다.
+- 대표 이름은 반드시 아래 목록 안에 있는 이름이어야 합니다. 새 이름을 만들지 마세요.
+- 묶는 예: 수량·괄호 표기만 다른 것("계란 2개" → "계란"), 구성품("라면 건더기스프" →
+  "라면", 후레이크·스프도 같음), 상표·세부 변형이라 서로 대체되는 것("신라면" → "라면",
+  "밀떡" → "떡", "대파" → "파").
+- 절대 묶으면 안 되는 예: 실제로 다른 재료. "진간장"과 "간장", "맛소금"과 "소금",
+  "파프리카"와 "파"는 각각 다른 것이라 묶지 마세요.
+- 판단 기준: "대표가 냉장고에 있으면 이 재료로 요리할 수 있는가?" 가 확실히 참일 때만
+  묶으세요. 조금이라도 애매하면 빈 문자열로 두세요 — 안 묶으면 매칭이 덜 될 뿐이지만,
+  잘못 묶으면 없는 재료를 있다고 말하게 됩니다.
+
+주어진 이름만 판정하고 표기를 바꾸지 마세요. 반드시 JSON 배열로만 답하세요.
+각 항목은 {{"name":..., "tier":..., "mergeInto":...}}.
+
+재료 이름 목록:
+{names}
+"""
+
 _lock = threading.Lock()
 
 
@@ -156,13 +190,12 @@ def build_payload(frames, transcript, description):
     return {"model": LM_STUDIO_MODEL, "messages": [{"role": "user", "content": content}], "max_tokens": 2000}
 
 
-def call_local_model(payload):
+def call_local_model(payload, timeout=120):
     req = Request(LM_STUDIO_URL, data=json.dumps(payload).encode("utf-8"),
                   headers={"Content-Type": "application/json"}, method="POST")
-    with urlopen(req, timeout=120) as resp:
+    with urlopen(req, timeout=timeout) as resp:
         body = json.loads(resp.read().decode("utf-8"))
-    text = body["choices"][0]["message"]["content"]
-    return parse_model_json(text)
+    return body["choices"][0]["message"]["content"]
 
 
 def parse_model_json(text):
@@ -170,6 +203,13 @@ def parse_model_json(text):
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise RuntimeError(f"모델 응답에서 JSON 을 못 찾음: {text[:500]}")
+    return json.loads(match.group(0))
+
+
+def parse_model_json_array(text):
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if not match:
+        raise RuntimeError(f"모델 응답에서 JSON 배열을 못 찾음: {text[:500]}")
     return json.loads(match.group(0))
 
 
@@ -190,13 +230,25 @@ def extract(video_url, description):
         audio_path = extract_audio(video_path, work_dir)
         transcript = transcribe(audio_path, work_dir)
         payload = build_payload(frames, transcript, description)
-        result = call_local_model(payload)
+        result = parse_model_json(call_local_model(payload))
         # 음성 인식이 실제로 얼마나 됐는지 — 백엔드가 분석 품질 신호로 저장 (2026-07-14 확정,
         # 이 자체는 판단이 아니라 사실이라 여기선 개수만 실어 보낸다. 경고 여부 판정은 백엔드 몫)
         result["transcriptChars"] = len((transcript or "").strip())
         return result
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def build_audit_payload(names):
+    prompt_text = AUDIT_PROMPT.format(names="\n".join(names))
+    # max_tokens 여유 큼(8000) — 사전 전체(실측 최대 243개)를 한 번에 감사하면 응답이
+    # {name,tier,mergeInto} 객체 수백 개라 영상 추출(단건, 2000)보다 훨씬 길다.
+    return {"model": LM_STUDIO_MODEL, "messages": [{"role": "user", "content": prompt_text}], "max_tokens": 8000}
+
+
+def audit_ingredients(names):
+    payload = build_audit_payload(names)
+    return parse_model_json_array(call_local_model(payload, timeout=180))
 
 
 def health():
@@ -267,7 +319,7 @@ class Handler(BaseHTTPRequestHandler):
         return b"".join(chunks)
 
     def do_POST(self):
-        if self.path != "/extract":
+        if self.path not in ("/extract", "/audit"):
             self.send_response(404)
             self.end_headers()
             return
@@ -281,7 +333,10 @@ class Handler(BaseHTTPRequestHandler):
             # 단일 워커(RegistrationWorker) 전제이나, 두 앱 인스턴스가 동시에 호출할 가능성을
             # 대비해 직렬화 — LM Studio·whisper 는 한 번에 하나씩만 처리 (2026-07-14 확정)
             with _lock:
-                result = extract(req["videoUrl"], req.get("description"))
+                if self.path == "/extract":
+                    result = extract(req["videoUrl"], req.get("description"))
+                else:
+                    result = audit_ingredients(req["names"])
             body = json.dumps(result, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

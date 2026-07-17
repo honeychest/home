@@ -42,13 +42,16 @@ public class IngredientAuditController {
 
     private final IngredientDictionaryRepository dictionary;
     private final IngredientAuditor auditor;
+    private final LocalIngredientAuditor localAuditor;
     private final GikkaAuthProperties authProperties;
     private final GikkaUserRepository users;
 
     public IngredientAuditController(IngredientDictionaryRepository dictionary, IngredientAuditor auditor,
-                                     GikkaAuthProperties authProperties, GikkaUserRepository users) {
+                                     LocalIngredientAuditor localAuditor, GikkaAuthProperties authProperties,
+                                     GikkaUserRepository users) {
         this.dictionary = dictionary;
         this.auditor = auditor;
+        this.localAuditor = localAuditor;
         this.authProperties = authProperties;
         this.users = users;
     }
@@ -68,7 +71,9 @@ public class IngredientAuditController {
      * 지어낼 수 있다): 실재하지 않는 이름, 대표 자격이 없는 이름(이미 남에게 묶인 멤버 — 대표로
      * 삼으면 A→B→C 체인이 된다), 이미 그 그룹인 것은 제안이 아니다.
      *
-     * <p>일시적 실패(429·503·타임아웃)는 503 — 프론트가 "잠시 후 다시" 문구로 (에러 계약: 상태 코드만).
+     * <p>일시적 실패(429·503·타임아웃)는 gikka-local(mac-mini LM Studio) 로 폴백한다(2026-07-18
+     * 확정). 로컬도 안 되면(서비스 다운 등) 그때 503 — 프론트가 "잠시 후 다시" 문구로
+     * (에러 계약: 상태 코드만).
      */
     @PostMapping("/dictionary/audit")
     public List<IngredientAuditor.Proposal> auditDictionary(@GikkaUserId long userId) {
@@ -86,7 +91,14 @@ public class IngredientAuditController {
                     .toList();
         } catch (RecipeExtractor.TransientFailureException e) {
             log.warn("Gemini 일시적 실패: {} - {}", "일시적 실패(원인불명)", e.getMessage());
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Gemini 일시적 실패", e);
+            try {
+                return localAuditor.audit(representatives).stream()
+                        .filter(p -> isUseful(p, byName))
+                        .toList();
+            } catch (LocalRecipeExtractor.LocalUnavailableException le) {
+                log.warn("[gikka] 로컬 감사도 불가 — 503: {}", le.getMessage());
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Gemini 일시적 실패", e);
+            }
         }
     }
 

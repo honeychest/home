@@ -77,3 +77,6 @@ tail -f ~/gikka-local/server.log                                          # 로�
 - 응답 JSON은 Spring `RecipeExtractor.ExtractionResult` 와 1:1 (category, name, ingredients,
   cookMinutes, steps, summary, tags).
 - 실패(HTTP 500)는 Spring 쪽에서 `LocalUnavailableException` 으로 묶여 Gemini 로 전체 폴백된다.
+- `POST /audit` (2026-07-18 신설): 텍스트 전용(yt-dlp·whisper 없음, LM Studio만) 재료 사전 감사.
+  `{"names": [...]}` → `[{"name","tier","mergeInto"}, ...]`. `IngredientAuditController`가
+  Gemini 429/503/타임아웃일 때만 여기로 폴백한다(평소엔 Gemini가 기본).
