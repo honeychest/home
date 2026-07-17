@@ -63,11 +63,12 @@ public class RecommendController {
         // "내 보관함" 여부는 내 등록 videoId 집합으로 표시만 한다 (매칭에는 안 씀).
         Set<String> myVideoIds = new HashSet<>(registrations.videoIdsForUser(userId));
         Set<String> seasoningNames = dictionary.seasoningNames();
+        Set<String> basicNames = dictionary.basicNames(); // 상비 양념 — 부족분에서 아예 뺀다
 
         List<RecommendRules.Match> matches = videos.allDoneRecipes().stream()
                 .map(this::toCandidate)
                 .flatMap(Optional::stream)
-                .map(candidate -> RecommendRules.match(candidate, fridgeNames, seasoningNames))
+                .map(candidate -> RecommendRules.match(candidate, fridgeNames, seasoningNames, basicNames))
                 .toList();
 
         RecommendRules.Sections sections = RecommendRules.bucket(matches);

@@ -76,6 +76,13 @@
 <div class="card alert">
   <h2>지금 알아야 할 것</h2>
   <ul>
+    <li><b>사용자 액션 — nginx 에 <code>location ^~ /api/recipe/llm/</code> 블록 반영 (안 하면 [AI 점검]이 계속 504)</b>:
+      저장소 백업 <code>chs/server/nginx/devcontext.conf</code> 에 블록이 들어가 있다 — 그걸 mac-mini
+      <code>/opt/homebrew/etc/nginx/servers/devcontext.conf</code> 의 <code>location /api</code> 앞에 넣고
+      <code>nginx -t</code>(문법 검사만) → <code>nginx -s reload</code>(무중단 워커 교체). 근거는 CONTEXT.md
+      "AI 점검 동기 호출(임시)" 절. <b>곁가지 발견</b>: 백업 사본이 2026-05-30 이후 서버와 어긋나 있었다
+      (<code>/api</code> 10s→15s, <code>/api/chat</code> 60s 블록 신설, <code>try_files</code> 변경이 전부 백포트 안 됨).
+      이번에 서버 실물 기준으로 맞춰뒀으니, 앞으로 서버에서 직접 고치면 이 백업도 함께 고칠 것.</li>
     <li><b>사용자 액션 — /recipe/monitor "강제 재분석"·"영상 삭제" 실동작 미검증</b>: SQL 이 문자열
       조합으로 바뀐 뒤 Testcontainers 부재로 실행 검증 수단이 없음. 실제 지울 영상이 생기면 버튼으로
       눌러 확인(실패 시 `docker logs chs-app-1 2>&1 | grep gikka`).</li>
@@ -390,19 +397,33 @@
       ③ 워커를 건드리면 `RegistrationWorkerTest`(신규 10건)가 지켜줌 — 특히 "일시적 실패는
       시도 횟수를 소모하지 않는다" 불변식. ④ 카테고리를 늘릴 때 cat-4~8 팔레트가 이미
       예약돼 있어 CATEGORY_LABEL·CATEGORY_BADGE 만 채우면 됨(TS 가 강제).</li>
-    <li><b>다음 세션 최우선 — 5차 4) 슬라이스1 커밋 → 배포 → 폰 검증 (A·B·C 구현 완료, 커밋 전)</b>
+    <li><b>다음 세션 최우선 — 5차 4) 슬라이스1 배포 → 폰 검증 (슬라이스1 은 이미 커밋·배포됨 f8c4d8a)</b>
       (grill-me·설계 원본은 CONTEXT.md "5차-4 사전·매칭 재설계" 절, PLAYBOOK "5차" 절 요약).
-      2026-07-17 세션에 슬라이스1 <b>A·B·C 전부 구현·검증 완료(미커밋)</b>. 남은 것:
-      <br><b>1) 커밋</b>: commit-check(모듈화·서버 관점) 후. springboot + frontend + gikka/server.py +
-      docs 를 함께. <b>주의</b>: gikka/server.py 는 mac-mini 별도 배포(Jenkins gikka stage) — 푸시만으로
+      <b>[AI 점검] 오류는 원인 규명·수정 완료</b> — 코드가 아니라 <b>nginx</b> 였다(`location /api` 의
+      15초 타임아웃이 24.7초 응답을 504 로 끊음). 전용 경로 <code>/api/recipe/llm/**</code> 로 분리 +
+      thinkingBudget=0(10.9초) + 503 매핑 + [점검 중…] 표시. 전체 근거·승격 조건은 CONTEXT.md
+      <b>"AI 점검 동기 호출(임시)"</b> 절이 단일 원본. (인계 메모의 "responseSchema 가 ARRAY 라 400"
+      가설은 <b>실측으로 기각</b> — 같은 스키마 직접 호출이 200. 그대로 고쳤으면 증상이 남았을 것.)
+      <br><b>1) 사용자 액션 — nginx 반영</b>: <code>chs/server/nginx/devcontext.conf</code> 의
+      <code>location ^~ /api/recipe/llm/</code> 블록을 mac-mini
+      <code>/opt/homebrew/etc/nginx/servers/devcontext.conf</code> 에 넣고 <code>nginx -t &amp;&amp;
+      nginx -s reload</code>. <b>코드 배포보다 먼저</b> 하면 틈이 없다(새 경로가 아직 없어도 무해).
+      <b>주의</b>: gikka/server.py 는 mac-mini 별도 배포(Jenkins gikka stage) — 푸시만으로
       로컬 프롬프트가 안 바뀌면 confidentSeasonings 가 로컬엔 안 실림(사본 금지 사고 교훈).
-      <br><b>2) 배포·폰 검증(양념 즉효 = 증거 게이트의 판정 데이터)</b>: V11 이 gikka 에 실행되면 기존
-      추출 재료가 PENDING 으로 쌓임 → /recipe/monitor "재료 사전 관리 열기"에서 굴소스·각종 장/소스를
+      <br><b>2) 배포·폰 검증(양념 즉효 = 증거 게이트의 판정 데이터)</b>: V11 은 gikka 에 이미 실행됨(기존
+      추출 재료 <b>243개가 PENDING 으로 이미 쌓여 있음</b>) → /recipe/monitor "재료 사전 관리 열기"에서 굴소스·각종 장/소스를
       [양념]으로 확정(또는 [AI 점검]으로 제안받아 반영) → 추천에서 그 레시피가 "재료 부족"에서 "양념만
       부족/완전 가능"으로 올라오는지 확인. 새로 분석되는 영상은 C 로 확신 양념이 자동 확정되는지도 확인.
-      <br><b>3) 증거 게이트 — 슬라이스2 착수 여부 재결정</b>: 위 검증에서 <b>변형 문제(라면/떡)가 실제로
-      남는지</b> 보고 결정. 남으면 슬라이스2(monitor 그룹 병합 관리 + AI 점검 병합 제안[병합은 오너
-      확정만] + match() 를 match_key 비교로 교체). 스키마에 match_key(자기자신)는 이미 있어 확장 비용 낮음.</li>
+      <br><b>3) 증거 게이트 — 2026-07-17 열림, 슬라이스2 착수 확정</b>: 배포 전에 <b>실데이터로 시뮬레이션</b>해
+      답이 나왔다(냉장고 20개·완료 레시피 115개·AI 점검 실제 호출). 위로 올라오는 레시피가
+      <b>슬라이스1만 8개 → 슬라이스2까지 33개(4배)</b>, 기본양념까지 더하면 <b>완전가능이 처음으로 0→9</b>.
+      막힌 107개 상당수가 "냉장고에 밀떡이 있는데 레시피는 '밀떡(어묵떡)' 이라 안 잡힘"류였다.
+      전체 근거·표는 CONTEXT.md "5차-4 사전·매칭 재설계"의 증거 게이트 절 + "기본양념" 절.
+      <br><b>남은 것 = 슬라이스2 구현</b>: monitor 그룹 병합 관리 + AI 점검을 병합 제안까지 확장(병합은
+      오너 확정만) + match() 를 match_key 비교로 교체. 스키마에 match_key(자기자신)는 이미 있어 확장 비용 낮음.
+      <b>라면스프는 라면 그룹에 넣는다</b>(포함 관계 — 실측으로 확정, CONTEXT.md 참고).
+      추천 레이아웃도 함께: <b>섹션당 내 보관함 5 + 남의 것 5 = 10개씩 3줄</b>(지금은 MAX_PER_SECTION=5 로
+      섞여서 5개. bucket() 이 "내 것"을 몰라 시그니처 변경 필요 — inLibrary 를 컨트롤러가 나중에 붙이는 구조).</li>
     <li><b>5차 4) 슬라이스1 A·B·C 구현 내역(2026-07-17, 커밋 전)</b> — 백엔드 recipe 98·프론트
       build·tsc(recipe clean)·vitest 34·lint 통과. 파일:
       <br>· <b>A(기반)</b>: V11__ingredient_dictionary.sql(테이블+양념 19+별칭 시드+기존 추출 이름 backfill),

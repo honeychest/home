@@ -18,9 +18,14 @@ interface RcpCoverflowProps<T> {
     renderCard: (item: T) => ReactNode;
     /** 카드 탭 — 스와이프 중 손을 뗀 경우(드래그)는 호출하지 않는다 */
     onCardClick?: (item: T) => void;
+    /** 카드별 추가 클래스 — 항목의 성격을 카드 테두리로 구분할 때(예: 추천의 "내 보관함").
+        카드 안 배지로 구분하지 말 것: 카드가 좁아 배지가 제목의 폭을 먹는다 (2026-07-17 실사용
+        발견 — 제목이 통째로 말줄임돼 안 보였음). 레이아웃에 영향 없는 표현만 쓸 것 —
+        폭·여백을 바꾸면 이 컴포넌트의 카드 폭 실측(applyLayout)이 틀어진다. */
+    cardClassOf?: (item: T) => string | undefined;
 }
 
-export default function RcpCoverflow<T>({ items, keyOf, renderCard, onCardClick }: RcpCoverflowProps<T>) {
+export default function RcpCoverflow<T>({ items, keyOf, renderCard, onCardClick, cardClassOf }: RcpCoverflowProps<T>) {
     const trackRef = useRef<HTMLDivElement>(null);
     const draggedRef = useRef(false);
 
@@ -112,7 +117,7 @@ export default function RcpCoverflow<T>({ items, keyOf, renderCard, onCardClick 
             <div className="rcp-coverflow" ref={trackRef}>
                 {items.map((item) => (
                     <div
-                        className="rcp-coverflow-card"
+                        className={['rcp-coverflow-card', cardClassOf?.(item)].filter(Boolean).join(' ')}
                         key={keyOf(item)}
                         role={onCardClick ? 'button' : undefined}
                         tabIndex={onCardClick ? 0 : undefined}

@@ -38,7 +38,6 @@ class RegistrationControllerMonitorTest {
     /** health() 는 mock 기본값 null 을 돌려준다 = "로컬 못 씀" — 이 테스트의 관심사(404/403 계약)와 무관 */
     private final LocalRecipeExtractor localExtractor = mock(LocalRecipeExtractor.class);
     private final IngredientDictionaryRepository dictionary = mock(IngredientDictionaryRepository.class);
-    private final IngredientAuditor auditor = mock(IngredientAuditor.class);
 
     private RegistrationController controller() {
         GikkaAuthProperties properties = new GikkaAuthProperties();
@@ -46,7 +45,7 @@ class RegistrationControllerMonitorTest {
         when(users.findEmail(OWNER_ID)).thenReturn("owner@example.com");
         when(users.findEmail(STRANGER_ID)).thenReturn("stranger@example.com");
         return new RegistrationController(repository, videos, rateLimiter, metadata, properties, users,
-                localExtractor, dictionary, auditor);
+                localExtractor, dictionary);
     }
 
     @Test
@@ -163,11 +162,46 @@ class RegistrationControllerMonitorTest {
     }
 
     @Test
-    @DisplayName("사전 목록·AI 점검: 오너가 아니면 403")
+    @DisplayName("사전 목록: 오너가 아니면 403")
     void dictionaryReadsRequireOwner() {
         assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
                 () -> controller().dictionary(STRANGER_ID)).getStatusCode());
-        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
-                () -> controller().auditDictionary(STRANGER_ID)).getStatusCode());
     }
+
+    @Test
+    @DisplayName("일괄 판정: 오너가 아니면 403 — 사전에 손대기 전에 막힌다")
+    void classifyBatchRequiresOwner() {
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> controller().classifyIngredients(STRANGER_ID, List.of(
+                        new RegistrationController.ClassifyRequest("간장", "CONFIRMED_BASIC"))));
+
+        assertEquals(HttpStatus.FORBIDDEN, e.getStatusCode());
+        verify(dictionary, never()).updateStatuses(any());
+    }
+
+    @Test
+    @DisplayName("일괄 판정: 한 건이라도 status 가 잘못되면 400 — 저장소를 아예 안 건드린다 "
+            + "(일부만 반영되고 실패하면 오너가 무엇이 적용됐는지 알 수 없다)")
+    void classifyBatchRejectsBadStatusWholesale() {
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> controller().classifyIngredients(OWNER_ID, List.of(
+                        new RegistrationController.ClassifyRequest("간장", "CONFIRMED_BASIC"),
+                        new RegistrationController.ClassifyRequest("굴소스", "NONSENSE"))));
+
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatusCode());
+        verify(dictionary, never()).updateStatuses(any());
+    }
+
+    @Test
+    @DisplayName("일괄 판정: 없는 이름은 404 가 아니라 조용히 건너뛰고 바뀐 건수를 돌려준다 "
+            + "(개별 classify 와 다른 계약 — 제안 83개 중 한 건 때문에 전체를 실패시키지 않는다)")
+    void classifyBatchSkipsMissingNames() {
+        when(dictionary.updateStatuses(any())).thenReturn(1);
+
+        assertEquals(1, controller().classifyIngredients(OWNER_ID, List.of(
+                new RegistrationController.ClassifyRequest("굴소스", "CONFIRMED_SEASONING"),
+                new RegistrationController.ClassifyRequest("없는재료", "CONFIRMED_SEASONING"))));
+    }
+    // AI 점검(auditDictionary)의 계약은 IngredientAuditControllerTest 로 옮겼다 (2026-07-17,
+    // 컨트롤러 분리 — /api/recipe/llm/** 전용 경로).
 }

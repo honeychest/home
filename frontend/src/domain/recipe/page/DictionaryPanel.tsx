@@ -3,7 +3,7 @@
 // 확정하거나 [AI 점검] 제안으로 반영한다. 3상태 조회(useQuery)+조작 실행기(useMutation) 공용 훅 재사용.
 // AI 점검은 온디맨드 — 제안(양념일 수 있음)만 돌려주고 자동 반영하지 않는다(안전 비대칭, CONTEXT.md).
 import { useCallback, useState } from 'react';
-import type { DictionaryEntry, IngredientProposal } from '../data/monitorTypes';
+import type { DictionaryEntry, DictionaryStatus, IngredientProposal } from '../data/monitorTypes';
 import { monitorRepository } from '../data/monitorRepository';
 import { useMutation } from './useMutation';
 import { useQuery } from './useQuery';
@@ -15,19 +15,35 @@ import RcpLoadError from '../ui/RcpLoadError';
 const LOAD_ERROR_TEXT = '재료 사전을 불러오지 못했어요 — 다시 시도해 주세요';
 const ACTION_FAIL_TEXT = '반영하지 못했어요 — 다시 시도해 주세요';
 const AUDIT_FAIL_TEXT = 'AI 점검을 하지 못했어요 — 잠시 후 다시 시도해 주세요';
+const AUDIT_TEXT = 'AI 점검';
+const AUDIT_BUSY_TEXT = '점검 중…';
 
-const STATUS_LABEL: Record<DictionaryEntry['status'], string> = {
+const STATUS_LABEL: Record<DictionaryStatus, string> = {
     PENDING: '미판정',
     SKIPPED: '보류',
     CONFIRMED_MAIN: '주재료 확정',
     CONFIRMED_SEASONING: '양념 확정',
+    CONFIRMED_BASIC: '기본양념 확정',
 };
-const STATUS_BADGE: Record<DictionaryEntry['status'], RcpBadgeVariant> = {
+const STATUS_BADGE: Record<DictionaryStatus, RcpBadgeVariant> = {
     PENDING: 'neutral',
     SKIPPED: 'warning',
     CONFIRMED_MAIN: 'good',
     CONFIRMED_SEASONING: 'good',
+    CONFIRMED_BASIC: 'good',
 };
+/** 제안 tier → 적용할 status. MAIN 제안은 서버가 빼고 보내므로 여기 올 일이 없다 */
+const PROPOSAL_STATUS: Record<IngredientProposal['suggestedTier'], DictionaryStatus> = {
+    SEASONING: 'CONFIRMED_SEASONING',
+    BASIC: 'CONFIRMED_BASIC',
+    MAIN: 'CONFIRMED_MAIN',
+};
+const PROPOSAL_HINT: Record<IngredientProposal['suggestedTier'], string> = {
+    SEASONING: '양념일 수 있어요',
+    BASIC: '늘 있는 기본양념일 수 있어요',
+    MAIN: '주재료일 수 있어요',
+};
+const applyAllText = (n: number) => `제안 ${n}개 전체 적용`;
 
 /** 판정 안 된 것(미판정·보류)을 위로 — 오너가 손볼 대상이 먼저 보이게 */
 const needsAttention = (s: DictionaryEntry['status']): boolean => s === 'PENDING' || s === 'SKIPPED';
@@ -41,7 +57,7 @@ export default function DictionaryPanel() {
     const audit = useMutation(() => AUDIT_FAIL_TEXT);
     const [proposals, setProposals] = useState<IngredientProposal[] | null>(null);
 
-    const classify = (name: string, status: DictionaryEntry['status']) => mutation.run(async () => {
+    const classify = (name: string, status: DictionaryStatus) => mutation.run(async () => {
         // 낙관적 업데이트 — 실패하면 useMutation 이 reload 로 재동기화 (도메인 표준 패턴)
         setData((prev) => (prev
             ? prev.map((e) => (e.name === name ? { ...e, status } : e))
@@ -53,9 +69,18 @@ export default function DictionaryPanel() {
         setProposals(await monitorRepository.auditDictionary());
     });
 
-    const applyProposal = (name: string) => mutation.run(async () => {
-        await monitorRepository.classifyIngredient(name, 'CONFIRMED_SEASONING');
-        setProposals((prev) => (prev ? prev.filter((p) => p.name !== name) : prev));
+    const applyProposal = (p: IngredientProposal) => mutation.run(async () => {
+        await monitorRepository.classifyIngredient(p.name, PROPOSAL_STATUS[p.suggestedTier]);
+        setProposals((prev) => (prev ? prev.filter((x) => x.name !== p.name) : prev));
+        await reload();
+    });
+
+    // 전체 적용 — 제안이 80건대라 한 건씩 누르면 실질적으로 못 쓴다 (2026-07-17 실측)
+    const applyAll = () => mutation.run(async () => {
+        if (!proposals || proposals.length === 0) return;
+        await monitorRepository.classifyIngredients(
+            proposals.map((p) => ({ name: p.name, status: PROPOSAL_STATUS[p.suggestedTier] })));
+        setProposals(null);
         await reload();
     });
 
@@ -68,8 +93,16 @@ export default function DictionaryPanel() {
         <section id="rcp-dict-panel" aria-label="재료 사전 관리">
             <div className="rcp-dict-head">
                 <h2 className="rcp-section-label">재료 사전 (오너 전용)</h2>
-                <button type="button" className="rcp-btn rcp-btn-ghost rcp-dict-audit" onClick={runAudit}>
-                    AI 점검
+                {/* 동기 LLM 호출이라 10초 이상 걸린다 — 표시가 없으면 눌러도 아무 반응이 없어
+                    고장으로 보인다 (2026-07-17). busy 동안 disabled 는 useMutation 의 연타 방지를
+                    화면에도 드러내는 것 (막고 있다는 걸 보여준다) */}
+                <button
+                    type="button"
+                    className="rcp-btn rcp-btn-ghost rcp-dict-audit"
+                    onClick={runAudit}
+                    disabled={audit.busy}
+                >
+                    {audit.busy ? AUDIT_BUSY_TEXT : AUDIT_TEXT}
                 </button>
             </div>
             <p className="rcp-screen-subtitle">
@@ -83,21 +116,33 @@ export default function DictionaryPanel() {
             {proposals !== null && (
                 <div className="rcp-dict-proposals" aria-label="AI 점검 제안">
                     {proposals.length === 0 ? (
-                        <p className="rcp-empty">양념으로 볼 만한 새 제안이 없어요.</p>
+                        <p className="rcp-empty">새로 분류할 만한 제안이 없어요.</p>
                     ) : (
-                        proposals.map((p) => (
-                            <div className="rcp-dict-proposal" key={p.name}>
-                                <span className="rcp-dict-name">{p.name}</span>
-                                <span className="rcp-dict-proposal-hint">양념일 수 있어요</span>
-                                <button
-                                    type="button"
-                                    className="rcp-dict-action rcp-dict-action-on"
-                                    onClick={() => void applyProposal(p.name)}
-                                >
-                                    양념으로
-                                </button>
-                            </div>
-                        ))
+                        <>
+                            <button
+                                type="button"
+                                className="rcp-btn rcp-btn-full"
+                                onClick={() => void applyAll()}
+                                disabled={mutation.busy}
+                            >
+                                {applyAllText(proposals.length)}
+                            </button>
+                            {proposals.map((p) => (
+                                <div className="rcp-dict-proposal" key={p.name}>
+                                    <span className="rcp-dict-name">{p.name}</span>
+                                    <span className="rcp-dict-proposal-hint">
+                                        {PROPOSAL_HINT[p.suggestedTier]}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="rcp-dict-action rcp-dict-action-on"
+                                        onClick={() => void applyProposal(p)}
+                                    >
+                                        {STATUS_LABEL[PROPOSAL_STATUS[p.suggestedTier]]}
+                                    </button>
+                                </div>
+                            ))}
+                        </>
                     )}
                 </div>
             )}
@@ -110,6 +155,15 @@ export default function DictionaryPanel() {
                             <span className="rcp-dict-name">{e.name}</span>
                             <RcpBadge variant={STATUS_BADGE[e.status]}>{STATUS_LABEL[e.status]}</RcpBadge>
                             <div className="rcp-dict-actions">
+                                {/* 기본 = 늘 있는 상비 양념(물·소금…) → 매칭에서 아예 뺌.
+                                    양념 = 없을 수 있는 것(고추장·굴소스…) → "양념만 부족" 으로 살아남음 */}
+                                <button
+                                    type="button"
+                                    className={actionClass(e.status === 'CONFIRMED_BASIC')}
+                                    onClick={() => void classify(e.name, 'CONFIRMED_BASIC')}
+                                >
+                                    기본
+                                </button>
                                 <button
                                     type="button"
                                     className={actionClass(e.status === 'CONFIRMED_SEASONING')}

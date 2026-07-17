@@ -524,6 +524,13 @@
   will-change: transform, opacity;
   transform-origin: center center;
 }
+/* 카드 성격 구분(추천의 "내 보관함") — inset box-shadow 로 안쪽 테두리를 그린다.
+   border 를 쓰면 카드 폭이 바뀌어 RcpCoverflow.applyLayout 의 폭 실측(가운데 스냅 padding
+   계산)이 틀어진다. inset 그림자는 레이아웃에 전혀 영향이 없고 border-radius 도 따라간다.
+   (2026-07-17 — 이전의 카드 안 배지 방식은 좁은 카드에서 제목을 통째로 가려 폐기) */
+.rcp-coverflow-card-mine {
+  box-shadow: var(--rcp-shadow-magnet), inset 0 0 0 3px var(--rcp-accent);
+}
 .rcp-coverflow-thumb {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
@@ -548,7 +555,7 @@
   display: flex; align-items: flex-start; gap: 4px;
 }
 .rcp-coverflow-title {
-  flex: 1; min-width: 0; /* 제목이 배지 옆에서 줄어들며 말줄임되게 (2026-07-16 5차 배지 추가) */
+  flex: 1; min-width: 0; /* flex 안에서 말줄임이 먹으려면 필요 (min-width:0 이 없으면 안 줄어듦) */
   color: #1c2b20;
   font-size: var(--rcp-fs-sm); font-weight: var(--rcp-fw-heavy);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* 카드 폭이 좁아 2줄은 과함 — 1줄+말줄임 */

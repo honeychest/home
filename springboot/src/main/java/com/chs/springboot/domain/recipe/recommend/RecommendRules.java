@@ -27,9 +27,15 @@ final class RecommendRules {
        내려온다). 구 ALIASES("다진 마늘"="다진마늘" 등)는 사전에 양쪽 표기를 모두 양념으로
        시드해 흡수됨(슬라이스1은 이름 정확 매칭 — 그룹 병합은 슬라이스2에서 match_key 로). */
 
-    enum Tier { MAIN, SEASONING }
+    /** BASIC = 집에 늘 있는 상비 양념(물·소금·설탕…) — 부족분에서 아예 뺀다. SEASONING(고추장·
+        굴소스…)과 달리 "양념만 부족" 섹션에도 안 남는다. 이게 없으면 완전 가능 섹션이 구조적으로
+        항상 0이다(레시피 115개 중 48개가 "물"을 재료로 적는데 냉장고엔 물이 없음 — 2026-07-17 실측). */
+    enum Tier { MAIN, SEASONING, BASIC }
 
-    static Tier classify(String ingredientName, Set<String> seasoningNames) {
+    static Tier classify(String ingredientName, Set<String> seasoningNames, Set<String> basicNames) {
+        if (basicNames.contains(ingredientName)) {
+            return Tier.BASIC;
+        }
         return seasoningNames.contains(ingredientName) ? Tier.SEASONING : Tier.MAIN;
     }
 
@@ -80,9 +86,10 @@ final class RecommendRules {
         }
     }
 
-    /** 재료 원문 그대로 정확 매칭(fridgeNames 는 사용자 냉장고 재료 이름 집합,
-        seasoningNames 는 사전에서 온 양념 이름 집합 — 부족분을 주재료/양념으로 가른다) */
-    static Match match(Candidate candidate, Set<String> fridgeNames, Set<String> seasoningNames) {
+    /** 재료 원문 그대로 정확 매칭(fridgeNames 는 사용자 냉장고 재료 이름 집합, seasoningNames·
+        basicNames 는 사전에서 온 이름 집합 — 부족분을 주재료/양념으로 가르고 기본양념은 뺀다) */
+    static Match match(Candidate candidate, Set<String> fridgeNames, Set<String> seasoningNames,
+                       Set<String> basicNames) {
         List<String> missingMain = new ArrayList<>();
         List<String> missingSeasoning = new ArrayList<>();
         for (String raw : candidate.ingredients()) {
@@ -90,7 +97,11 @@ final class RecommendRules {
             if (name.isEmpty() || fridgeNames.contains(name)) {
                 continue;
             }
-            if (classify(name, seasoningNames) == Tier.SEASONING) {
+            Tier tier = classify(name, seasoningNames, basicNames);
+            if (tier == Tier.BASIC) {
+                continue; // 늘 있다고 간주 — 부족분에 안 셈
+            }
+            if (tier == Tier.SEASONING) {
                 missingSeasoning.add(name);
             } else {
                 missingMain.add(name);

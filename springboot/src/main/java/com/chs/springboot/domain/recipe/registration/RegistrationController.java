@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
@@ -41,14 +42,13 @@ public class RegistrationController {
         "로컬이 지금 쓸 수 있는 상태인가"는 라우팅과 무관한 로컬 자신의 사실이므로 (2026-07-16) */
     private final LocalRecipeExtractor localExtractor;
     private final IngredientDictionaryRepository dictionary;
-    private final IngredientAuditor auditor;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public RegistrationController(RegistrationRepository repository, VideoRepository videos,
                                   GeminiRateLimiter rateLimiter, VideoMetadataClient metadata,
                                   GikkaAuthProperties authProperties, GikkaUserRepository users,
                                   LocalRecipeExtractor localExtractor,
-                                  IngredientDictionaryRepository dictionary, IngredientAuditor auditor) {
+                                  IngredientDictionaryRepository dictionary) {
         this.localExtractor = localExtractor;
         this.repository = repository;
         this.videos = videos;
@@ -57,7 +57,6 @@ public class RegistrationController {
         this.authProperties = authProperties;
         this.users = users;
         this.dictionary = dictionary;
-        this.auditor = auditor;
     }
 
     public record RegisterRequest(String url) {
@@ -285,7 +284,8 @@ public class RegistrationController {
             IngredientDictionaryRepository.STATUS_PENDING,
             IngredientDictionaryRepository.STATUS_SKIPPED,
             IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN,
-            IngredientDictionaryRepository.STATUS_CONFIRMED_SEASONING);
+            IngredientDictionaryRepository.STATUS_CONFIRMED_SEASONING,
+            IngredientDictionaryRepository.STATUS_CONFIRMED_BASIC);
 
     /** 오너 판정 — 이름의 status 를 정한다(tier 는 파생). 없는 이름=404, 잘못된 status=400 */
     @PostMapping("/dictionary/classify")
@@ -300,19 +300,24 @@ public class RegistrationController {
         }
     }
 
-    /** AI 일괄 점검 — 아직 판정 안 된(PENDING) 이름을 LLM 이 훑어 "양념일 것 같은" 제안만 돌려준다
-        (자동 반영 아님 — 오너가 classify 로 반영. 온디맨드라 제안은 저장하지 않는다). */
-    @PostMapping("/dictionary/audit")
-    public List<IngredientAuditor.Proposal> auditDictionary(@GikkaUserId long userId) {
+    /** 오너 일괄 판정 — [AI 점검] 제안 전체 적용용. 제안이 83개라(2026-07-17 실측) 한 건씩
+        왕복하면 실질적으로 못 쓴다. 개별 classify 와 달리 없는 이름은 404 가 아니라 조용히
+        건너뛴다 — 일괄이라 한 건 때문에 전체를 실패시키지 않는다.
+        @return 실제로 바뀐 건수 (프론트는 안 쓰고 재조회로 화면을 맞춘다 — 확인·로그용) */
+    @PostMapping("/dictionary/classify-batch")
+    public int classifyIngredients(@GikkaUserId long userId, @RequestBody List<ClassifyRequest> requests) {
         requireOwner(userId);
-        List<String> pending = dictionary.all().stream()
-                .filter(e -> IngredientDictionaryRepository.STATUS_PENDING.equals(e.status()))
-                .map(IngredientDictionaryRepository.Entry::name)
-                .toList();
-        return auditor.audit(pending).stream()
-                .filter(p -> "SEASONING".equals(p.suggestedTier()))
-                .toList();
+        if (requests == null || requests.stream().anyMatch(r -> r == null || r.name() == null
+                || r.name().isBlank() || !ALLOWED_STATUSES.contains(r.status()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이름·상태 누락 또는 잘못된 상태");
+        }
+        return dictionary.updateStatuses(requests.stream()
+                .collect(Collectors.toMap(r -> r.name().trim(), ClassifyRequest::status, (a, b) -> b)));
     }
+
+    // AI 일괄 점검(/dictionary/audit)은 IngredientAuditController 로 옮겼다 (2026-07-17) —
+    // 동기 LLM 호출이라 응답이 10~25초라서 nginx `location /api` 의 15초에 끊겼다.
+    // 전용 경로 /api/recipe/llm/** 로 분리. 근거는 그 클래스 주석 참고.
 
     private void requireOwner(long userId) {
         if (!authProperties.isOwner(users.findEmail(userId))) {

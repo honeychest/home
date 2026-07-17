@@ -39,11 +39,10 @@ class RegistrationControllerSearchTest {
     private final GikkaUserRepository users = mock(GikkaUserRepository.class);
     private final LocalRecipeExtractor localExtractor = mock(LocalRecipeExtractor.class);
     private final IngredientDictionaryRepository dictionary = mock(IngredientDictionaryRepository.class);
-    private final IngredientAuditor auditor = mock(IngredientAuditor.class);
 
     private RegistrationController controller() {
         return new RegistrationController(repository, videos, rateLimiter, metadata,
-                new GikkaAuthProperties(), users, localExtractor, dictionary, auditor);
+                new GikkaAuthProperties(), users, localExtractor, dictionary);
     }
 
     @Test

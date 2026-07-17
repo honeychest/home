@@ -7,7 +7,6 @@ import type { RecommendItem, RecommendSnapshot } from '../data/recommendTypes';
 import { recommendRepository } from '../data/recommendRepository';
 import { registrationRepository } from '../data/registrationRepository';
 import { DuplicateVideoError } from '../data/registrationTypes';
-import RcpBadge from '../ui/RcpBadge';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpButton from '../ui/RcpButton';
 import RcpCoverflow from '../ui/RcpCoverflow';
@@ -20,8 +19,10 @@ const LOAD_ERROR_TEXT = '추천을 불러오지 못했어요 — 네트워크 �
 const loadMessage = () => LOAD_ERROR_TEXT;
 const MAX_VISIBLE_CHIPS = 2; // 카드 폭이 좁아 칩이 너무 많으면 사진을 가림 — 나머지는 "+n"
 const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;
-// 내 것/남의 것 구분 — 추천 풀이 gikka 전체로 넓어져 남의 레시피도 뜬다 (2026-07-16 5차)
-const IN_LIBRARY_LABEL = '내 보관함';
+// 내 것/남의 것 구분 — 추천 풀이 gikka 전체로 넓어져 남의 레시피도 뜬다 (2026-07-16 5차).
+// 표시는 카드 테두리 색 (2026-07-17 — 배지가 제목을 가려서 교체). 기본이 남의 것이고
+// 내 보관함이 강조되는 방향 (그린 = --rcp-accent).
+const MINE_CARD_CLASS = 'rcp-coverflow-card-mine';
 const ADD_TO_LIBRARY_TEXT = '내 보관함에 담기';
 const ADD_ERROR_TEXT = '담지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const ALREADY_ADDED_TEXT = '이미 보관함에 있어요';
@@ -67,11 +68,12 @@ function RecommendCard({ item }: { item: RecommendItem }) {
                 <div className="rcp-coverflow-thumb-fallback"><ChefHat size={40} /></div>
             )}
             <div className="rcp-coverflow-vignette" />
-            {/* 제목 행 안에 배지를 함께 둔다 — 카드가 좁아 겹치지 않게 flex 로 나란히
-                (내 보관함에 있는 레시피만 배지, 남의 것은 담을 수 있는 새 레시피) */}
+            {/* 제목만 둔다 — "내 보관함" 구분은 카드 테두리(rcp-coverflow-card-mine)가 담당.
+                이전엔 여기 배지를 나란히 뒀는데, 카드가 좁아 배지가 제목의 폭을 먹어 제목이
+                통째로 말줄임돼 안 보였다 (2026-07-17 실사용 발견). 카드 안에 이름과 경쟁하는
+                요소를 넣지 말 것 — 구분은 레이아웃을 안 건드리는 표현으로. */}
             <div className="rcp-coverflow-name">
                 <span className="rcp-coverflow-title">{item.title}</span>
-                {item.inLibrary && <RcpBadge variant="good">{IN_LIBRARY_LABEL}</RcpBadge>}
             </div>
             {item.missing.length > 0 && (
                 <div className="rcp-coverflow-chips">
@@ -131,6 +133,7 @@ export default function RecommendPage() {
                                 <RcpCoverflow
                                     items={section.items}
                                     keyOf={(item) => item.videoId}
+                                    cardClassOf={(item) => (item.inLibrary ? MINE_CARD_CLASS : undefined)}
                                     renderCard={(item) => <RecommendCard item={item} />}
                                     onCardClick={(item) => setSelected(item)}
                                 />

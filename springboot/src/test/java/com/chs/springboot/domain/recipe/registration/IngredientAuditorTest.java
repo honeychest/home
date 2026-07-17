@@ -12,23 +12,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class IngredientAuditorTest {
 
     @Test
-    @DisplayName("제안 파싱: SEASONING/MAIN 을 그대로 담고, 이름이 빈 항목은 버린다")
+    @DisplayName("제안 파싱: BASIC/SEASONING/MAIN 을 그대로 담고, 이름이 빈 항목은 버린다")
     void parsesProposals() throws Exception {
         var array = new ObjectMapper().readTree("""
-                [{"name":"간장","tier":"SEASONING"},{"name":"두부","tier":"MAIN"},{"name":"  ","tier":"SEASONING"}]
+                [{"name":"고추장","tier":"SEASONING"},{"name":"소금","tier":"BASIC"},
+                 {"name":"두부","tier":"MAIN"},{"name":"  ","tier":"SEASONING"}]
                 """);
 
         var proposals = IngredientAuditor.parse(array);
 
-        assertEquals(2, proposals.size());
-        assertEquals("간장", proposals.get(0).name());
+        assertEquals(3, proposals.size());
+        assertEquals("고추장", proposals.get(0).name());
         assertEquals("SEASONING", proposals.get(0).suggestedTier());
-        assertEquals("두부", proposals.get(1).name());
-        assertEquals("MAIN", proposals.get(1).suggestedTier());
+        assertEquals("소금", proposals.get(1).name());
+        assertEquals("BASIC", proposals.get(1).suggestedTier());
+        assertEquals("두부", proposals.get(2).name());
+        assertEquals("MAIN", proposals.get(2).suggestedTier());
     }
 
     @Test
-    @DisplayName("tier 가 SEASONING 이 아니면 전부 MAIN 으로 정규화 (안전 기본값)")
+    @DisplayName("모르는 tier 는 전부 MAIN 으로 정규화 (안전 기본값 — 스키마가 enum 을 강제하지만 "
+            + "모델이 어겨도 위험한 쪽으로 안 기울게)")
     void unknownTierBecomesMain() throws Exception {
         var array = new ObjectMapper().readTree("""
                 [{"name":"고구마","tier":"???"}]

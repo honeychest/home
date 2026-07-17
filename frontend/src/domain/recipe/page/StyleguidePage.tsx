@@ -16,10 +16,10 @@ import RcpFab from '../ui/RcpFab';
 import { ChefHat } from 'lucide-react';
 
 const COVERFLOW_SAMPLE = [
-    { id: 'a', title: '떡볶이', missing: [] as string[] },
-    { id: 'b', title: '아주아주 길게 적어본 요리 이름도 한 줄 말줄임까지만 (긴 글자 스트레스 테스트)', missing: ['간장', '참기름'] },
-    { id: 'c', title: '제육볶음', missing: ['고추장', '고춧가루', '대파'] },
-    { id: 'd', title: '순두부찌개', missing: ['순두부'] },
+    { id: 'a', title: '떡볶이', missing: [] as string[], mine: true },
+    { id: 'b', title: '아주아주 길게 적어본 요리 이름도 한 줄 말줄임까지만 (긴 글자 스트레스 테스트)', missing: ['간장', '참기름'], mine: true },
+    { id: 'c', title: '제육볶음', missing: ['고추장', '고춧가루', '대파'], mine: false },
+    { id: 'd', title: '순두부찌개', missing: ['순두부'], mine: false },
 ];
 
 const COLOR_TOKENS = [
@@ -126,10 +126,12 @@ export default function StyleguidePage() {
             />
 
             <h2 className="rcp-section-label">겹침형 커버플로우 — RcpCoverflow (.rcp-coverflow)</h2>
-            <Label>{'<RcpCoverflow items keyOf renderCard> — 추천 화면(4차) 3단계 섹션. 가운데 카드 확대(1.15배)+겹침(-60px), 옆 카드 축소(0.62배)·반투명(0.55) — 목업에서 사용자가 슬라이더로 확정한 값을 상수화'}</Label>
+            <Label>{'<RcpCoverflow items keyOf renderCard cardClassOf> — 추천 화면(4차) 3단계 섹션. 가운데 카드 확대(1.15배)+겹침(-60px), 옆 카드 축소(0.62배)·반투명(0.55) — 목업에서 사용자가 슬라이더로 확정한 값을 상수화'}</Label>
+            <Label>{'cardClassOf 로 카드 성격 구분 — 앞 2장이 .rcp-coverflow-card-mine(내 보관함, 그린 테두리). 카드 안 배지로 구분하지 말 것: 카드가 좁아 제목을 가린다(2026-07-17)'}</Label>
             <RcpCoverflow
                 items={COVERFLOW_SAMPLE}
                 keyOf={(item) => item.id}
+                cardClassOf={(item) => (item.mine ? 'rcp-coverflow-card-mine' : undefined)}
                 renderCard={(item) => (
                     <>
                         <div className="rcp-coverflow-thumb-fallback"><ChefHat size={40} /></div>
