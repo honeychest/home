@@ -68,6 +68,8 @@ PROMPT_TEMPLATE = """\
          만드는 영상) 넣지 마세요 — 영상에 실제로 쓰인 것만 적는 원칙이 우선입니다.
    - cookMinutes: 예상 조리 시간(분). 영상에서 알 수 없으면 생략.
    - steps: 조리 순서 요약. 각 단계를 짧은 한 문장으로, 3~7개.
+   - confidentSeasonings: 위 ingredients 중 소금·간장·설탕·고춧가루·참기름처럼 명백히 양념·조미료라고
+     확신하는 것만 이름 그대로 골라 담으세요. 주재료일 수도 있어 애매하면 넣지 마세요(확실한 것만).
 3. RECIPE 가 아닌 경우에만:
    - summary: 영상의 요점 요약 2~3문장. 나중에 다시 찾을 때 내용을 떠올릴 수 있게.
    주의: 화면·음성·설명란에서 명확히 확인되지 않는 고유명사(인물 이름, 지명, 특정 사건·경기
@@ -78,7 +80,7 @@ PROMPT_TEMPLATE = """\
 4. tags: 모든 영상 공통. 이 영상을 검색할 때 쓸 만한 키워드 3~8개. 짧은 명사 위주로.
    이 태그들이 나중에 이 영상을 다시 찾는 핵심 단서이니 summary 보다 중요합니다.
 
-모든 텍스트는 한국어로, 반드시 JSON으로만 답하세요 (키: category,name,ingredients,cookMinutes,steps,summary,tags).
+모든 텍스트는 한국어로, 반드시 JSON으로만 답하세요 (키: category,name,ingredients,cookMinutes,steps,confidentSeasonings,summary,tags).
 
 음성 전사:
 {transcript}

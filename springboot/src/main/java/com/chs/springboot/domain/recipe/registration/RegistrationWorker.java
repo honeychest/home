@@ -26,13 +26,16 @@ public class RegistrationWorker {
     private final GeminiRateLimiter rateLimiter;
     private final RecipeExtractor extractor;
     private final GikkaMediaProperties properties;
+    private final IngredientDictionaryRepository dictionary;
 
     public RegistrationWorker(VideoRepository videos, GeminiRateLimiter rateLimiter,
-                              RecipeExtractor extractor, GikkaMediaProperties properties) {
+                              RecipeExtractor extractor, GikkaMediaProperties properties,
+                              IngredientDictionaryRepository dictionary) {
         this.videos = videos;
         this.rateLimiter = rateLimiter;
         this.extractor = extractor;
         this.properties = properties;
+        this.dictionary = dictionary;
     }
 
     @Scheduled(fixedDelay = 5000, initialDelay = 15000)
@@ -65,6 +68,12 @@ public class RegistrationWorker {
             List<String> signals = RegistrationRules.analysisSignals(item.description(), result.transcriptChars());
             videos.markDone(item.videoId(), result.category(), recipe,
                     result.summary(), result.tags(), RecipeExtractor.SUMMARY_VERSION, signals);
+            if ("RECIPE".equals(result.category()) && result.ingredients() != null) {
+                // 추출된 재료 이름을 사전에 이어서 채우고(PENDING), 모델이 확신한 양념은 자동 확정 (5차-4 슬라이스1).
+                // 확신 없는 것은 PENDING(=MAIN 안전 기본값)으로 남아 오너·AI 점검이 나중에 판정한다.
+                dictionary.upsertPending(result.ingredients());
+                dictionary.confirmSeasoningIfPending(result.confidentSeasonings());
+            }
             log.info("[gikka] 분석 완료 video={} category={}", item.videoId(), result.category());
         } catch (RecipeExtractor.TransientFailureException e) {
             videos.releaseAfterRateLimit(item.videoId(), e.getMessage());

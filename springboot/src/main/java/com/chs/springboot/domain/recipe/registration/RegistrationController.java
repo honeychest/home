@@ -8,6 +8,7 @@ package com.chs.springboot.domain.recipe.registration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
@@ -39,12 +40,15 @@ public class RegistrationController {
     /** 오너 모니터의 로컬 추출기 상태 표시용 — Hybrid(@Primary)가 아니라 로컬 구현체를 직접 받는다.
         "로컬이 지금 쓸 수 있는 상태인가"는 라우팅과 무관한 로컬 자신의 사실이므로 (2026-07-16) */
     private final LocalRecipeExtractor localExtractor;
+    private final IngredientDictionaryRepository dictionary;
+    private final IngredientAuditor auditor;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public RegistrationController(RegistrationRepository repository, VideoRepository videos,
                                   GeminiRateLimiter rateLimiter, VideoMetadataClient metadata,
                                   GikkaAuthProperties authProperties, GikkaUserRepository users,
-                                  LocalRecipeExtractor localExtractor) {
+                                  LocalRecipeExtractor localExtractor,
+                                  IngredientDictionaryRepository dictionary, IngredientAuditor auditor) {
         this.localExtractor = localExtractor;
         this.repository = repository;
         this.videos = videos;
@@ -52,6 +56,8 @@ public class RegistrationController {
         this.metadata = metadata;
         this.authProperties = authProperties;
         this.users = users;
+        this.dictionary = dictionary;
+        this.auditor = auditor;
     }
 
     public record RegisterRequest(String url) {
@@ -71,6 +77,44 @@ public class RegistrationController {
     @GetMapping
     public List<RegistrationResponse> list(@GikkaUserId long userId) {
         return repository.list(userId).stream().map(this::toResponse).toList();
+    }
+
+    /** 보관함 검색 결과 (2026-07-16 5차) — 내 등록 우선(mine) + gikka 전체 보완(others).
+        others 는 내가 등록 안 한 완료 영상이라 registeredAt=null 로 내려간다 (프론트 GikkaVideo). */
+    public record SearchResponse(List<RegistrationResponse> mine, List<RegistrationResponse> others) {
+    }
+
+    /** 보관함 검색 — 내 보관함 우선, 결과가 부족해도 gikka 전체(등록 무관)를 항상 함께 보완 노출
+        (2026-07-16 5차, 임계값 없이 항상 두 섹션 — CONTEXT.md "5차 확장" 2번). 매칭은 제목·요리
+        이름·태그 부분일치. limit=others 개수 상한(프론트 상수). q 가 비면 빈 결과. */
+    @GetMapping("/search")
+    public SearchResponse search(@GikkaUserId long userId,
+                                 @RequestParam String q, @RequestParam int limit) {
+        String query = q.trim();
+        if (query.isEmpty()) {
+            return new SearchResponse(List.of(), List.of());
+        }
+        List<RegistrationResponse> mine = repository.searchMine(userId, query).stream()
+                .map(this::toResponse).toList();
+        List<RegistrationResponse> others = repository.searchOthers(userId, query, limit).stream()
+                .map(this::toResponse).toList();
+        return new SearchResponse(mine, others);
+    }
+
+    /** gikka 전체 보완에서 고른 영상을 내 보관함에 담기 (2026-07-16 5차) — URL 재입력·재분석 없이
+        video_id 로 내 registration 만 새로 만든다(이미 분석돼 있으므로). 없는·삭제된 영상=404,
+        이미 내 것=409. 기존 "이미 있으면 연결만" 경로(registerLink)와 같은 성격. */
+    @PostMapping("/by-video/{videoId}")
+    public RegistrationResponse registerByVideoId(@GikkaUserId long userId, @PathVariable String videoId) {
+        if (!videos.existsActive(videoId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "없는 영상");
+        }
+        if (repository.exists(userId, videoId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 등록된 영상");
+        }
+        repository.registerLink(userId, videoId, Optional.empty());
+        return repository.find(userId, videoId).map(this::toResponse)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "등록 직후 조회 실패"));
     }
 
     /** 영상 1개 등록 — 이미 있는 영상이면 메타 조회 없이 연결만(길이 컷 판정도 이미 끝난 상태) */
@@ -224,6 +268,52 @@ public class RegistrationController {
         }
     }
 
+    /* ── 재료 사전 관리 (오너 전용) — 2026-07-17 5차-4 슬라이스1. classify() 가 읽는 MAIN/SEASONING
+       분류의 단일 원본(ingredient_dictionary). 오너가 tier 를 직접 확정하거나 [AI 점검]으로 제안을
+       받아 반영한다. "오너 전용 기능은 모니터 한 곳에 모은다"(2026-07-13) 정책에 따라 여기에 둔다. */
+
+    @GetMapping("/dictionary")
+    public List<IngredientDictionaryRepository.Entry> dictionary(@GikkaUserId long userId) {
+        requireOwner(userId);
+        return dictionary.all();
+    }
+
+    public record ClassifyRequest(String name, String status) {
+    }
+
+    private static final Set<String> ALLOWED_STATUSES = Set.of(
+            IngredientDictionaryRepository.STATUS_PENDING,
+            IngredientDictionaryRepository.STATUS_SKIPPED,
+            IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN,
+            IngredientDictionaryRepository.STATUS_CONFIRMED_SEASONING);
+
+    /** 오너 판정 — 이름의 status 를 정한다(tier 는 파생). 없는 이름=404, 잘못된 status=400 */
+    @PostMapping("/dictionary/classify")
+    public void classifyIngredient(@GikkaUserId long userId, @RequestBody ClassifyRequest request) {
+        requireOwner(userId);
+        if (request == null || request.name() == null || request.name().isBlank()
+                || !ALLOWED_STATUSES.contains(request.status())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이름·상태 누락 또는 잘못된 상태");
+        }
+        if (!dictionary.updateStatus(request.name().trim(), request.status())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "사전에 없는 이름");
+        }
+    }
+
+    /** AI 일괄 점검 — 아직 판정 안 된(PENDING) 이름을 LLM 이 훑어 "양념일 것 같은" 제안만 돌려준다
+        (자동 반영 아님 — 오너가 classify 로 반영. 온디맨드라 제안은 저장하지 않는다). */
+    @PostMapping("/dictionary/audit")
+    public List<IngredientAuditor.Proposal> auditDictionary(@GikkaUserId long userId) {
+        requireOwner(userId);
+        List<String> pending = dictionary.all().stream()
+                .filter(e -> IngredientDictionaryRepository.STATUS_PENDING.equals(e.status()))
+                .map(IngredientDictionaryRepository.Entry::name)
+                .toList();
+        return auditor.audit(pending).stream()
+                .filter(p -> "SEASONING".equals(p.suggestedTier()))
+                .toList();
+    }
+
     private void requireOwner(long userId) {
         if (!authProperties.isOwner(users.findEmail(userId))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "오너 전용 기능");
@@ -244,7 +334,9 @@ public class RegistrationController {
                 readJson(row.recipeJson(), "recipe_json", row.videoId()),
                 row.summary(),
                 readJson(row.tagsJson(), "tags", row.videoId()),
-                row.registeredAt().toString(),
+                // 검색 보완(others)은 내 등록이 아니라 registeredAt 이 null — 이 경우 null 로 내려간다
+                // (프론트 GikkaVideo 는 registeredAt 을 안 쓴다). 내 등록 항목은 항상 값이 있다.
+                row.registeredAt() == null ? null : row.registeredAt().toString(),
                 readJson(row.analysisSignalsJson(), "analysis_signals", row.videoId()));
     }
 

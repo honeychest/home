@@ -9,7 +9,9 @@ export interface IngredientStatus {
 
 /** 추천 카드 하나. missing = 카드에 표시할 부족분(완전 가능=빈 배열, 양념만 부족=부족한 양념
     이름, 재료 부족=부족한 재료 이름, 개수 상한 없음). ingredients·cookMinutes·steps 는
-    카드 탭 → 상세 팝업용(2026-07-14 확정) */
+    카드 탭 → 상세 팝업용(2026-07-14 확정). inLibrary = 이 레시피가 내 보관함에 있는지 —
+    추천 풀이 gikka 전체로 넓어져(2026-07-16 5차) 남의 레시피도 뜨므로, 내 것엔 배지를,
+    남의 것엔 "내 보관함에 담기" 버튼을 보여주는 판단에 쓴다 */
 export interface RecommendItem {
     videoId: string;
     url: string;
@@ -19,6 +21,7 @@ export interface RecommendItem {
     ingredients: IngredientStatus[];
     cookMinutes: number | null;
     steps: string[];
+    inLibrary: boolean;
 }
 
 /** 3단계 — 완전 가능 / 양념만 부족 / 재료 부족(1~3개, 부족 적은 순). 각 섹션 최대 5개 */

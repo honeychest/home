@@ -33,7 +33,8 @@ class HybridRecipeExtractorTest {
         RestClient.Builder geminiBuilder = RestClient.builder();
         geminiServer = MockRestServiceServer.bindTo(geminiBuilder).build();
         GikkaTelegramNotifier notifier = new GikkaTelegramNotifier(RestClient.builder(), properties);
-        GeminiRecipeExtractor gemini = new GeminiRecipeExtractor(geminiBuilder, properties, notifier);
+        GeminiRecipeExtractor gemini = new GeminiRecipeExtractor(
+                new GeminiJsonClient(geminiBuilder, properties), properties, notifier);
 
         hybrid = new HybridRecipeExtractor(local, gemini);
     }

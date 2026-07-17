@@ -8,17 +8,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClient;
 
 @Component
 public class GeminiRecipeExtractor implements RecipeExtractor {
@@ -42,6 +35,9 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                      만드는 영상) 넣지 마세요 — 영상에 실제로 쓰인 것만 적는 원칙이 우선입니다.
                - cookMinutes: 예상 조리 시간(분). 영상에서 알 수 없으면 생략.
                - steps: 조리 순서 요약. 각 단계를 짧은 한 문장으로, 3~7개.
+               - confidentSeasonings: 위 ingredients 중 소금·간장·설탕·고춧가루·참기름처럼 명백히
+                 양념·조미료라고 확신하는 것만 이름 그대로 골라 담으세요. 주재료일 수도 있어 애매하면
+                 넣지 마세요(넣은 것은 자동으로 양념 처리되니 확실한 것만).
             3. RECIPE 가 아닌 경우에만:
                - summary: 영상의 요점 요약 2~3문장. 나중에 다시 찾을 때 내용을 떠올릴 수 있게.
                  화면·음성·설명란에서 명확히 확인되지 않는 고유명사(인물 이름, 지명, 특정
@@ -57,9 +53,7 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiRecipeExtractor.class);
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    private final RestClient rest;
+    private final GeminiJsonClient gemini;
     private final GikkaMediaProperties properties;
     private final GikkaTelegramNotifier notifier;
 
@@ -67,9 +61,9 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
     // 재기동 전까지 유지한다 (매 호출 404 낭비 방지. 인스턴스별 판정 — 2인스턴스 각자 전환).
     private volatile boolean failedOver = false;
 
-    public GeminiRecipeExtractor(RestClient.Builder builder, GikkaMediaProperties properties,
+    public GeminiRecipeExtractor(GeminiJsonClient gemini, GikkaMediaProperties properties,
                                  GikkaTelegramNotifier notifier) {
-        this.rest = builder.baseUrl("https://generativelanguage.googleapis.com").build();
+        this.gemini = gemini;
         this.properties = properties;
         this.notifier = notifier;
     }
@@ -100,32 +94,13 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
         if (description != null && !description.isBlank()) {
             parts.add(Map.of("text", "영상 설명란 원문:\n" + description));
         }
-        Map<String, Object> body = Map.of(
-                "contents", List.of(Map.of("parts", parts)),
-                "generationConfig", Map.of(
-                        "responseMimeType", "application/json",
-                        "responseSchema", responseSchema(),
-                        "mediaResolution", "MEDIA_RESOLUTION_LOW"));
-        try {
-            JsonNode response = rest.post()
-                    .uri("/v1beta/models/{model}:generateContent?key={key}",
-                            model, properties.getGeminiApiKey())
-                    .body(body)
-                    .retrieve()
-                    .body(JsonNode.class);
-            return parseEnvelope(response);
-        } catch (HttpClientErrorException e) {
-            if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
-                throw new TransientFailureException(e.getMessage());
-            }
-            throw e;
-        } catch (HttpServerErrorException e) {
-            // 503 "high demand" 등 Gemini 쪽 일시적 과부하 (2026-07-13 실측) — 영상 문제가 아님
-            throw new TransientFailureException(e.getMessage());
-        } catch (ResourceAccessException e) {
-            // 응답 지연으로 타임아웃(HttpClientConfig 의 readTimeout=300s) — 이것도 실측상 일시적 현상
-            throw new TransientFailureException(e.getMessage());
-        }
+        Map<String, Object> generationConfig = Map.of(
+                "responseMimeType", "application/json",
+                "responseSchema", responseSchema(),
+                "mediaResolution", "MEDIA_RESOLUTION_LOW");
+        // 429/503/타임아웃은 GeminiJsonClient 이 TransientFailureException 으로 매핑한다.
+        // 404(모델 폐쇄)는 그대로 전파돼 아래 extract() 의 페일오버가 잡는다.
+        return ExtractionResultJson.parse(gemini.generate(model, parts, generationConfig));
     }
 
     /** 구조화 출력 스키마 — 모델이 자유 서술로 새는 것을 방지 */
@@ -138,21 +113,9 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                         "ingredients", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
                         "cookMinutes", Map.of("type", "INTEGER"),
                         "steps", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
+                        "confidentSeasonings", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
                         "summary", Map.of("type", "STRING"),
                         "tags", Map.of("type", "ARRAY", "items", Map.of("type", "STRING"))),
                 "required", List.of("category"));
-    }
-
-    /** Gemini 응답 봉투(candidates[0]…parts[0].text) 를 벗겨 공용 파서에 넘긴다 — 봉투 모양은
-        Gemini 만의 사정이라 여기 남고, 알맹이 파싱은 ExtractionResultJson 이 소유.
-        transcriptChars 는 Gemini 응답에 없어 null 이 되고, Hybrid 가 로컬 결과에서 이어붙인다 */
-    static ExtractionResult parseEnvelope(JsonNode response) {
-        String text = response.path("candidates").path(0).path("content").path("parts").path(0)
-                .path("text").asText("");
-        try {
-            return ExtractionResultJson.parse(MAPPER.readTree(text));
-        } catch (Exception e) {
-            throw new IllegalStateException("Gemini 응답 파싱 실패: " + text, e);
-        }
     }
 }

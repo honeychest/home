@@ -46,6 +46,22 @@ export interface LocalExtractorHealth {
     denoOnPath: boolean;
 }
 
+/** 재료 사전 항목 — 양념 여부 판정의 단일 원본 (2026-07-17 5차-4 슬라이스1, 오너 전용).
+    status 가 곧 양념 여부의 원본(CONFIRMED_SEASONING 만 양념, 그 외는 주재료 안전 기본값) —
+    별도 tier 필드를 두지 않는다(status 의 순수 파생이라 2026-07-17 점검에서 제거).
+    matchKey = 슬라이스2(그룹 매칭)용 — 슬라이스1은 전부 자기 이름이라 화면에선 아직 안 쓴다. */
+export interface DictionaryEntry {
+    name: string;
+    matchKey: string;
+    status: 'PENDING' | 'SKIPPED' | 'CONFIRMED_MAIN' | 'CONFIRMED_SEASONING';
+}
+
+/** AI 점검 제안 한 건 — LLM 이 "양념일 수 있다"고 제시한 이름. 자동 반영 아님(오너가 확인). */
+export interface IngredientProposal {
+    name: string;
+    suggestedTier: 'MAIN' | 'SEASONING';
+}
+
 /** 전 사용자 대기열 스냅샷 — 대기열 크기·워커 생존·429 이력 + 항목 목록 (2026-07-13 확정) */
 export interface MonitorSnapshot {
     waitingCount: number;

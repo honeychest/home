@@ -4,14 +4,18 @@
 package com.chs.springboot.domain.recipe.recommend;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
 import com.chs.springboot.domain.recipe.fridge.FridgeItemResponse;
 import com.chs.springboot.domain.recipe.fridge.FridgeRepository;
+import com.chs.springboot.domain.recipe.registration.IngredientDictionaryRepository;
 import com.chs.springboot.domain.recipe.registration.RegistrationRepository;
+import com.chs.springboot.domain.recipe.registration.VideoRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -24,20 +28,27 @@ import org.springframework.web.bind.annotation.RestController;
 public class RecommendController {
 
     private final RegistrationRepository registrations;
+    private final VideoRepository videos;
     private final FridgeRepository fridge;
+    private final IngredientDictionaryRepository dictionary;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public RecommendController(RegistrationRepository registrations, FridgeRepository fridge) {
+    public RecommendController(RegistrationRepository registrations, VideoRepository videos,
+                              FridgeRepository fridge, IngredientDictionaryRepository dictionary) {
         this.registrations = registrations;
+        this.videos = videos;
         this.fridge = fridge;
+        this.dictionary = dictionary;
     }
 
     /** missing: 완전 가능=빈 목록, 양념만 부족=부족한 양념 이름, 재료 부족=부족한 재료 이름
         (개수 상한 없음 — 2026-07-14 확정, 부족 적은 순으로 항상 표시).
-        ingredients·cookMinutes·steps: 카드 탭 → 상세 팝업용(2026-07-14 확정) */
+        ingredients·cookMinutes·steps: 카드 탭 → 상세 팝업용(2026-07-14 확정).
+        inLibrary: 이 레시피가 내 보관함에 있는지 (2026-07-16 5차 — 추천 풀이 gikka 전체로 넓어져
+        남의 레시피도 뜨므로, 카드 배지·"담기" 버튼 노출을 프론트가 판단하게 표시) */
     public record RecommendItem(String videoId, String url, String title, String thumbnailUrl,
                                 List<String> missing, List<RecommendRules.IngredientStatus> ingredients,
-                                Integer cookMinutes, List<String> steps) {
+                                Integer cookMinutes, List<String> steps, boolean inLibrary) {
     }
 
     public record RecommendSnapshot(List<RecommendItem> complete, List<RecommendItem> seasoningOnly,
@@ -48,22 +59,26 @@ public class RecommendController {
     public RecommendSnapshot recommend(@GikkaUserId long userId) {
         var fridgeNames = fridge.list(userId).stream()
                 .map(FridgeItemResponse::name).collect(Collectors.toSet());
+        // 후보는 gikka 전체 완료 요리(콜드스타트 대응) — 냉장고 매칭은 그대로 내 것 기준.
+        // "내 보관함" 여부는 내 등록 videoId 집합으로 표시만 한다 (매칭에는 안 씀).
+        Set<String> myVideoIds = new HashSet<>(registrations.videoIdsForUser(userId));
+        Set<String> seasoningNames = dictionary.seasoningNames();
 
-        List<RecommendRules.Match> matches = registrations.recipesForUser(userId).stream()
+        List<RecommendRules.Match> matches = videos.allDoneRecipes().stream()
                 .map(this::toCandidate)
                 .flatMap(Optional::stream)
-                .map(candidate -> RecommendRules.match(candidate, fridgeNames))
+                .map(candidate -> RecommendRules.match(candidate, fridgeNames, seasoningNames))
                 .toList();
 
         RecommendRules.Sections sections = RecommendRules.bucket(matches);
         return new RecommendSnapshot(
-                sections.complete().stream().map(this::toItem).toList(),
-                sections.seasoningOnly().stream().map(this::toItem).toList(),
-                sections.needsIngredients().stream().map(this::toItem).toList());
+                toItems(sections.complete(), myVideoIds),
+                toItems(sections.seasoningOnly(), myVideoIds),
+                toItems(sections.needsIngredients(), myVideoIds));
     }
 
     /** recipe_json 이 없으면(이론상 RECIPE+DONE 인데 비어있는 이상 상태) 추천 대상에서 조용히 제외 */
-    private Optional<RecommendRules.Candidate> toCandidate(RegistrationRepository.Row row) {
+    private Optional<RecommendRules.Candidate> toCandidate(VideoRepository.Row row) {
         if (row.recipeJson() == null) {
             return Optional.empty();
         }
@@ -84,10 +99,14 @@ public class RecommendController {
                 row.videoId(), row.url(), name, row.thumbnailUrl(), ingredients, cookMinutes, steps));
     }
 
-    private RecommendItem toItem(RecommendRules.Match match) {
+    private List<RecommendItem> toItems(List<RecommendRules.Match> matches, Set<String> myVideoIds) {
+        return matches.stream().map(match -> toItem(match, myVideoIds)).toList();
+    }
+
+    private RecommendItem toItem(RecommendRules.Match match, Set<String> myVideoIds) {
         RecommendRules.Candidate c = match.candidate();
         List<String> missing = !match.missingMain().isEmpty() ? match.missingMain() : match.missingSeasoning();
         return new RecommendItem(c.videoId(), c.url(), c.title(), c.thumbnailUrl(), missing,
-                match.ingredientStatuses(), c.cookMinutes(), c.steps());
+                match.ingredientStatuses(), c.cookMinutes(), c.steps(), myVideoIds.contains(c.videoId()));
     }
 }

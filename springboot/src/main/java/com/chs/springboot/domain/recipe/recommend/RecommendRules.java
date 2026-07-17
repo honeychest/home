@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 final class RecommendRules {
@@ -19,36 +18,19 @@ final class RecommendRules {
     private RecommendRules() {
     }
 
-    /* ── 1. 재료/양념 분류 (CONTEXT.md 4차 확정) ──
-       정규화(대파=파 통합 등)는 원칙적으로 하지 않는다 — 원문 그대로 정확 매칭.
-       단, 실사용 데이터(2026-07-14, "캔참치" 레시피 채점)로 발견된 명백한 표기 차이만
-       예외로 별칭(ALIASES) 처리한다 — "다진 마늘"(띄어쓰기)="다진마늘", "백식초"="식초"
-       (사용자 확인: 둘 다 "같은 걸 가리키는 표기 차이"). 반대로 "맛소금"≠"소금",
-       "진간장"·"양조간장"≠"간장"은 실제로 다른 재료라는 사용자 판단으로 합치지 않는다
-       (여기가 바로 "정규화가 필요한지 애매하다"던 지점 — 표기 차이만 좁게 흡수하고
-       종류가 다른 건 그대로 둔다는 원칙으로 정리됨).
-       목록은 오너가 정한 코드 상수(관리 화면 없음 — 이 규모에서는 화면보다 코드 배포가
-       더 가볍다는 판단). 확장 여지: 나중에 SEASONING 을 BASIC/SPECIAL 로 세분화하거나
-       사용자별 목록으로 바꿀 때 이 안(Tier·SEASONINGS·ALIASES·classify)만 고치면 된다 —
-       호출부(match)는 Tier 값만 본다. */
+    /* ── 1. 재료/양념 분류 (2026-07-17 5차-4 슬라이스1 — DB 사전으로 이관) ──
+       분류 목록은 이제 코드 상수가 아니라 재료 사전(ingredient_dictionary)이 소유한다.
+       이 순수 모듈은 DB 를 모른다 — 호출부(RecommendController)가 사전에서 양념 이름 집합을
+       읽어 인자로 넘긴다(pattern-pure-rules 유지, 테스트는 집합만 주입하면 됨).
+       seasoningNames 에 든 이름만 SEASONING, 나머지는 전부 MAIN(판정 전 이름을 양념으로 잘못
+       빼면 추천에서 사라지므로 MAIN 이 안전 기본값 — 사전의 PENDING/SKIPPED 도 tier=MAIN 으로
+       내려온다). 구 ALIASES("다진 마늘"="다진마늘" 등)는 사전에 양쪽 표기를 모두 양념으로
+       시드해 흡수됨(슬라이스1은 이름 정확 매칭 — 그룹 병합은 슬라이스2에서 match_key 로). */
 
     enum Tier { MAIN, SEASONING }
 
-    private static final Set<String> SEASONINGS = Set.of(
-            "물", "소금", "설탕", "간장", "고추장", "고춧가루", "된장", "후추", "식용유",
-            "참기름", "들기름", "다진마늘", "다진생강", "맛술", "식초", "물엿", "올리고당",
-            "전분가루", "통깨"
-    );
-
-    /** 표기 차이만 좁게 흡수(2026-07-14 확정) — 종류가 다른 재료는 여기 넣지 않는다 */
-    private static final Map<String, String> ALIASES = Map.of(
-            "다진 마늘", "다진마늘",
-            "백식초", "식초"
-    );
-
-    static Tier classify(String ingredientName) {
-        String canonical = ALIASES.getOrDefault(ingredientName, ingredientName);
-        return SEASONINGS.contains(canonical) ? Tier.SEASONING : Tier.MAIN;
+    static Tier classify(String ingredientName, Set<String> seasoningNames) {
+        return seasoningNames.contains(ingredientName) ? Tier.SEASONING : Tier.MAIN;
     }
 
     /* ── 2. 매칭 ── */
@@ -98,8 +80,9 @@ final class RecommendRules {
         }
     }
 
-    /** 재료 원문 그대로 정확 매칭(fridgeNames 는 사용자 냉장고 재료 이름 집합) */
-    static Match match(Candidate candidate, Set<String> fridgeNames) {
+    /** 재료 원문 그대로 정확 매칭(fridgeNames 는 사용자 냉장고 재료 이름 집합,
+        seasoningNames 는 사전에서 온 양념 이름 집합 — 부족분을 주재료/양념으로 가른다) */
+    static Match match(Candidate candidate, Set<String> fridgeNames, Set<String> seasoningNames) {
         List<String> missingMain = new ArrayList<>();
         List<String> missingSeasoning = new ArrayList<>();
         for (String raw : candidate.ingredients()) {
@@ -107,7 +90,7 @@ final class RecommendRules {
             if (name.isEmpty() || fridgeNames.contains(name)) {
                 continue;
             }
-            if (classify(name) == Tier.SEASONING) {
+            if (classify(name, seasoningNames) == Tier.SEASONING) {
                 missingSeasoning.add(name);
             } else {
                 missingMain.add(name);

@@ -34,7 +34,9 @@ class GeminiRecipeExtractorTest {
         server = MockRestServiceServer.bindTo(builder).build();
         // 토큰이 비어 있으므로 notify 는 무발송 — 테스트에서 외부 호출 없음
         GikkaTelegramNotifier notifier = new GikkaTelegramNotifier(RestClient.builder(), properties);
-        extractor = new GeminiRecipeExtractor(builder, properties, notifier);
+        // Gemini 호출 봉투·일시적 실패 매핑은 GeminiJsonClient seam 소유 (2026-07-17 점검) — mock 서버는
+        // 그 client 의 builder 에 바인딩. 추출기의 HTTP 레벨 기대(모델 URL·429/503·페일오버)는 그대로 통과.
+        extractor = new GeminiRecipeExtractor(new GeminiJsonClient(builder, properties), properties, notifier);
     }
 
     /** Gemini 응답 봉투: candidates[0].content.parts[0].text 안에 JSON 문자열 */
@@ -191,21 +193,6 @@ class GeminiRecipeExtractorTest {
         assertThrows(org.springframework.web.client.HttpClientErrorException.NotFound.class,
                 () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
         server.verify();
-    }
-
-    @Test
-    @DisplayName("봉투 파싱은 순수 함수 — HTTP 없이 직접 검증 (candidates[0]…parts[0].text 안의 JSON)")
-    void parsesEnvelopeWithoutHttp() throws Exception {
-        var envelope = new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
-                {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"RECIPE\\",\\"name\\":\\"김치찌개\\",\\"ingredients\\":[\\"김치\\"],\\"steps\\":[\\"끓인다\\"]}"}]}}]}
-                """);
-
-        var result = GeminiRecipeExtractor.parseEnvelope(envelope);
-
-        assertEquals("RECIPE", result.category());
-        assertEquals("김치찌개", result.name());
-        assertEquals(List.of("김치"), result.ingredients());
-        assertNull(result.cookMinutes());
     }
 
     private void expectFallbackSuccess() {

@@ -95,13 +95,53 @@ public class RegistrationRepository {
                 .query(this::mapRow).list();
     }
 
-    /** 추천 계산용: 완료된 요리(RECIPE+DONE)만 (2026-07-14 4차 확정 — recipe_json 이 항상 있음) */
-    public List<Row> recipesForUser(long userId) {
-        return jdbc.sql("SELECT " + JOINED_COLUMNS + " " + JOIN
-                        + "WHERE r.user_id = :userId AND v.status = 'DONE' AND v.category = 'RECIPE' "
-                        + "ORDER BY r.registered_at DESC")
+    /** 내가 등록한 영상 ID 전부 — 추천에서 "내 보관함" 여부 표시용 (2026-07-16 5차, 추천 소스가
+        gikka 전체로 확장되며 신설. 구 recipesForUser 는 후보 소스가 VideoRepository.allDoneRecipes 로
+        옮겨가 유일 호출부가 사라져 제거함). */
+    public List<String> videoIdsForUser(long userId) {
+        return jdbc.sql("SELECT video_id FROM registration WHERE user_id = :userId")
                 .param("userId", userId)
+                .query(String.class).list();
+    }
+
+    /** 보관함 검색 매칭 조건 (2026-07-16 5차) — 제목·추출된 요리 이름·검색 태그에 부분일치(대소문자 무시).
+        tags 는 JSONB 배열이라 ::text 통짜 비교로 원소 안 부분일치도 잡는다. recipe_json->>'name' 은
+        추출된 요리 이름. :like 는 likeParam 이 %,_,\ 를 리터럴로 escape 해 바인딩(ESCAPE '\' 와 짝).
+        searchMine·searchOthers 두 조회의 단일 원본 — 매칭 규칙이 갈리지 않게 한 곳에 둔다. */
+    private static final String SEARCH_MATCH =
+            "(v.title ILIKE :like ESCAPE '\\' "
+            + "OR v.recipe_json->>'name' ILIKE :like ESCAPE '\\' "
+            + "OR v.tags::text ILIKE :like ESCAPE '\\')";
+
+    /** 보관함 검색 — 내 등록 중 매칭 (2026-07-16 5차). 상태 무관: 방금 등록해 분석 전인 항목도
+        제목으로 찾히게 한다 (내 것이니 진행 상태 그대로 보여주면 됨). 최신 등록이 앞. */
+    public List<Row> searchMine(long userId, String query) {
+        return jdbc.sql("SELECT " + JOINED_COLUMNS + " " + JOIN
+                        + "WHERE r.user_id = :userId AND " + SEARCH_MATCH + " "
+                        + "ORDER BY r.registered_at DESC")
+                .param("userId", userId).param("like", likeParam(query))
                 .query(this::mapRow).list();
+    }
+
+    /** 보관함 검색 보완 — 내가 등록 안 한 gikka 전체 완료(DONE) 영상 중 매칭 (전 분류, 2026-07-16 5차).
+        "이런 것도 있어요". registeredAt 은 LEFT JOIN 미매칭이라 NULL 로 내려간다(내 등록이 아님).
+        video LEFT JOIN 내 registration 패턴 — 추천 3번(내 것 표시 + 전체 풀)도 같은 형태를 재사용한다.
+        최신 분석이 앞, limit(표시 개수 원본은 프론트 상수). */
+    public List<Row> searchOthers(long userId, String query, int limit) {
+        return jdbc.sql("SELECT " + JOINED_COLUMNS
+                        + " FROM video v LEFT JOIN registration r"
+                        + " ON r.video_id = v.video_id AND r.user_id = :userId"
+                        + " WHERE r.user_id IS NULL AND v.status = 'DONE' AND " + SEARCH_MATCH
+                        + " ORDER BY v.queued_at DESC LIMIT :limit")
+                .param("userId", userId).param("like", likeParam(query)).param("limit", limit)
+                .query(this::mapRow).list();
+    }
+
+    /** ILIKE 파라미터로 감싸기 — 사용자 입력의 \,%,_ 를 리터럴로 escape (ESCAPE '\' 와 짝).
+        안 하면 사용자가 친 %·_ 가 와일드카드로 동작해 엉뚱한 결과가 난다. */
+    private static String likeParam(String query) {
+        String escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return "%" + escaped + "%";
     }
 
     /** 모니터링 화면 한 행 — 전 사용자 대기열 실시간 추적용 (오너 전용) */

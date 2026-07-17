@@ -134,7 +134,7 @@ export default function StyleguidePage() {
                     <>
                         <div className="rcp-coverflow-thumb-fallback"><ChefHat size={40} /></div>
                         <div className="rcp-coverflow-vignette" />
-                        <div className="rcp-coverflow-name"><span>{item.title}</span></div>
+                        <div className="rcp-coverflow-name"><span className="rcp-coverflow-title">{item.title}</span></div>
                         {item.missing.length > 0 && (
                             <div className="rcp-coverflow-chips">
                                 {item.missing.slice(0, 2).map((m) => (

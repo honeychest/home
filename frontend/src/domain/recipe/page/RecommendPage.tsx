@@ -5,15 +5,29 @@ import { useCallback, useState } from 'react';
 import { ChefHat } from 'lucide-react';
 import type { RecommendItem, RecommendSnapshot } from '../data/recommendTypes';
 import { recommendRepository } from '../data/recommendRepository';
+import { registrationRepository } from '../data/registrationRepository';
+import { DuplicateVideoError } from '../data/registrationTypes';
+import RcpBadge from '../ui/RcpBadge';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
+import RcpButton from '../ui/RcpButton';
 import RcpCoverflow from '../ui/RcpCoverflow';
+import RcpInlineError from '../ui/RcpInlineError';
 import RcpLoadError from '../ui/RcpLoadError';
+import { useMutation } from './useMutation';
 import { useQuery } from './useQuery';
 
 const LOAD_ERROR_TEXT = '추천을 불러오지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
 const loadMessage = () => LOAD_ERROR_TEXT;
 const MAX_VISIBLE_CHIPS = 2; // 카드 폭이 좁아 칩이 너무 많으면 사진을 가림 — 나머지는 "+n"
 const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;
+// 내 것/남의 것 구분 — 추천 풀이 gikka 전체로 넓어져 남의 레시피도 뜬다 (2026-07-16 5차)
+const IN_LIBRARY_LABEL = '내 보관함';
+const ADD_TO_LIBRARY_TEXT = '내 보관함에 담기';
+const ADD_ERROR_TEXT = '담지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
+const ALREADY_ADDED_TEXT = '이미 보관함에 있어요';
+// 실패 문구 결정 — useMutation 에 모듈 레벨로 넘긴다 (렌더마다 재생성 방지, 에러 계약)
+const addMessage = (e: unknown) =>
+    e instanceof DuplicateVideoError ? ALREADY_ADDED_TEXT : ADD_ERROR_TEXT;
 
 interface Section {
     key: string;
@@ -53,7 +67,12 @@ function RecommendCard({ item }: { item: RecommendItem }) {
                 <div className="rcp-coverflow-thumb-fallback"><ChefHat size={40} /></div>
             )}
             <div className="rcp-coverflow-vignette" />
-            <div className="rcp-coverflow-name"><span>{item.title}</span></div>
+            {/* 제목 행 안에 배지를 함께 둔다 — 카드가 좁아 겹치지 않게 flex 로 나란히
+                (내 보관함에 있는 레시피만 배지, 남의 것은 담을 수 있는 새 레시피) */}
+            <div className="rcp-coverflow-name">
+                <span className="rcp-coverflow-title">{item.title}</span>
+                {item.inLibrary && <RcpBadge variant="good">{IN_LIBRARY_LABEL}</RcpBadge>}
+            </div>
             {item.missing.length > 0 && (
                 <div className="rcp-coverflow-chips">
                     {visible.map((name) => <span key={name} className="rcp-coverflow-chip">{name}</span>)}
@@ -68,6 +87,14 @@ export default function RecommendPage() {
     const [selected, setSelected] = useState<RecommendItem | null>(null); // 카드 탭 → 상세 팝업
     const load = useCallback(() => recommendRepository.get(), []);
     const query = useQuery<RecommendSnapshot>(load, loadMessage);
+    // 남의 레시피 담기 — 공용 useMutation(실패 문구·연타 방지·재동기화). 담은 뒤 추천 재조회로
+    // 배지가 "내 보관함"으로 바뀐다 (registerByVideoId = 2번에서 만든 by-video 등록 재사용)
+    const mutation = useMutation(addMessage, query.reload);
+    const handleAdd = (item: RecommendItem) => mutation.run(async () => {
+        await registrationRepository.registerByVideoId(item.videoId);
+        setSelected(null);
+        await query.reload();
+    });
 
     const snapshot = query.data;
     const loadError = query.error;
@@ -120,6 +147,7 @@ export default function RecommendPage() {
             >
                 {selected && (
                     <>
+                        <RcpInlineError message={mutation.error} />
                         <h3 className="rcp-section-label">재료 (영상에 나온 그대로)</h3>
                         <div className="rcp-chip-group">
                             {selected.ingredients.map((ing) => (
@@ -150,6 +178,10 @@ export default function RecommendPage() {
                         >
                             원본 영상 보기
                         </a>
+                        {/* 남의 레시피면 담기 버튼 — 내 것이면 이미 보관함에 있으니 안 보여준다 */}
+                        {!selected.inLibrary && (
+                            <RcpButton onClick={() => void handleAdd(selected)}>{ADD_TO_LIBRARY_TEXT}</RcpButton>
+                        )}
                     </>
                 )}
             </RcpBottomSheet>

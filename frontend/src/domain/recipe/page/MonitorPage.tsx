@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { MonitorItem, MonitorSnapshot } from '../data/monitorTypes';
 import { MONITOR_LIMIT, isForbidden, monitorRepository } from '../data/monitorRepository';
 import { localExtractorStatus } from '../data/localExtractorStatus';
+import DictionaryPanel from './DictionaryPanel';
 import { useMutation } from './useMutation';
 import { useQuery } from './useQuery';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
@@ -98,6 +99,7 @@ const nextRetrySecondsLeft = (nextRetryAt: string | null, nowMs: number): number
 export default function MonitorPage() {
     const [now, setNow] = useState(() => Date.now());
     const [selected, setSelected] = useState<MonitorItem | null>(null); // 항목 탭 → 액션 시트
+    const [showDict, setShowDict] = useState(false); // 재료 사전 관리 — 펼칠 때만 마운트(매 폴링 조회 방지)
 
     const load = useCallback(() => monitorRepository.list(MONITOR_LIMIT), []);
     const query = useQuery<MonitorSnapshot>(load, loadMessage);
@@ -219,6 +221,16 @@ export default function MonitorPage() {
                     </section>
                 </>
             )}
+
+            <button
+                type="button"
+                className="rcp-btn rcp-btn-ghost rcp-btn-full rcp-dict-toggle"
+                aria-expanded={showDict}
+                onClick={() => setShowDict((v) => !v)}
+            >
+                {showDict ? '재료 사전 닫기' : '재료 사전 관리 열기'}
+            </button>
+            {showDict && <DictionaryPanel />}
 
             <RcpBottomSheet
                 open={selected !== null}

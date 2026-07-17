@@ -23,7 +23,7 @@ final class ExtractionResultJson {
                 ? json.get("transcriptChars").asInt() : null;
         if (!"RECIPE".equals(category)) {
             return new RecipeExtractor.ExtractionResult(category, null, null, null, null,
-                    json.path("summary").asText(null), tags, transcriptChars);
+                    json.path("summary").asText(null), tags, transcriptChars, List.of());
         }
         return new RecipeExtractor.ExtractionResult(
                 category,
@@ -32,7 +32,8 @@ final class ExtractionResultJson {
                 json.hasNonNull("cookMinutes") ? json.get("cookMinutes").asInt() : null,
                 toList(json.path("steps")),
                 null, // RECIPE 요약은 name·steps 가 대신함
-                tags, transcriptChars);
+                tags, transcriptChars,
+                toList(json.path("confidentSeasonings"))); // 모델이 확신한 양념 (5차-4 슬라이스1-C)
     }
 
     private static List<String> toList(JsonNode array) {

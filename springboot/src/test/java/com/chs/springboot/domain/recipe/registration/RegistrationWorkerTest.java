@@ -34,9 +34,10 @@ class RegistrationWorkerTest {
     private final GeminiRateLimiter rateLimiter = mock(GeminiRateLimiter.class);
     private final RecipeExtractor extractor = mock(RecipeExtractor.class);
     private final GikkaMediaProperties properties = new GikkaMediaProperties();
+    private final IngredientDictionaryRepository dictionary = mock(IngredientDictionaryRepository.class);
 
     private RegistrationWorker worker() {
-        return new RegistrationWorker(videos, rateLimiter, extractor, properties);
+        return new RegistrationWorker(videos, rateLimiter, extractor, properties, dictionary);
     }
 
     private static VideoRepository.Row row(String description) {
@@ -93,7 +94,7 @@ class RegistrationWorkerTest {
         when(videos.claimNext()).thenReturn(Optional.of(row("설명란 원문")));
         when(extractor.extract(URL, "설명란 원문")).thenReturn(new RecipeExtractor.ExtractionResult(
                 "RECIPE", "김치찌개", List.of("김치", "두부"), 20, List.of("끓인다"),
-                null, List.of("김치찌개"), 300));
+                null, List.of("김치찌개"), 300, List.of()));
 
         worker().processOne();
 
@@ -111,12 +112,27 @@ class RegistrationWorkerTest {
     }
 
     @Test
+    @DisplayName("RECIPE: 재료를 사전에 upsert 하고 모델이 확신한 양념은 자동 확정한다 (5차-4 슬라이스1-C)")
+    void recipeFeedsIngredientDictionary() {
+        givenSlotAcquired();
+        when(videos.claimNext()).thenReturn(Optional.of(row("설명란 원문")));
+        when(extractor.extract(URL, "설명란 원문")).thenReturn(new RecipeExtractor.ExtractionResult(
+                "RECIPE", "김치찌개", List.of("김치", "두부", "간장"), 20, List.of("끓인다"),
+                null, List.of("김치찌개"), 300, List.of("간장")));
+
+        worker().processOne();
+
+        verify(dictionary).upsertPending(List.of("김치", "두부", "간장"));
+        verify(dictionary).confirmSeasoningIfPending(List.of("간장"));
+    }
+
+    @Test
     @DisplayName("TIP/ETC: 레시피 JSON 은 저장하지 않고 요약·태그만 (1단계 기능은 RECIPE 만 사용)")
     void nonRecipeStoresSummaryOnly() {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row(null)));
         when(extractor.extract(URL, null)).thenReturn(new RecipeExtractor.ExtractionResult(
-                "TIP", null, null, null, null, "신발끈 묶는 법", List.of("신발끈"), null));
+                "TIP", null, null, null, null, "신발끈 묶는 법", List.of("신발끈"), null, List.of()));
 
         worker().processOne();
 
@@ -130,7 +146,7 @@ class RegistrationWorkerTest {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row("설명란 원문")));
         when(extractor.extract(URL, "설명란 원문")).thenReturn(new RecipeExtractor.ExtractionResult(
-                "RECIPE", "김치찌개", List.of("김치"), null, List.of("끓인다"), null, List.of(), 300));
+                "RECIPE", "김치찌개", List.of("김치"), null, List.of("끓인다"), null, List.of(), 300, List.of()));
 
         worker().processOne();
 
@@ -186,7 +202,7 @@ class RegistrationWorkerTest {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row(null)));
         when(extractor.extract(anyString(), any())).thenReturn(new RecipeExtractor.ExtractionResult(
-                "RECIPE", null, null, null, null, null, List.of(), null));
+                "RECIPE", null, null, null, null, null, List.of(), null, List.of()));
 
         worker().processOne();
 

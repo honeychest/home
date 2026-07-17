@@ -545,10 +545,10 @@
 }
 .rcp-coverflow-name {
   position: absolute; top: 8px; left: 8px; right: 8px;
-  display: flex;
+  display: flex; align-items: flex-start; gap: 4px;
 }
-.rcp-coverflow-name span {
-  max-width: 100%;
+.rcp-coverflow-title {
+  flex: 1; min-width: 0; /* 제목이 배지 옆에서 줄어들며 말줄임되게 (2026-07-16 5차 배지 추가) */
   color: #1c2b20;
   font-size: var(--rcp-fs-sm); font-weight: var(--rcp-fw-heavy);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* 카드 폭이 좁아 2줄은 과함 — 1줄+말줄임 */
@@ -723,6 +723,42 @@
 }
 .rcp-monitor-error {
   font-size: var(--rcp-fs-xs); color: var(--rcp-danger); overflow-wrap: anywhere;
+}
+
+/* ── 재료 사전 관리: rcp-dict-* (5차-4 슬라이스1 — 오너 전용, MonitorPage 섹션) ── */
+.rcp-dict-toggle { margin-top: var(--rcp-space-4); }
+#rcp-dict-panel { margin-top: var(--rcp-space-3); }
+.rcp-dict-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--rcp-space-2);
+}
+.rcp-dict-audit { width: auto; }
+.rcp-dict-proposals, .rcp-dict-list {
+  display: flex; flex-direction: column; gap: var(--rcp-space-2); margin-top: var(--rcp-space-2);
+}
+.rcp-dict-row, .rcp-dict-proposal {
+  display: flex; align-items: center; gap: var(--rcp-space-2);
+  background: var(--rcp-surface);
+  border: 1px solid var(--rcp-line);
+  border-radius: var(--rcp-radius-lg);
+  padding: var(--rcp-space-2) var(--rcp-space-3);
+}
+.rcp-dict-name {
+  flex: 1; min-width: 0; overflow-wrap: anywhere;
+  font-size: var(--rcp-fs-md); font-weight: var(--rcp-fw-bold); color: var(--rcp-text);
+}
+.rcp-dict-proposal-hint {
+  font-size: var(--rcp-fs-xs); color: var(--rcp-text-faint); flex-shrink: 0;
+}
+.rcp-dict-actions { display: flex; gap: var(--rcp-space-1); flex-shrink: 0; }
+.rcp-dict-action {
+  min-height: 44px; padding: 0 var(--rcp-space-2);
+  border: 1px solid var(--rcp-line); border-radius: var(--rcp-radius-md);
+  background: var(--rcp-surface); color: var(--rcp-text-sub);
+  font-family: inherit; font-size: var(--rcp-fs-xs); font-weight: var(--rcp-fw-bold);
+}
+.rcp-dict-action:active { background: var(--rcp-surface-dim); }
+.rcp-dict-action-on {
+  background: var(--rcp-accent-soft); color: var(--rcp-accent); border-color: var(--rcp-accent);
 }
 
 /* ── 앱 셸 로딩/에러 (2차 — API 전환으로 지연·실패가 실제로 생김) ──

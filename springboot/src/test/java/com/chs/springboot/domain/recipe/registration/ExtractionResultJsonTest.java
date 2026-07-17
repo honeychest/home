@@ -96,4 +96,25 @@ class ExtractionResultJsonTest {
 
         assertNull(result.transcriptChars());
     }
+
+    @Test
+    @DisplayName("confidentSeasonings: RECIPE 에서 모델이 확신한 양념 목록을 파싱한다 (5차-4 슬라이스1-C)")
+    void parsesConfidentSeasonings() throws Exception {
+        var result = ExtractionResultJson.parse(json("""
+                {"category":"RECIPE","name":"김치찌개","ingredients":["김치","간장"],"confidentSeasonings":["간장"]}
+                """));
+
+        assertEquals(List.of("간장"), result.confidentSeasonings());
+    }
+
+    @Test
+    @DisplayName("confidentSeasonings: 없거나 RECIPE 가 아니면 빈 목록 (안전 기본값)")
+    void confidentSeasoningsEmptyWhenAbsentOrNonRecipe() throws Exception {
+        assertEquals(List.of(), ExtractionResultJson.parse(json("""
+                {"category":"RECIPE","name":"물김치"}
+                """)).confidentSeasonings());
+        assertEquals(List.of(), ExtractionResultJson.parse(json("""
+                {"category":"TIP","summary":"요약"}
+                """)).confidentSeasonings());
+    }
 }

@@ -37,6 +37,8 @@ class RegistrationControllerMonitorTest {
     private final GikkaUserRepository users = mock(GikkaUserRepository.class);
     /** health() 는 mock 기본값 null 을 돌려준다 = "로컬 못 씀" — 이 테스트의 관심사(404/403 계약)와 무관 */
     private final LocalRecipeExtractor localExtractor = mock(LocalRecipeExtractor.class);
+    private final IngredientDictionaryRepository dictionary = mock(IngredientDictionaryRepository.class);
+    private final IngredientAuditor auditor = mock(IngredientAuditor.class);
 
     private RegistrationController controller() {
         GikkaAuthProperties properties = new GikkaAuthProperties();
@@ -44,7 +46,7 @@ class RegistrationControllerMonitorTest {
         when(users.findEmail(OWNER_ID)).thenReturn("owner@example.com");
         when(users.findEmail(STRANGER_ID)).thenReturn("stranger@example.com");
         return new RegistrationController(repository, videos, rateLimiter, metadata, properties, users,
-                localExtractor);
+                localExtractor, dictionary, auditor);
     }
 
     @Test
@@ -114,5 +116,58 @@ class RegistrationControllerMonitorTest {
                 () -> controller().monitor(STRANGER_ID, 50));
 
         assertEquals(HttpStatus.FORBIDDEN, e.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("사전 판정: 오너가 아니면 403 — 사전에 손대기 전에 막힌다")
+    void classifyRequiresOwner() {
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> controller().classifyIngredient(STRANGER_ID,
+                        new RegistrationController.ClassifyRequest("간장", "CONFIRMED_SEASONING")));
+
+        assertEquals(HttpStatus.FORBIDDEN, e.getStatusCode());
+        verify(dictionary, never()).updateStatus(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("사전 판정: 잘못된 status 는 400 — 저장소를 건드리지 않는다")
+    void classifyRejectsBadStatus() {
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> controller().classifyIngredient(OWNER_ID,
+                        new RegistrationController.ClassifyRequest("간장", "NONSENSE")));
+
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatusCode());
+        verify(dictionary, never()).updateStatus(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("사전 판정: 사전에 없는 이름이면 404 — 저장소의 false 를 삼키지 않는다")
+    void classifyMissingNameIs404() {
+        when(dictionary.updateStatus(anyString(), anyString())).thenReturn(false);
+
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> controller().classifyIngredient(OWNER_ID,
+                        new RegistrationController.ClassifyRequest("없는재료", "CONFIRMED_MAIN")));
+
+        assertEquals(HttpStatus.NOT_FOUND, e.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("사전 판정: 오너가 유효한 status 로 있는 이름을 판정하면 정상 통과")
+    void classifySucceeds() {
+        when(dictionary.updateStatus(anyString(), anyString())).thenReturn(true);
+
+        assertDoesNotThrow(() -> controller().classifyIngredient(OWNER_ID,
+                new RegistrationController.ClassifyRequest("굴소스", "CONFIRMED_SEASONING")));
+        verify(dictionary).updateStatus("굴소스", "CONFIRMED_SEASONING");
+    }
+
+    @Test
+    @DisplayName("사전 목록·AI 점검: 오너가 아니면 403")
+    void dictionaryReadsRequireOwner() {
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
+                () -> controller().dictionary(STRANGER_ID)).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
+                () -> controller().auditDictionary(STRANGER_ID)).getStatusCode());
     }
 }

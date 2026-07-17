@@ -7,6 +7,7 @@
 package com.chs.springboot.domain.recipe.registration;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -100,6 +101,15 @@ public class VideoRepository {
         return jdbc.sql("SELECT COUNT(*) FROM video WHERE video_id = :videoId AND status <> 'REMOVED'")
                 .param("videoId", videoId)
                 .query(Integer.class).single() > 0;
+    }
+
+    /** 추천 후보 풀 — gikka 전체의 완료된 요리(DONE+RECIPE). 사용자 무관(누구 것이든)이다:
+        "내 보관함" 여부는 컨트롤러가 registration 으로 따로 표시한다 (2026-07-16 5차, 콜드스타트
+        대응 — 등록 몇 개 안 되는 신규 사용자도 전체 풀에서 추천이 뜨게). 최신 분석이 앞. */
+    public List<Row> allDoneRecipes() {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM video "
+                        + "WHERE status = 'DONE' AND category = 'RECIPE' ORDER BY queued_at DESC")
+                .query(this::mapRow).list();
     }
 
     /** 영상이 이미 있으면 아무 일도 안 함(메타 조회·분석 0회 — CONTEXT.md 확정). 없으면 새로 생성.

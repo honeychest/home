@@ -2,7 +2,7 @@
 // 2026-07-12 3차 백엔드 연결: 목 구현체를 API 구현체로 교체 (화면 무수정 — 성공 기준).
 // 이전 목 구현은 git 이력 참고. 진행 반영은 화면 폴링(list 재호출) — 서버 대기열(DB+단일 워커)과 합치.
 // 401(세션 만료)은 http.ts 공용 시임이 처리 — 이 파일과 화면은 인증을 모른다.
-import type { RegistrationItem } from './registrationTypes';
+import type { RegistrationItem, SearchResults } from './registrationTypes';
 import { DuplicateVideoError, UnavailableVideoError } from './registrationTypes';
 import { HttpError, jsonBody, request } from './http';
 
@@ -19,6 +19,12 @@ export interface RegistrationRepository {
     unregister(videoId: string): Promise<void>;
     /** 홈 섬네일용: 최근 분석 완료(DONE + RECIPE) 영상 */
     recentDone(limit: number): Promise<RegistrationItem[]>;
+    /** 보관함 검색 (2026-07-16 5차) — 내 등록 우선(mine) + gikka 전체 보완(others, 등록 무관 완료 영상).
+        limit = others 표시 개수 상한. q 가 비면 서버가 빈 결과를 준다 */
+    search(q: string, limit: number): Promise<SearchResults>;
+    /** gikka 전체 보완에서 고른 영상을 내 보관함에 담기 — video_id 로 연결만 생성(재분석 없음).
+        없는·삭제된 영상=UnavailableVideoError, 이미 내 것=DuplicateVideoError */
+    registerByVideoId(videoId: string): Promise<RegistrationItem>;
 }
 
 const BASE = '/api/recipe/registrations';
@@ -53,6 +59,21 @@ export function createApiRegistrationRepository(): RegistrationRepository {
 
         recentDone(limit) {
             return request<RegistrationItem[]>(`${BASE}/recent?limit=${limit}`);
+        },
+
+        search(q, limit) {
+            return request<SearchResults>(`${BASE}/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+        },
+
+        async registerByVideoId(videoId) {
+            try {
+                return await request<RegistrationItem>(
+                    `${BASE}/by-video/${encodeURIComponent(videoId)}`, { method: 'POST' });
+            } catch (e) {
+                if (e instanceof HttpError && e.status === 409) throw new DuplicateVideoError(videoId);
+                if (e instanceof HttpError && e.status === 404) throw new UnavailableVideoError(videoId);
+                throw e;
+            }
         },
     };
 }
