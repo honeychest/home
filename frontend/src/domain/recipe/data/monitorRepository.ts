@@ -1,7 +1,7 @@
 // [AGENT] 전 사용자 대기열 모니터링 저장소 — 오너 전용 화면(MonitorPage) 전용 (2026-07-13 확정)
 // 재료 사전 관리(2026-07-17 5차-4)도 오너 전용이라 같은 저장소에 둔다(모니터 화면 한 곳 정책).
 import type {
-    DictionaryEntry, DictionaryStatus, IngredientProposal, MonitorSnapshot,
+    DictionaryEntry, DictionaryStatus, IngredientMerge, IngredientProposal, MonitorSnapshot,
 } from './monitorTypes';
 import { HttpError, jsonBody, request } from './http';
 
@@ -21,7 +21,14 @@ export interface MonitorRepository {
     /** 일괄 판정 — [AI 점검] 제안 전체 적용용. 개별과 달리 없는 이름은 404 가 아니라 조용히 건너뜀
         (제안이 80건대라 한 건씩 왕복하면 못 쓴다 — 2026-07-17 실측) */
     classifyIngredients(decisions: IngredientDecision[]): Promise<void>;
-    /** AI 일괄 점검 — 아직 판정 안 된 이름의 양념·기본양념 제안만 (자동 반영 아님).
+    /** 그룹 확정 — name 을 matchKey 그룹에 넣는다(matchKey === name 이면 해제).
+        묶기는 오너 확정만 — AI 는 제안까지만이고 자동 병합 경로는 없다(안전 비대칭 규칙).
+        없는 이름·사전에 없는 대표 = 404 (HttpError) */
+    mergeIngredient(name: string, matchKey: string): Promise<void>;
+    /** 일괄 그룹 확정 — [AI 점검] 병합 제안 전체 적용용 (없는 이름은 조용히 건너뜀) */
+    mergeIngredients(merges: IngredientMerge[]): Promise<void>;
+    /** AI 일괄 점검 — 분류 제안(아직 판정 안 된 이름의 양념·기본양념)과 묶기 제안("계란 2개"→"계란")
+        을 함께 (자동 반영 아님).
         동기 LLM 호출이라 10초 이상 걸린다 — 화면은 useMutation 의 busy 로 진행 표시할 것 */
     auditDictionary(): Promise<IngredientProposal[]>;
 }
@@ -55,6 +62,14 @@ export function createApiMonitorRepository(): MonitorRepository {
         classifyIngredients(decisions) {
             return request<void>('/api/recipe/registrations/dictionary/classify-batch',
                 { method: 'POST', ...jsonBody(decisions) });
+        },
+        mergeIngredient(name, matchKey) {
+            return request<void>('/api/recipe/registrations/dictionary/merge',
+                { method: 'POST', ...jsonBody({ name, matchKey }) });
+        },
+        mergeIngredients(merges) {
+            return request<void>('/api/recipe/registrations/dictionary/merge-batch',
+                { method: 'POST', ...jsonBody(merges) });
         },
         auditDictionary() {
             // /llm/ 경로는 동기 LLM 호출 전용 — nginx 가 이 접두사에만 긴 타임아웃(120s)을 준다.

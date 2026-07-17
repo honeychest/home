@@ -62,13 +62,16 @@ public class RecommendController {
         // 후보는 gikka 전체 완료 요리(콜드스타트 대응) — 냉장고 매칭은 그대로 내 것 기준.
         // "내 보관함" 여부는 내 등록 videoId 집합으로 표시만 한다 (매칭에는 안 씀).
         Set<String> myVideoIds = new HashSet<>(registrations.videoIdsForUser(userId));
-        Set<String> seasoningNames = dictionary.seasoningNames();
-        Set<String> basicNames = dictionary.basicNames(); // 상비 양념 — 부족분에서 아예 뺀다
+        // 사전 3종은 늘 같이 다닌다 — 저장소가 멤버까지 대표 기준으로 펼쳐서 주므로 여기선 조립만.
+        // basicNames = 상비 양념(부족분에서 아예 뺀다), matchKeys = 그룹 매칭 키(2026-07-17 슬라이스2)
+        var dict = new RecommendRules.Dictionary(
+                dictionary.matchKeys(), dictionary.seasoningNames(), dictionary.basicNames());
+        Set<String> fridgeKeys = RecommendRules.keysOf(fridgeNames, dict); // 후보마다 다시 계산하지 않게 한 번만
 
         List<RecommendRules.Match> matches = videos.allDoneRecipes().stream()
                 .map(this::toCandidate)
                 .flatMap(Optional::stream)
-                .map(candidate -> RecommendRules.match(candidate, fridgeNames, seasoningNames, basicNames))
+                .map(candidate -> RecommendRules.match(candidate, fridgeKeys, dict))
                 .toList();
 
         RecommendRules.Sections sections = RecommendRules.bucket(matches);

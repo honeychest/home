@@ -19,6 +19,8 @@
 package com.chs.springboot.domain.recipe.registration;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
@@ -47,25 +49,61 @@ public class IngredientAuditController {
         this.users = users;
     }
 
-    /** AI 일괄 점검 — 아직 판정 안 된(PENDING) 이름을 LLM 이 훑어 양념(SEASONING)·기본양념(BASIC)
-        제안만 돌려준다. MAIN 제안은 뺀다 — PENDING 이 이미 주재료 취급이라 바꿀 게 없다(안전 기본값).
-        자동 반영 아님 — 오너가 /dictionary/classify(개별)·/dictionary/classify-batch(전체 적용)로 반영.
-        온디맨드라 제안은 저장하지 않는다.
-        일시적 실패(429·503·타임아웃)는 503 — 프론트가 "잠시 후 다시" 문구로 (에러 계약: 상태 코드만). */
+    /**
+     * AI 일괄 점검 — 사전을 LLM 이 한 번에 훑어 두 종류를 "제안"한다(자동 반영 아님. 오너가
+     * /dictionary/classify·classify-batch·merge·merge-batch 로 반영. 온디맨드라 제안은 저장 안 함).
+     *   · 분류 제안: 아직 판정 안 된(PENDING) 이름의 양념(SEASONING)·기본양념(BASIC) 여부.
+     *     MAIN 제안은 뺀다 — PENDING 이 이미 주재료 취급이라 바꿀 게 없다(안전 기본값).
+     *   · 묶기 제안: "계란 2개 → 계란" 같은 변형 흡수 (2026-07-17 슬라이스2).
+     *
+     * <p>LLM 에 넘기는 건 <b>대표들만</b>이다(이미 묶인 멤버는 성격이 대표에서 나오므로 판정 대상이
+     * 아니다). 분류 제안과 달리 묶기 제안은 PENDING 뿐 아니라 확정된 이름도 대상이라 — 대표
+     * 후보("라면")가 이미 CONFIRMED_MAIN 일 수 있어 PENDING 만 보내면 묶을 곳이 사라진다.
+     *
+     * <p>LLM 이 낸 제안을 사전 사실과 대조해 여기서 거른다(모델은 사전을 모르고, 없는 이름을
+     * 지어낼 수 있다): 실재하지 않는 이름, 대표 자격이 없는 이름(이미 남에게 묶인 멤버 — 대표로
+     * 삼으면 A→B→C 체인이 된다), 이미 그 그룹인 것은 제안이 아니다.
+     *
+     * <p>일시적 실패(429·503·타임아웃)는 503 — 프론트가 "잠시 후 다시" 문구로 (에러 계약: 상태 코드만).
+     */
     @PostMapping("/dictionary/audit")
     public List<IngredientAuditor.Proposal> auditDictionary(@GikkaUserId long userId) {
         requireOwner(userId);
-        List<String> pending = dictionary.all().stream()
-                .filter(e -> IngredientDictionaryRepository.STATUS_PENDING.equals(e.status()))
+        List<IngredientDictionaryRepository.Entry> all = dictionary.all();
+        Map<String, IngredientDictionaryRepository.Entry> byName = all.stream()
+                .collect(Collectors.toMap(IngredientDictionaryRepository.Entry::name, e -> e));
+        List<String> representatives = all.stream()
+                .filter(IngredientAuditController::isRepresentative)
                 .map(IngredientDictionaryRepository.Entry::name)
                 .toList();
         try {
-            return auditor.audit(pending).stream()
-                    .filter(p -> !IngredientAuditor.TIER_MAIN.equals(p.suggestedTier()))
+            return auditor.audit(representatives).stream()
+                    .filter(p -> isUseful(p, byName))
                     .toList();
         } catch (RecipeExtractor.TransientFailureException e) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Gemini 일시적 실패", e);
         }
+    }
+
+    /** 대표 = 아무에게도 안 묶인 행(자기 이름이 자기 매칭 키). 멤버는 성격을 대표에서 물려받는다. */
+    private static boolean isRepresentative(IngredientDictionaryRepository.Entry entry) {
+        return entry.name().equals(entry.matchKey());
+    }
+
+    /** 오너에게 보여줄 가치가 있는 제안인가 — 사전에 실재하고, 지금 상태를 실제로 바꾸는 것만. */
+    private static boolean isUseful(IngredientAuditor.Proposal proposal,
+                                    Map<String, IngredientDictionaryRepository.Entry> byName) {
+        IngredientDictionaryRepository.Entry entry = byName.get(proposal.name());
+        if (entry == null || !isRepresentative(entry)) {
+            return false; // 모델이 지어낸 이름이거나, 이미 묶인 멤버
+        }
+        if (proposal.mergeInto() != null) {
+            IngredientDictionaryRepository.Entry target = byName.get(proposal.mergeInto());
+            return target != null && isRepresentative(target); // 없는 대표·체인 방지
+        }
+        // 분류 제안은 아직 안 정한 것만 — 오너가 이미 정한 건 덮어쓸 후보로 올리지 않는다(사람 판정 우선)
+        return IngredientDictionaryRepository.STATUS_PENDING.equals(entry.status())
+                && !IngredientAuditor.TIER_MAIN.equals(proposal.suggestedTier());
     }
 
     private void requireOwner(long userId) {

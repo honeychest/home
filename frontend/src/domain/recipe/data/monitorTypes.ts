@@ -46,26 +46,38 @@ export interface LocalExtractorHealth {
     denoOnPath: boolean;
 }
 
-/** 재료 사전 항목 — 재료 성격 판정의 단일 원본 (2026-07-17 5차-4 슬라이스1, 오너 전용).
+/** 재료 사전 항목 — 재료 성격 판정의 단일 원본 (2026-07-17 5차-4, 오너 전용).
     status 가 곧 원본이다 — 별도 tier 필드를 두지 않는다(순수 파생이라 2026-07-17 점검에서 제거).
       CONFIRMED_BASIC     = 늘 있는 상비 양념(물·소금…) → 매칭에서 아예 뺌
       CONFIRMED_SEASONING = 없을 수 있는 양념(고추장·굴소스…) → "양념만 부족" 으로 살아남음
-      그 외(PENDING·SKIPPED·CONFIRMED_MAIN) = 주재료 취급(안전 기본값)
-    matchKey = 슬라이스2(그룹 매칭)용 — 슬라이스1은 전부 자기 이름이라 화면에선 아직 안 쓴다. */
+      그 외(PENDING·SKIPPED·CONFIRMED_MAIN) = 주재료 취급(안전 기본값) */
 export type DictionaryStatus =
     'PENDING' | 'SKIPPED' | 'CONFIRMED_MAIN' | 'CONFIRMED_SEASONING' | 'CONFIRMED_BASIC';
 
 export interface DictionaryEntry {
     name: string;
+    /** 그룹 매칭 키 (슬라이스2) — "무엇이 있으면 이걸 가진 걸로 칠까".
+        자기 이름이면 대표(안 묶임), 다른 이름이면 그 그룹의 멤버다.
+        **멤버의 양념 여부는 대표가 정한다** — 멤버 자신의 status 는 무시되므로 화면도 멤버에겐
+        분류 버튼을 안 보여준다(보여주면 눌러도 아무 효과가 없어 거짓말이 된다). */
     matchKey: string;
     status: DictionaryStatus;
 }
 
-/** AI 점검 제안 한 건 — 자동 반영 아님(오너가 확인). 서버가 MAIN 제안은 빼고 보내므로
-    실제로는 SEASONING·BASIC 만 오지만, 계약상 tier 3종을 그대로 둔다. */
+/** AI 점검 제안 한 건 — 자동 반영 아님(오너가 확인). 두 종류가 섞여 온다.
+    서버가 쓸모없는 제안(MAIN·이미 확정된 것·없는 이름·체인)은 걸러서 보낸다. */
 export interface IngredientProposal {
     name: string;
-    suggestedTier: 'MAIN' | 'SEASONING' | 'BASIC';
+    /** 분류 제안. 묶기 제안이면 null — 묶이면 분류는 대표가 정하므로 제안할 게 없다 */
+    suggestedTier: 'MAIN' | 'SEASONING' | 'BASIC' | null;
+    /** 묶기 제안 — 이 이름을 흡수할 대표 이름. 분류 제안이면 null */
+    mergeInto: string | null;
+}
+
+/** 그룹 확정 한 건 — matchKey === name 이면 그룹 해제 */
+export interface IngredientMerge {
+    name: string;
+    matchKey: string;
 }
 
 /** 전 사용자 대기열 스냅샷 — 대기열 크기·워커 생존·429 이력 + 항목 목록 (2026-07-13 확정) */

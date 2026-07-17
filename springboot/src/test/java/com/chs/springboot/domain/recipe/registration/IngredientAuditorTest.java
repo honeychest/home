@@ -42,4 +42,35 @@ class IngredientAuditorTest {
 
         assertEquals("MAIN", proposals.get(0).suggestedTier());
     }
+
+    @Test
+    @DisplayName("묶기 제안이면 tier 는 버린다 — 묶이는 순간 양념 여부는 대표가 정하므로 둘을 "
+            + "같이 제안하면 오너가 뭘 승인하는 건지 흐려진다 (2026-07-17 슬라이스2)")
+    void mergeProposalDropsTier() throws Exception {
+        var array = new ObjectMapper().readTree("""
+                [{"name":"계란 2개","tier":"MAIN","mergeInto":"계란"}]
+                """);
+
+        var proposals = IngredientAuditor.parse(array);
+
+        assertEquals("계란 2개", proposals.get(0).name());
+        assertEquals("계란", proposals.get(0).mergeInto());
+        assertEquals(null, proposals.get(0).suggestedTier());
+    }
+
+    @Test
+    @DisplayName("빈 mergeInto·자기 자신에게 묶기는 '안 묶음'과 같은 뜻 — 분류 제안으로 남는다")
+    void emptyOrSelfMergeIsNotAMerge() throws Exception {
+        var array = new ObjectMapper().readTree("""
+                [{"name":"고추장","tier":"SEASONING","mergeInto":""},
+                 {"name":"두부","tier":"MAIN","mergeInto":"두부"}]
+                """);
+
+        var proposals = IngredientAuditor.parse(array);
+
+        assertEquals(null, proposals.get(0).mergeInto());
+        assertEquals("SEASONING", proposals.get(0).suggestedTier());
+        assertEquals(null, proposals.get(1).mergeInto());
+        assertEquals("MAIN", proposals.get(1).suggestedTier());
+    }
 }

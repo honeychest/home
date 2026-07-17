@@ -9,7 +9,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 final class RecommendRules {
 
@@ -20,23 +22,38 @@ final class RecommendRules {
 
     /* ── 1. 재료/양념 분류 (2026-07-17 5차-4 슬라이스1 — DB 사전으로 이관) ──
        분류 목록은 이제 코드 상수가 아니라 재료 사전(ingredient_dictionary)이 소유한다.
-       이 순수 모듈은 DB 를 모른다 — 호출부(RecommendController)가 사전에서 양념 이름 집합을
-       읽어 인자로 넘긴다(pattern-pure-rules 유지, 테스트는 집합만 주입하면 됨).
+       이 순수 모듈은 DB 를 모른다 — 호출부(RecommendController)가 사전을 읽어 Dictionary 로
+       넘긴다(pattern-pure-rules 유지, 테스트는 값만 주입하면 됨).
        seasoningNames 에 든 이름만 SEASONING, 나머지는 전부 MAIN(판정 전 이름을 양념으로 잘못
        빼면 추천에서 사라지므로 MAIN 이 안전 기본값 — 사전의 PENDING/SKIPPED 도 tier=MAIN 으로
-       내려온다). 구 ALIASES("다진 마늘"="다진마늘" 등)는 사전에 양쪽 표기를 모두 양념으로
-       시드해 흡수됨(슬라이스1은 이름 정확 매칭 — 그룹 병합은 슬라이스2에서 match_key 로). */
+       내려온다). 구 ALIASES("다진 마늘"="다진마늘" 등)는 사전에 양쪽 표기를 모두 양념으로 시드해 흡수됨. */
+
+    /**
+     * 매칭이 필요로 하는 사전의 값들 (2026-07-17 슬라이스2에서 묶음 — 셋은 항상 같은 사전에서
+     * 같이 오고 늘 함께 다닌다. 인자로 흩어 놓으면 호출부마다 셋을 다시 조립해야 한다).
+     *
+     * @param matchKeys     이름 → 매칭 키. 멤버는 대표 이름을 가리키고, 안 묶인 이름은 자기 이름.
+     * @param seasoningNames 양념 이름 집합 — 저장소가 멤버까지 대표 기준으로 펼쳐서 준다.
+     * @param basicNames     기본양념 이름 집합 — 같은 방식.
+     */
+    record Dictionary(Map<String, String> matchKeys, Set<String> seasoningNames, Set<String> basicNames) {
+
+        /** 사전에 없는 이름은 자기 이름 — 안 묶인 것과 같은 취급(엄격 매칭이 안전 기본값) */
+        String keyOf(String name) {
+            return matchKeys.getOrDefault(name, name);
+        }
+    }
 
     /** BASIC = 집에 늘 있는 상비 양념(물·소금·설탕…) — 부족분에서 아예 뺀다. SEASONING(고추장·
         굴소스…)과 달리 "양념만 부족" 섹션에도 안 남는다. 이게 없으면 완전 가능 섹션이 구조적으로
         항상 0이다(레시피 115개 중 48개가 "물"을 재료로 적는데 냉장고엔 물이 없음 — 2026-07-17 실측). */
     enum Tier { MAIN, SEASONING, BASIC }
 
-    static Tier classify(String ingredientName, Set<String> seasoningNames, Set<String> basicNames) {
-        if (basicNames.contains(ingredientName)) {
+    static Tier classify(String ingredientName, Dictionary dictionary) {
+        if (dictionary.basicNames().contains(ingredientName)) {
             return Tier.BASIC;
         }
-        return seasoningNames.contains(ingredientName) ? Tier.SEASONING : Tier.MAIN;
+        return dictionary.seasoningNames().contains(ingredientName) ? Tier.SEASONING : Tier.MAIN;
     }
 
     /* ── 2. 매칭 ── */
@@ -86,18 +103,30 @@ final class RecommendRules {
         }
     }
 
-    /** 재료 원문 그대로 정확 매칭(fridgeNames 는 사용자 냉장고 재료 이름 집합, seasoningNames·
-        basicNames 는 사전에서 온 이름 집합 — 부족분을 주재료/양념으로 가르고 기본양념은 뺀다) */
-    static Match match(Candidate candidate, Set<String> fridgeNames, Set<String> seasoningNames,
-                       Set<String> basicNames) {
+    /** 냉장고 재료 이름을 매칭 키로 바꾼다 — 호출부가 후보마다 다시 계산하지 않게 한 번만.
+        (2026-07-17 슬라이스2 — 이전엔 이름을 그대로 비교했다) */
+    static Set<String> keysOf(Set<String> names, Dictionary dictionary) {
+        return names.stream().map(dictionary::keyOf).collect(Collectors.toSet());
+    }
+
+    /**
+     * 매칭 (2026-07-17 슬라이스2 — 이름 정확 일치에서 match_key 비교로 교체).
+     * 냉장고의 "계란"과 레시피의 "계란 2개"가 같은 그룹이면 "있음"으로 친다. 안 묶인 이름은
+     * 키가 자기 이름이라 예전과 똑같이 동작한다(그룹을 안 쓰면 아무것도 안 바뀜 = 안전).
+     * 부족분에 담는 이름은 **레시피 원문 그대로**다 — 화면에 대표 이름("계란")이 아니라 영상이
+     * 말한 이름("계란 2개")이 보여야 원문 보존 원칙과 맞다.
+     *
+     * @param fridgeKeys 냉장고 재료의 매칭 키 집합 (keysOf 로 미리 변환한 것)
+     */
+    static Match match(Candidate candidate, Set<String> fridgeKeys, Dictionary dictionary) {
         List<String> missingMain = new ArrayList<>();
         List<String> missingSeasoning = new ArrayList<>();
         for (String raw : candidate.ingredients()) {
             String name = raw == null ? "" : raw.trim();
-            if (name.isEmpty() || fridgeNames.contains(name)) {
+            if (name.isEmpty() || fridgeKeys.contains(dictionary.keyOf(name))) {
                 continue;
             }
-            Tier tier = classify(name, seasoningNames, basicNames);
+            Tier tier = classify(name, dictionary);
             if (tier == Tier.BASIC) {
                 continue; // 늘 있다고 간주 — 부족분에 안 셈
             }

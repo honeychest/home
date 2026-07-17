@@ -241,10 +241,12 @@ export default function StyleguidePage() {
             <p style={{ fontSize: 'var(--rcp-fs-sm)', color: 'var(--rcp-text-sub)' }}>
                 확정(그린 실선)과 제안(노랑 점선)은 절대 같은 색이면 안 됩니다 — 색과 모양 둘 다로
                 구분해야 색맹에서도 읽힙니다. 탭하면 즉시 저장이라 "미저장" 상태는 없습니다.
+                묶인 멤버(→ 계란)는 성격을 대표에서 물려받으므로 분류 버튼 대신 [그룹 해제]만 줍니다 —
+                눌러도 효과가 없는 버튼을 보여주면 거짓말이 됩니다.
                 긴 글자 스트레스 테스트 겸용: 재료명이 길어지면 이름만 줄바꿈되고 버튼은 안 짓눌립니다.
             </p>
             <div className="rcp-dict-filters">
-                {['손볼 것 12', '제안 83', '전체 243'].map((label, i) => (
+                {['손볼 것 12', '제안 83', '묶임 37', '전체 243'].map((label, i) => (
                     <button type="button" key={label} className={`rcp-dict-action ${i === 0 ? 'rcp-dict-action-on' : ''}`.trim()}>
                         {label}
                     </button>
@@ -252,12 +254,12 @@ export default function StyleguidePage() {
             </div>
             <div className="rcp-dict-list">
                 {[
-                    { name: '굴소스', badge: '미판정', on: -1, proposed: 1 },
-                    { name: '아주아주 길게 적어본 재료 이름 (긴 글자 스트레스 테스트)', badge: '주재료 확정', on: 2, proposed: -1 },
+                    { name: '굴소스', badge: '미판정', variant: 'neutral' as const, on: -1, proposed: 1 },
+                    { name: '아주아주 길게 적어본 재료 이름 (긴 글자 스트레스 테스트)', badge: '주재료 확정', variant: 'good' as const, on: 2, proposed: -1 },
                 ].map((row) => (
                     <div className="rcp-dict-row" key={row.name}>
                         <span className="rcp-dict-name">{row.name}</span>
-                        <RcpBadge variant={row.on === -1 ? 'neutral' : 'good'}>{row.badge}</RcpBadge>
+                        <RcpBadge variant={row.variant}>{row.badge}</RcpBadge>
                         <div className="rcp-dict-actions">
                             {['기본', '양념', '주재료', '보류'].map((label, i) => (
                                 <button
@@ -271,6 +273,22 @@ export default function StyleguidePage() {
                         </div>
                     </div>
                 ))}
+                {/* 묶기 제안이 붙은 대표 — 분류 버튼 대신 이것부터 (묶이면 분류는 대표가 정한다) */}
+                <div className="rcp-dict-row">
+                    <span className="rcp-dict-name">계란 2개</span>
+                    <RcpBadge variant="neutral">미판정</RcpBadge>
+                    <div className="rcp-dict-actions">
+                        <button type="button" className="rcp-dict-action rcp-dict-action-proposed">→ 계란</button>
+                    </div>
+                </div>
+                {/* 이미 묶인 멤버 */}
+                <div className="rcp-dict-row">
+                    <span className="rcp-dict-name">라면 건더기스프</span>
+                    <RcpBadge variant="neutral">→ 라면</RcpBadge>
+                    <div className="rcp-dict-actions">
+                        <button type="button" className="rcp-dict-action">그룹 해제</button>
+                    </div>
+                </div>
             </div>
 
             <h2 className="rcp-section-label">하단 탭 바 — RcpTabBar (.rcp-tab-bar)</h2>

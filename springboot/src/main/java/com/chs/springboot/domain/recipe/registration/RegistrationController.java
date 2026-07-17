@@ -315,6 +315,46 @@ public class RegistrationController {
                 .collect(Collectors.toMap(r -> r.name().trim(), ClassifyRequest::status, (a, b) -> b)));
     }
 
+    /** 그룹 확정 요청 — name 을 matchKey 그룹에 넣는다. matchKey == name 이면 그룹 해제. */
+    public record MergeRequest(String name, String matchKey) {
+    }
+
+    private static boolean isBlankMerge(MergeRequest r) {
+        return r == null || r.name() == null || r.name().isBlank()
+                || r.matchKey() == null || r.matchKey().isBlank();
+    }
+
+    /**
+     * 오너의 그룹 확정 (2026-07-17 슬라이스2) — "계란 2개"를 "계란" 그룹에 넣어, 냉장고에 계란이
+     * 있으면 있는 것으로 치게 한다. 같은 엔드포인트로 해제도 한다(matchKey == name).
+     *
+     * <p>묶기는 오너 확정만 — AI 는 제안까지만이고 자동 병합 경로는 없다(안전 비대칭 규칙).
+     * 없는 이름·사전에 없는 대표 = 404.
+     */
+    @PostMapping("/dictionary/merge")
+    public void mergeIngredient(@GikkaUserId long userId, @RequestBody MergeRequest request) {
+        requireOwner(userId);
+        if (isBlankMerge(request)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이름·대표 누락");
+        }
+        if (!dictionary.merge(request.name().trim(), request.matchKey().trim())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "사전에 없는 이름 또는 대표");
+        }
+    }
+
+    /** 오너 일괄 그룹 확정 — [AI 점검] 병합 제안 전체 적용용. classify-batch 와 같은 이유로
+        없는 이름은 조용히 건너뛴다(한 건 때문에 전체를 실패시키지 않는다).
+        @return 실제로 바뀐 건수 (프론트는 재조회로 화면을 맞춘다 — 확인·로그용) */
+    @PostMapping("/dictionary/merge-batch")
+    public int mergeIngredients(@GikkaUserId long userId, @RequestBody List<MergeRequest> requests) {
+        requireOwner(userId);
+        if (requests == null || requests.stream().anyMatch(RegistrationController::isBlankMerge)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이름·대표 누락");
+        }
+        return dictionary.mergeAll(requests.stream()
+                .collect(Collectors.toMap(r -> r.name().trim(), r -> r.matchKey().trim(), (a, b) -> b)));
+    }
+
     // AI 일괄 점검(/dictionary/audit)은 IngredientAuditController 로 옮겼다 (2026-07-17) —
     // 동기 LLM 호출이라 응답이 10~25초라서 nginx `location /api` 의 15초에 끊겼다.
     // 전용 경로 /api/recipe/llm/** 로 분리. 근거는 그 클래스 주석 참고.

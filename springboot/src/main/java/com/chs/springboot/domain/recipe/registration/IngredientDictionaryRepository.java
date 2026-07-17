@@ -42,16 +42,37 @@ public class IngredientDictionaryRepository {
     public record Entry(String name, String matchKey, String status) {
     }
 
-    /** 매칭이 읽는 양념 이름 집합 — RecommendRules.classify() 에 넘긴다(그 외 이름은 주재료 취급). */
+    /* ── 매칭이 읽는 값들 (RecommendRules.Dictionary 로 조립돼 넘어간다) ──
+       세 조회 모두 "멤버의 성격은 대표가 정한다"(V13)를 자기참조 조인으로 표현한다. 안 묶인 행은
+       match_key = 자기 이름이라 자기 자신과 조인돼 슬라이스1과 동작이 같다(그룹을 안 쓰면 무변화).
+       멤버 자신의 status 는 이 조인에 안 쓰인다 — 대표가 단일 원본이라 멤버 status 는 무시된다. */
+
+    /** 양념 이름 집합 — 대표가 CONFIRMED_SEASONING 인 이름 전부(멤버 포함). 그 외는 주재료 취급. */
     public Set<String> seasoningNames() {
-        return jdbc.sql("SELECT name FROM ingredient_dictionary WHERE status = 'CONFIRMED_SEASONING'")
-                .query(String.class).set();
+        return namesWhoseRepresentativeIs(STATUS_CONFIRMED_SEASONING);
     }
 
-    /** 매칭이 읽는 기본양념 이름 집합 — 있다고 간주해 부족분에서 아예 뺀다(RecommendRules 참고). */
+    /** 기본양념 이름 집합 — 있다고 간주해 부족분에서 아예 뺀다(RecommendRules 참고). */
     public Set<String> basicNames() {
-        return jdbc.sql("SELECT name FROM ingredient_dictionary WHERE status = 'CONFIRMED_BASIC'")
-                .query(String.class).set();
+        return namesWhoseRepresentativeIs(STATUS_CONFIRMED_BASIC);
+    }
+
+    private Set<String> namesWhoseRepresentativeIs(String status) {
+        return jdbc.sql("""
+                        SELECT d.name
+                        FROM ingredient_dictionary d
+                        JOIN ingredient_dictionary rep ON rep.name = d.match_key
+                        WHERE rep.status = :status
+                        """)
+                .param("status", status).query(String.class).set();
+    }
+
+    /** 이름 → 매칭 키 전체 (2026-07-17 슬라이스2). 매칭이 이름 대신 이 키를 비교한다. */
+    public Map<String, String> matchKeys() {
+        return jdbc.sql("SELECT name, match_key FROM ingredient_dictionary")
+                .query((rs, i) -> Map.entry(rs.getString("name"), rs.getString("match_key")))
+                .list().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /** 오너의 일괄 판정 (이름 → status) — [AI 점검] 제안 전체 적용용. 제안이 83개라 한 건씩
@@ -112,6 +133,55 @@ public class IngredientDictionaryRepository {
                             """)
                     .param("name", name).update();
         }
+    }
+
+    /**
+     * 오너의 그룹 확정 (2026-07-17 슬라이스2) — name 을 matchKey 그룹에 넣는다.
+     * name.equals(matchKey) 면 그룹 해제(자기 이름으로 되돌림).
+     *
+     * <p>묶기는 오직 오너 확정만 한다 — LLM 은 제안까지만이고 자동 병합은 없다(안전 비대칭 규칙,
+     * CONTEXT.md). 쪼개기(기본값 = 자기 이름)는 틀려도 "덜 매칭"으로 끝나지만, 묶기는 틀리면
+     * 없는 재료를 있다고 하게 되기 때문이다.
+     *
+     * <p>그룹 깊이는 항상 1로 평탄화한다 — A→B 인데 B→C 면 A 의 키(B)와 C 의 키(C)가 달라져
+     * 매칭이 조용히 깨진다. 그래서 (1) 대표의 대표를 따라가고, (2) 지금 name 을 대표로 삼고 있던
+     * 멤버들도 같은 대표로 함께 옮긴다. 이 평탄화 덕분에 순환(A→B 뒤 B→A)도 자연히 안 생긴다 —
+     * 그 경우 대표를 따라가면 자기 자신이라 그룹 해제로 귀결된다.
+     *
+     * <p>멤버의 status 는 건드리지 않는다 — 묶여 있는 동안엔 무시되고(대표가 정함), 나중에 그룹을
+     * 풀면 원래 판정이 그대로 돌아온다(오너의 이전 작업을 안 지운다).
+     *
+     * @return false = 없는 이름 또는 사전에 없는 대표
+     */
+    public boolean merge(String name, String matchKey) {
+        if (name.equals(matchKey)) {
+            return jdbc.sql("""
+                            UPDATE ingredient_dictionary SET match_key = name, updated_at = now()
+                            WHERE name = :name
+                            """)
+                    .param("name", name).update() > 0;
+        }
+        String representative = jdbc.sql("SELECT match_key FROM ingredient_dictionary WHERE name = :name")
+                .param("name", matchKey).query(String.class).optional().orElse(null);
+        if (representative == null) {
+            return false; // 사전에 없는 대표 — FK 가 막기 전에 여기서 거른다(400/404 를 주기 위해)
+        }
+        return jdbc.sql("""
+                        UPDATE ingredient_dictionary SET match_key = :rep, updated_at = now()
+                        WHERE name = :name OR match_key = :name
+                        """)
+                .param("rep", representative).param("name", name).update() > 0;
+    }
+
+    /** 오너의 일괄 그룹 확정 — [AI 점검] 병합 제안 전체 적용용. updateStatuses 와 같은 이유로
+        없는 이름·없는 대표는 조용히 건너뛴다(한 건 때문에 전체를 실패시키지 않는다).
+        @return 실제로 바뀐 건수 */
+    public int mergeAll(Map<String, String> nameToMatchKey) {
+        int changed = 0;
+        for (Map.Entry<String, String> d : nameToMatchKey.entrySet()) {
+            changed += merge(d.getKey(), d.getValue()) ? 1 : 0;
+        }
+        return changed;
     }
 
     /**

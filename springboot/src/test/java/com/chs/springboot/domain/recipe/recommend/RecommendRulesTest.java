@@ -1,15 +1,19 @@
 // [AGENT] 추천 3단계 판정 고정 (DB·HTTP 없는 순수 테스트) — CONTEXT.md 4차 확정(2026-07-14 grill-me)
 // 2026-07-17 5차-4 슬라이스1: classify/match 가 양념 이름 집합을 인자로 받도록 바뀜(사전 DB화).
-// 순수 모듈 규율 유지 — 테스트는 사전 대신 SEASONINGS 집합을 직접 주입해 판정을 고정한다.
+// 2026-07-17 5차-4 슬라이스2: 셋(matchKeys·seasoning·basic)이 늘 같이 다녀 Dictionary 로 묶임 +
+// 매칭이 이름 정확 일치에서 match_key 비교로 바뀜.
+// 순수 모듈 규율 유지 — 테스트는 DB 대신 Dictionary 값을 직접 주입해 판정을 고정한다.
 package com.chs.springboot.domain.recipe.recommend;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RecommendRulesTest {
@@ -26,6 +30,11 @@ class RecommendRulesTest {
             "후추", "후춧가루", "참기름", "들기름", "깨", "통깨", "깨소금",
             "다진마늘", "다진 마늘", "고춧가루", "고추가루", "식초", "백식초");
 
+    /** 그룹을 안 쓰는 사전 — matchKeys 가 비면 모든 이름의 키가 자기 이름이라 슬라이스1(이름 정확
+        일치)과 동작이 같다. 그룹 매칭 테스트만 자기 사전을 따로 만든다. */
+    private static final RecommendRules.Dictionary DICT =
+            new RecommendRules.Dictionary(Map.of(), SEASONINGS, BASICS);
+
     private static RecommendRules.Candidate candidate(String id, List<String> ingredients) {
         return new RecommendRules.Candidate(
                 id, "https://youtu.be/" + id, id + "-title", "http://t/" + id, ingredients, 10, List.of("끓인다"));
@@ -35,7 +44,7 @@ class RecommendRulesTest {
     @DisplayName("재료·양념 다 있으면 완전 가능")
     void completeWhenNothingMissing() {
         var c = candidate("a", List.of("두부", "고추장"));
-        var match = RecommendRules.match(c, Set.of("두부", "고추장"), SEASONINGS, BASICS);
+        var match = RecommendRules.match(c, Set.of("두부", "고추장"), DICT);
 
         assertTrue(match.isComplete());
         assertTrue(match.missingMain().isEmpty());
@@ -48,7 +57,7 @@ class RecommendRulesTest {
             + "냉장고에 물을 넣는 사람은 없어 완전 가능이 0이었음)")
     void basicSeasoningsAreNeverMissing() {
         var c = candidate("a", List.of("두부", "물", "소금", "설탕"));
-        var match = RecommendRules.match(c, Set.of("두부"), SEASONINGS, BASICS);
+        var match = RecommendRules.match(c, Set.of("두부"), DICT);
 
         assertTrue(match.isComplete());
         assertTrue(match.missingSeasoning().isEmpty());
@@ -60,14 +69,14 @@ class RecommendRulesTest {
             + "'늘 있다'가 우선이라 부족분에 안 샌다")
     void basicWinsOverSeasoning() {
         assertEquals(RecommendRules.Tier.BASIC,
-                RecommendRules.classify("소금", Set.of("소금"), Set.of("소금")));
+                RecommendRules.classify("소금", new RecommendRules.Dictionary(Map.of(), Set.of("소금"), Set.of("소금"))));
     }
 
     @Test
     @DisplayName("재료는 다 있고 양념만 없으면 양념만 부족 — 재료 부족 판정에 안 걸림")
     void seasoningOnlyWhenMainPresent() {
         var c = candidate("a", List.of("두부", "고추장"));
-        var match = RecommendRules.match(c, Set.of("두부"), SEASONINGS, BASICS);
+        var match = RecommendRules.match(c, Set.of("두부"), DICT);
 
         assertTrue(match.isSeasoningOnly());
         assertEquals(List.of("고추장"), match.missingSeasoning());
@@ -78,7 +87,7 @@ class RecommendRulesTest {
     @DisplayName("재료가 몇 개든 없으면 재료 부족 — 부족 개수를 그대로 담는다")
     void missingMainCarriesCount() {
         var c = candidate("a", List.of("두부", "대파", "고추장"));
-        var match = RecommendRules.match(c, Set.of(), SEASONINGS, BASICS);
+        var match = RecommendRules.match(c, Set.of(), DICT);
 
         assertTrue(match.isMissingMain());
         assertEquals(List.of("두부", "대파"), match.missingMain());
@@ -90,7 +99,7 @@ class RecommendRulesTest {
             "완전 매칭이 하나도 없을 때 추천이 통째로 안 보이는 문제가 실사용에서 발견됨)")
     void manyMissingStillCountsAsMissingMain() {
         var c = candidate("a", List.of("두부", "대파", "돼지고기", "김치"));
-        var match = RecommendRules.match(c, Set.of(), SEASONINGS, BASICS);
+        var match = RecommendRules.match(c, Set.of(), DICT);
 
         assertTrue(match.isMissingMain());
         assertEquals(4, match.missingMain().size());
@@ -101,7 +110,7 @@ class RecommendRulesTest {
             + "'굴소스'가 그 사례: 사전 도입 전엔 코드 상수 19개 밖이라 주재료로 잡혀 추천이 밀렸다")
     void unknownNamesAreMain() {
         var c = candidate("a", List.of("고추장", "다진 마늘", "굴소스"));
-        var match = RecommendRules.match(c, Set.of(), SEASONINGS, BASICS);
+        var match = RecommendRules.match(c, Set.of(), DICT);
 
         assertEquals(List.of("고추장"), match.missingSeasoning()); // 사전의 SEASONING
         assertEquals(List.of("굴소스"), match.missingMain());       // 사전에 없음 → MAIN
@@ -119,11 +128,11 @@ class RecommendRulesTest {
         var missingOne = candidate("missing-one", List.of("두부", "대파"));
 
         var matches = List.of(
-                RecommendRules.match(complete, Set.of("두부"), SEASONINGS, BASICS),
-                RecommendRules.match(seasoningOnly, Set.of("두부"), SEASONINGS, BASICS),
-                RecommendRules.match(missingFar, Set.of("두부"), SEASONINGS, BASICS),
-                RecommendRules.match(missingTwo, Set.of("두부"), SEASONINGS, BASICS),
-                RecommendRules.match(missingOne, Set.of("두부"), SEASONINGS, BASICS));
+                RecommendRules.match(complete, Set.of("두부"), DICT),
+                RecommendRules.match(seasoningOnly, Set.of("두부"), DICT),
+                RecommendRules.match(missingFar, Set.of("두부"), DICT),
+                RecommendRules.match(missingTwo, Set.of("두부"), DICT),
+                RecommendRules.match(missingOne, Set.of("두부"), DICT));
 
         var sections = RecommendRules.bucket(matches);
 
@@ -140,7 +149,7 @@ class RecommendRulesTest {
             + "냉장고에 없어도 '있음' — 부족분이 아니니 상세에서도 갖춘 것으로 보여야 일관된다")
     void ingredientStatusesKeepOrderAndHaveFlag() {
         var c = candidate("a", List.of("두부", "대파", "소금", "고추장"));
-        var match = RecommendRules.match(c, Set.of("두부"), SEASONINGS, BASICS);
+        var match = RecommendRules.match(c, Set.of("두부"), DICT);
 
         assertEquals(
                 List.of(
@@ -151,11 +160,75 @@ class RecommendRulesTest {
                 match.ingredientStatuses());
     }
 
+    /* ── 그룹 매칭 (2026-07-17 5차-4 슬라이스2) ──
+       실측 근거: 막힌 레시피 107개 중 상당수가 냉장고에 이미 있는 것의 다른 이름이었다 —
+       "평생 떡볶이 ← 밀떡 부족"(냉장고에 밀떡 있음), "짬뽕맛 라면 ← 매운 라면 부족"(신라면 있음). */
+
+    /** 계란 계열을 "계란"으로, 라면 계열을 "라면"으로 묶은 사전. 대표는 자기 자신을 가리킨다. */
+    private static final RecommendRules.Dictionary GROUPED = new RecommendRules.Dictionary(
+            Map.of("계란", "계란", "계란 2개", "계란", "달걀", "계란",
+                    "라면", "라면", "신라면", "라면", "라면 건더기스프", "라면",
+                    "진간장", "진간장"),
+            SEASONINGS, BASICS);
+
+    @Test
+    @DisplayName("그룹 매칭: 냉장고의 '계란'이 레시피의 '계란 2개'를 덮는다 — 수량 표기 때문에 "
+            + "부족으로 잡히던 것이 사라진다(프롬프트를 조여도 이미 쌓인 데이터엔 소급이 안 되지만 "
+            + "match_key 는 재분석 없이 소급된다 — 2026-07-17 확정)")
+    void groupedNamesMatchThroughRepresentative() {
+        var c = candidate("a", List.of("계란 2개", "라면 건더기스프"));
+        var fridgeKeys = RecommendRules.keysOf(Set.of("계란", "신라면"), GROUPED);
+
+        var match = RecommendRules.match(c, fridgeKeys, GROUPED);
+
+        assertTrue(match.isComplete()); // 신라면 → 라면 그룹이라 건더기스프도 있는 것으로 친다
+    }
+
+    @Test
+    @DisplayName("안 묶인 이름은 예전 그대로 엄격 매칭 — '진간장'은 '간장'이 있어도 부족이다 "
+            + "(실제로 다른 재료라 묶지 않는다. 오병합은 없는 재료를 있다고 말하게 된다)")
+    void ungroupedNamesStayStrict() {
+        var c = candidate("a", List.of("진간장"));
+        var fridgeKeys = RecommendRules.keysOf(Set.of("간장"), GROUPED);
+
+        var match = RecommendRules.match(c, fridgeKeys, GROUPED);
+
+        assertFalse(match.isComplete());
+        assertEquals(List.of("진간장"), match.missingMain());
+    }
+
+    @Test
+    @DisplayName("부족분에 담기는 이름은 대표가 아니라 레시피 원문 그대로 — 화면엔 영상이 말한 "
+            + "이름이 보여야 한다(재료 원문 보존 원칙)")
+    void missingKeepsOriginalNameNotRepresentative() {
+        var c = candidate("a", List.of("계란 2개"));
+
+        var match = RecommendRules.match(c, Set.of(), GROUPED);
+
+        assertEquals(List.of("계란 2개"), match.missingMain());
+    }
+
+    @Test
+    @DisplayName("묶인 멤버의 양념 여부는 대표를 따른다 — 저장소가 멤버 이름까지 펼쳐 주므로 "
+            + "규칙은 이름 집합만 보면 된다(멤버 자신의 status 는 매칭에 안 쓰인다)")
+    void memberInheritsRepresentativeTier() {
+        // 저장소의 조인 결과를 그대로 흉내: "고추장"이 SEASONING 이면 멤버 "고추장 2스푼"도 집합에 들어온다
+        var dict = new RecommendRules.Dictionary(
+                Map.of("고추장", "고추장", "고추장 2스푼", "고추장"),
+                Set.of("고추장", "고추장 2스푼"), BASICS);
+        var c = candidate("a", List.of("고추장 2스푼"));
+
+        var match = RecommendRules.match(c, Set.of(), dict);
+
+        assertTrue(match.isSeasoningOnly());
+        assertEquals(List.of("고추장 2스푼"), match.missingSeasoning());
+    }
+
     @Test
     @DisplayName("각 섹션은 최대 5개 — 6개째부터는 잘린다")
     void capsAtFivePerSection() {
         var matches = java.util.stream.IntStream.range(0, 7)
-                .mapToObj(i -> RecommendRules.match(candidate("c" + i, List.of("두부")), Set.of("두부"), SEASONINGS, BASICS))
+                .mapToObj(i -> RecommendRules.match(candidate("c" + i, List.of("두부")), Set.of("두부"), DICT))
                 .toList();
 
         var sections = RecommendRules.bucket(matches);

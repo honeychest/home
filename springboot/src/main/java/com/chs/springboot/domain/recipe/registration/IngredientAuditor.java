@@ -18,8 +18,9 @@ import org.springframework.stereotype.Component;
 public class IngredientAuditor {
 
     private static final String PROMPT = """
-            아래는 요리 레시피에서 추출된 재료 이름 목록입니다.
-            각 이름을 BASIC / SEASONING / MAIN 중 하나로 판정하세요.
+            아래는 요리 레시피에서 추출된 재료 이름 목록입니다. 각 이름에 대해 두 가지를 판정하세요.
+
+            [1] tier — BASIC / SEASONING / MAIN 중 하나.
             - BASIC: 어느 집에나 늘 있는 상비 양념. 물·소금·설탕·간장·식용유·후추·참기름·통깨·
               다진마늘·고춧가루·식초 같은 것. "장 보러 갈 필요가 없는" 것만.
             - SEASONING: 양념·조미료지만 없을 수 있어 사러 가야 하는 것.
@@ -27,8 +28,21 @@ public class IngredientAuditor {
             - MAIN: 그 외 실제 식재료(고기·채소·두부·면·떡 등).
             확실하지 않으면 MAIN 으로 두세요(안전 기본값 — 양념으로 잘못 빼면 레시피가 추천에서
             사라지지만, 주재료로 두면 "부족 재료"로 보일 뿐이라 덜 위험합니다).
-            주어진 이름만 판정하고, 새 이름을 만들거나 표기를 바꾸지 마세요.
-            결과는 각 이름에 대해 {name, tier} 로만.
+
+            [2] mergeInto — 이 이름을 흡수할 대표 이름. 묶을 필요가 없으면 빈 문자열.
+            같은 것이 여러 이름으로 흩어져 있으면 대표 하나로 묶습니다. 냉장고에 대표가 있으면
+            멤버도 있는 것으로 칩니다.
+            - 대표 이름은 반드시 아래 목록 안에 있는 이름이어야 합니다. 새 이름을 만들지 마세요.
+            - 묶는 예: 수량·괄호 표기만 다른 것("계란 2개" → "계란"), 구성품("라면 건더기스프" →
+              "라면", 후레이크·스프도 같음), 상표·세부 변형이라 서로 대체되는 것("신라면" → "라면",
+              "밀떡" → "떡", "대파" → "파").
+            - 절대 묶으면 안 되는 예: 실제로 다른 재료. "진간장"과 "간장", "맛소금"과 "소금",
+              "파프리카"와 "파"는 각각 다른 것이라 묶지 마세요.
+            - 판단 기준: "대표가 냉장고에 있으면 이 재료로 요리할 수 있는가?" 가 확실히 참일 때만
+              묶으세요. 조금이라도 애매하면 빈 문자열로 두세요 — 안 묶으면 매칭이 덜 될 뿐이지만,
+              잘못 묶으면 없는 재료를 있다고 말하게 됩니다.
+
+            주어진 이름만 판정하고 표기를 바꾸지 마세요. 결과는 각 이름에 대해 {name, tier, mergeInto}.
             """;
 
     private final GeminiJsonClient gemini;
@@ -44,8 +58,18 @@ public class IngredientAuditor {
     public static final String TIER_SEASONING = "SEASONING";
     public static final String TIER_BASIC = "BASIC";
 
-    /** 오너가 확인할 제안 한 건 — 이 이름에 대해 LLM 이 제시한 tier. 자동 반영 아님. */
-    public record Proposal(String name, String suggestedTier) {
+    /**
+     * 오너가 확인할 제안 한 건 — 자동 반영 아님(안전 비대칭 원칙).
+     *
+     * @param suggestedTier 분류 제안. 묶기 제안이면 null — 묶이는 순간 양념 여부는 대표가 정하므로
+     *                      멤버의 tier 를 따로 제안할 이유가 없다.
+     * @param mergeInto     묶기 제안(이 이름을 흡수할 대표). 없으면 null.
+     */
+    public record Proposal(String name, String suggestedTier, String mergeInto) {
+
+        boolean isMerge() {
+            return mergeInto != null;
+        }
     }
 
     /** names 를 판정해 제안 목록을 돌려준다. 키가 없거나 이름이 없으면 빈 목록. */
@@ -75,22 +99,34 @@ public class IngredientAuditor {
                         "properties", Map.of(
                                 "name", Map.of("type", "STRING"),
                                 "tier", Map.of("type", "STRING",
-                                        "enum", List.of(TIER_MAIN, TIER_SEASONING, TIER_BASIC))),
-                        "required", List.of("name", "tier")));
+                                        "enum", List.of(TIER_MAIN, TIER_SEASONING, TIER_BASIC)),
+                                "mergeInto", Map.of("type", "STRING")),
+                        "required", List.of("name", "tier", "mergeInto")));
     }
 
     /** 알맹이 JSON(제안 배열)을 제안 목록으로 — 순수(HTTP·봉투 없음, GeminiJsonClient 이 이미 벗김).
         모르는 tier 값은 전부 MAIN 으로 정규화한다(안전 기본값 — 스키마가 enum 을 강제하지만
-        모델이 어긴 경우에도 위험한 쪽으로 기울지 않게). */
+        모델이 어긴 경우에도 위험한 쪽으로 기울지 않게).
+        묶기 제안이면 tier 는 버린다 — 멤버의 양념 여부는 대표가 정하므로 둘을 같이 제안하면
+        오너가 뭘 승인하는 건지 흐려진다. 자기 자신에게 묶으라는 답(mergeInto == name)은
+        "안 묶음"과 같은 뜻이라 그렇게 정규화한다.
+        제안이 사전에 실재하는 이름인지·대표가 대표 자격이 있는지는 여기서 안 본다 —
+        그건 사전을 아는 호출부(IngredientAuditController)의 몫이다(이 클래스는 사전을 모른다). */
     static List<Proposal> parse(JsonNode array) {
         List<Proposal> proposals = new ArrayList<>();
         for (JsonNode node : array) {
             String name = node.path("name").asText("").trim();
-            String tier = node.path("tier").asText(TIER_MAIN);
-            if (!name.isEmpty()) {
-                boolean known = TIER_SEASONING.equals(tier) || TIER_BASIC.equals(tier);
-                proposals.add(new Proposal(name, known ? tier : TIER_MAIN));
+            if (name.isEmpty()) {
+                continue;
             }
+            String mergeInto = node.path("mergeInto").asText("").trim();
+            if (!mergeInto.isEmpty() && !mergeInto.equals(name)) {
+                proposals.add(new Proposal(name, null, mergeInto));
+                continue;
+            }
+            String tier = node.path("tier").asText(TIER_MAIN);
+            boolean known = TIER_SEASONING.equals(tier) || TIER_BASIC.equals(tier);
+            proposals.add(new Proposal(name, known ? tier : TIER_MAIN, null));
         }
         return proposals;
     }

@@ -64,28 +64,94 @@ class IngredientAuditControllerTest {
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, e.getStatusCode());
     }
 
+    private static IngredientDictionaryRepository.Entry entry(String name, String status) {
+        return new IngredientDictionaryRepository.Entry(name, name, status);
+    }
+
+    private static IngredientDictionaryRepository.Entry member(String name, String matchKey) {
+        return new IngredientDictionaryRepository.Entry(name, matchKey,
+                IngredientDictionaryRepository.STATUS_PENDING);
+    }
+
+    private static IngredientAuditor.Proposal tier(String name, String suggestedTier) {
+        return new IngredientAuditor.Proposal(name, suggestedTier, null);
+    }
+
+    private static IngredientAuditor.Proposal merge(String name, String mergeInto) {
+        return new IngredientAuditor.Proposal(name, null, mergeInto);
+    }
+
     @Test
-    @DisplayName("PENDING 만 LLM 에 보내고, 양념·기본양념 제안만 돌려준다 — MAIN 제안은 버린다 "
-            + "(PENDING 이 이미 주재료 취급이라 바꿀 게 없음)")
-    void sendsOnlyPendingAndDropsMainProposals() {
+    @DisplayName("대표만 LLM 에 보낸다 — 이미 묶인 멤버는 성격이 대표에서 나오므로 판정 대상이 "
+            + "아니다. 확정된 이름도 보낸다(묶기 제안의 대표 후보가 될 수 있어야 하므로 — "
+            + "PENDING 만 보내면 '라면'이 이미 CONFIRMED_MAIN 일 때 묶을 곳이 사라진다)")
+    void sendsRepresentativesOnly() {
         when(dictionary.all()).thenReturn(List.of(
-                new IngredientDictionaryRepository.Entry("굴소스", "굴소스",
-                        IngredientDictionaryRepository.STATUS_PENDING),
-                new IngredientDictionaryRepository.Entry("물", "물",
-                        IngredientDictionaryRepository.STATUS_PENDING),
-                new IngredientDictionaryRepository.Entry("두부", "두부",
-                        IngredientDictionaryRepository.STATUS_PENDING),
-                new IngredientDictionaryRepository.Entry("간장", "간장",
-                        IngredientDictionaryRepository.STATUS_CONFIRMED_BASIC)));
-        when(auditor.audit(List.of("굴소스", "물", "두부"))).thenReturn(List.of(
-                new IngredientAuditor.Proposal("굴소스", IngredientAuditor.TIER_SEASONING),
-                new IngredientAuditor.Proposal("물", IngredientAuditor.TIER_BASIC),
-                new IngredientAuditor.Proposal("두부", IngredientAuditor.TIER_MAIN)));
+                entry("굴소스", IngredientDictionaryRepository.STATUS_PENDING),
+                entry("라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN),
+                member("신라면", "라면")));
+        when(auditor.audit(List.of("굴소스", "라면"))).thenReturn(List.of());
+
+        controller().auditDictionary(OWNER_ID);
+
+        verify(auditor).audit(List.of("굴소스", "라면"));
+    }
+
+    @Test
+    @DisplayName("분류 제안은 PENDING 인 것만, MAIN 제안은 버린다 — PENDING 이 이미 주재료 취급이라 "
+            + "바꿀 게 없고, 오너가 이미 정한 건 덮어쓸 후보로 올리지 않는다(사람 판정 우선)")
+    void keepsOnlyUsefulTierProposals() {
+        when(dictionary.all()).thenReturn(List.of(
+                entry("굴소스", IngredientDictionaryRepository.STATUS_PENDING),
+                entry("물", IngredientDictionaryRepository.STATUS_PENDING),
+                entry("두부", IngredientDictionaryRepository.STATUS_PENDING),
+                entry("간장", IngredientDictionaryRepository.STATUS_CONFIRMED_BASIC)));
+        when(auditor.audit(anyList())).thenReturn(List.of(
+                tier("굴소스", IngredientAuditor.TIER_SEASONING),
+                tier("물", IngredientAuditor.TIER_BASIC),
+                tier("두부", IngredientAuditor.TIER_MAIN),          // 안전 기본값 — 바꿀 게 없다
+                tier("간장", IngredientAuditor.TIER_SEASONING)));   // 오너가 이미 BASIC 으로 확정함
 
         List<IngredientAuditor.Proposal> proposals = controller().auditDictionary(OWNER_ID);
 
-        assertEquals(2, proposals.size());
-        assertEquals("굴소스", proposals.get(0).name());
-        assertEquals("물", proposals.get(1).name());
+        assertEquals(List.of("굴소스", "물"), proposals.stream().map(IngredientAuditor.Proposal::name).toList());
+    }
+
+    @Test
+    @DisplayName("묶기 제안은 확정된 이름에도 나온다 — 분류와 달리 묶기는 status 와 무관하다")
+    void keepsMergeProposalsRegardlessOfStatus() {
+        when(dictionary.all()).thenReturn(List.of(
+                entry("라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN),
+                entry("신라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN)));
+        when(auditor.audit(anyList())).thenReturn(List.of(merge("신라면", "라면")));
+
+        List<IngredientAuditor.Proposal> proposals = controller().auditDictionary(OWNER_ID);
+
+        assertEquals(List.of(merge("신라면", "라면")), proposals);
+    }
+
+    @Test
+    @DisplayName("모델이 지어낸 이름·사전에 없는 대표는 버린다 — LLM 은 사전을 모른다")
+    void dropsProposalsAboutUnknownNames() {
+        when(dictionary.all()).thenReturn(List.of(
+                entry("라면", IngredientDictionaryRepository.STATUS_PENDING)));
+        when(auditor.audit(anyList())).thenReturn(List.of(
+                tier("없는재료", IngredientAuditor.TIER_SEASONING), // 사전에 없는 이름
+                merge("라면", "없는대표")));                        // 사전에 없는 대표
+
+        assertEquals(List.of(), controller().auditDictionary(OWNER_ID));
+    }
+
+    @Test
+    @DisplayName("이미 묶인 멤버를 대표로 삼자는 제안은 버린다 — A→B→C 체인이 되면 A 와 C 의 키가 "
+            + "달라져 매칭이 조용히 깨진다(그룹 깊이는 항상 1)")
+    void dropsMergeIntoMember() {
+        when(dictionary.all()).thenReturn(List.of(
+                entry("라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN),
+                member("신라면", "라면"),
+                entry("사각라면", IngredientDictionaryRepository.STATUS_PENDING)));
+        when(auditor.audit(anyList())).thenReturn(List.of(merge("사각라면", "신라면")));
+
+        assertEquals(List.of(), controller().auditDictionary(OWNER_ID));
     }
 }
