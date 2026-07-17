@@ -90,8 +90,12 @@ DESCRIPTION_SUFFIX = "\n\n영상 설명란 원문:\n{description}"
 
 # 재료 사전 감사 프롬프트 — IngredientAuditor.PROMPT(springboot)과 동일한 지시 (일관성 유지).
 # Gemini 가 429/503/타임아웃일 때 IngredientAuditController 가 여기로 폴백한다 (2026-07-18 확정).
+# 판정 대상(pendingNames)만 판정하고, allRepresentatives 는 mergeInto 후보를 찾는 참고 자료일
+# 뿐이다 — 응답 크기가 사전 전체가 아니라 신규 개수에만 비례하게 만드는 핵심(springboot 쪽과
+# 동일 이유, 2026-07-18).
 AUDIT_PROMPT = """\
-아래는 요리 레시피에서 추출된 재료 이름 목록입니다. 각 이름에 대해 두 가지를 판정하세요.
+아래 "판정 대상" 목록의 각 이름에 대해서만 두 가지를 판정하세요.
+"참고용 전체 대표 목록"은 판정하지 마세요 — mergeInto 값을 고를 때만 참고하는 자료입니다.
 
 [1] tier — BASIC / SEASONING / MAIN 중 하나.
 - BASIC: 어느 집에나 늘 있는 상비 양념. 물·소금·설탕·간장·식용유·후추·참기름·통깨·
@@ -105,7 +109,8 @@ AUDIT_PROMPT = """\
 [2] mergeInto — 이 이름을 흡수할 대표 이름. 묶을 필요가 없으면 빈 문자열.
 같은 것이 여러 이름으로 흩어져 있으면 대표 하나로 묶습니다. 냉장고에 대표가 있으면
 멤버도 있는 것으로 칩니다.
-- 대표 이름은 반드시 아래 목록 안에 있는 이름이어야 합니다. 새 이름을 만들지 마세요.
+- 대표 이름은 반드시 "참고용 전체 대표 목록" 안에 있는 이름이어야 합니다(판정 대상 자기
+  자신은 제외 — 자기 자신으로 묶는 건 의미가 없습니다). 새 이름을 만들지 마세요.
 - 묶는 예: 수량·괄호 표기만 다른 것("계란 2개" → "계란"), 구성품("라면 건더기스프" →
   "라면", 후레이크·스프도 같음), 상표·세부 변형이라 서로 대체되는 것("신라면" → "라면",
   "밀떡" → "떡", "대파" → "파").
@@ -115,11 +120,14 @@ AUDIT_PROMPT = """\
   묶으세요. 조금이라도 애매하면 빈 문자열로 두세요 — 안 묶으면 매칭이 덜 될 뿐이지만,
   잘못 묶으면 없는 재료를 있다고 말하게 됩니다.
 
-주어진 이름만 판정하고 표기를 바꾸지 마세요. 반드시 JSON 배열로만 답하세요.
+판정 대상만 판정하고 표기를 바꾸지 마세요. 반드시 JSON 배열로만 답하세요.
 각 항목은 {{"name":..., "tier":..., "mergeInto":...}}.
 
-재료 이름 목록:
-{names}
+판정 대상:
+{pending_names}
+
+참고용 전체 대표 목록(mergeInto 후보):
+{all_representatives}
 """
 
 _lock = threading.Lock()
@@ -239,15 +247,20 @@ def extract(video_url, description):
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def build_audit_payload(names):
-    prompt_text = AUDIT_PROMPT.format(names="\n".join(names))
-    # max_tokens 여유 큼(8000) — 사전 전체(실측 최대 243개)를 한 번에 감사하면 응답이
-    # {name,tier,mergeInto} 객체 수백 개라 영상 추출(단건, 2000)보다 훨씬 길다.
-    return {"model": LM_STUDIO_MODEL, "messages": [{"role": "user", "content": prompt_text}], "max_tokens": 8000}
+def build_audit_payload(pending_names, all_representatives):
+    prompt_text = AUDIT_PROMPT.format(
+        pending_names="\n".join(pending_names),
+        all_representatives="\n".join(all_representatives))
+    # max_tokens 는 판정 대상(pending_names) 개수에만 비례 — 응답이 그 개수만큼의
+    # {name,tier,mergeInto} 객체이기 때문(2026-07-18, 전체 대표를 판정 대상으로 보내던 예전
+    # 방식이 사전 크기(실측 243개)에 비례해 자라다 이 상한을 넘겨 503 이 났던 문제의 근본 수정).
+    max_tokens = min(32000, max(500, len(pending_names) * 40))
+    return {"model": LM_STUDIO_MODEL, "messages": [{"role": "user", "content": prompt_text}],
+            "max_tokens": max_tokens}
 
 
-def audit_ingredients(names):
-    payload = build_audit_payload(names)
+def audit_ingredients(pending_names, all_representatives):
+    payload = build_audit_payload(pending_names, all_representatives)
     return parse_model_json_array(call_local_model(payload, timeout=180))
 
 
@@ -336,7 +349,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path == "/extract":
                     result = extract(req["videoUrl"], req.get("description"))
                 else:
-                    result = audit_ingredients(req["names"])
+                    result = audit_ingredients(req["pendingNames"], req.get("allRepresentatives", []))
             body = json.dumps(result, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

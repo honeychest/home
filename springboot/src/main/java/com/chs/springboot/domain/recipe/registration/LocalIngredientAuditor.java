@@ -25,14 +25,14 @@ public class LocalIngredientAuditor {
         this.properties = properties;
     }
 
-    public List<IngredientAuditor.Proposal> audit(List<String> names) {
+    public List<IngredientAuditor.Proposal> audit(List<String> pendingNames, List<String> allRepresentatives) {
         if (!properties.isLocalExtractorEnabled()) {
             throw new LocalRecipeExtractor.LocalUnavailableException("로컬 추출기 비활성화 설정", null);
         }
         try {
             JsonNode response = rest.post()
                     .uri("/audit")
-                    .body(Map.of("names", names))
+                    .body(Map.of("pendingNames", pendingNames, "allRepresentatives", allRepresentatives))
                     .retrieve()
                     .body(JsonNode.class);
             return IngredientAuditor.parse(response);

@@ -78,5 +78,8 @@ tail -f ~/gikka-local/server.log                                          # 로�
   cookMinutes, steps, summary, tags).
 - 실패(HTTP 500)는 Spring 쪽에서 `LocalUnavailableException` 으로 묶여 Gemini 로 전체 폴백된다.
 - `POST /audit` (2026-07-18 신설): 텍스트 전용(yt-dlp·whisper 없음, LM Studio만) 재료 사전 감사.
-  `{"names": [...]}` → `[{"name","tier","mergeInto"}, ...]`. `IngredientAuditController`가
+  `{"pendingNames": [...], "allRepresentatives": [...]}` → `[{"name","tier","mergeInto"}, ...]`.
+  `pendingNames`(신규만)만 판정 대상이고 `allRepresentatives`(전체 대표)는 mergeInto 후보
+  참고용 — 응답 크기가 사전 전체가 아니라 신규 개수에만 비례하게 하는 설계(2026-07-18,
+  사전이 커질수록 응답이 자라 max_tokens 를 넘기던 문제의 근본 수정). `IngredientAuditController`가
   Gemini 429/503/타임아웃일 때만 여기로 폴백한다(평소엔 Gemini가 기본).

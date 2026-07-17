@@ -63,9 +63,13 @@ public class IngredientAuditController {
      *     MAIN 제안은 뺀다 — PENDING 이 이미 주재료 취급이라 바꿀 게 없다(안전 기본값).
      *   · 묶기 제안: "계란 2개 → 계란" 같은 변형 흡수 (2026-07-17 슬라이스2).
      *
-     * <p>LLM 에 넘기는 건 <b>대표들만</b>이다(이미 묶인 멤버는 성격이 대표에서 나오므로 판정 대상이
-     * 아니다). 분류 제안과 달리 묶기 제안은 PENDING 뿐 아니라 확정된 이름도 대상이라 — 대표
-     * 후보("라면")가 이미 CONFIRMED_MAIN 일 수 있어 PENDING 만 보내면 묶을 곳이 사라진다.
+     * <p>판정 대상은 <b>PENDING 대표만</b>이다(2026-07-18 확정, 이미 묶인 멤버는 성격이 대표에서
+     * 나오므로 애초에 대표가 아니다). 전체 대표 목록(확정 포함)은 LLM 에 "이 중에서만 mergeInto
+     * 를 골라라"는 참고 자료로만 넘어간다 — 판정 대상이 아니므로 응답에 안 나온다. 이렇게 하면
+     * 응답 크기가 사전 전체 크기가 아니라 신규(PENDING) 개수에만 비례한다(예전엔 대표 전체를
+     * 판정 대상으로 보내 사전이 커질수록 출력이 자라다가 gikka-local max_tokens 를 넘겨 503 이
+     * 재발했다). 트레이드오프: 이미 CONFIRMED 인 대표끼리 뒤늦게 묶자는 제안은 더 이상 안 나온다
+     * (그 경우도 "매칭이 덜 될 뿐"인 안전한 실패 모드).
      *
      * <p>LLM 이 낸 제안을 사전 사실과 대조해 여기서 거른다(모델은 사전을 모르고, 없는 이름을
      * 지어낼 수 있다): 실재하지 않는 이름, 대표 자격이 없는 이름(이미 남에게 묶인 멤버 — 대표로
@@ -85,14 +89,22 @@ public class IngredientAuditController {
                 .filter(IngredientAuditController::isRepresentative)
                 .map(IngredientDictionaryRepository.Entry::name)
                 .toList();
+        List<String> pendingRepresentatives = all.stream()
+                .filter(IngredientAuditController::isRepresentative)
+                .filter(e -> IngredientDictionaryRepository.STATUS_PENDING.equals(e.status()))
+                .map(IngredientDictionaryRepository.Entry::name)
+                .toList();
+        if (pendingRepresentatives.isEmpty()) {
+            return List.of(); // 신규 없음 — LLM 호출 자체를 생략(한도 절약)
+        }
         try {
-            return auditor.audit(representatives).stream()
+            return auditor.audit(pendingRepresentatives, representatives).stream()
                     .filter(p -> isUseful(p, byName))
                     .toList();
         } catch (RecipeExtractor.TransientFailureException e) {
             log.warn("Gemini 일시적 실패: {} - {}", "일시적 실패(원인불명)", e.getMessage());
             try {
-                return localAuditor.audit(representatives).stream()
+                return localAuditor.audit(pendingRepresentatives, representatives).stream()
                         .filter(p -> isUseful(p, byName))
                         .toList();
             } catch (LocalRecipeExtractor.LocalUnavailableException le) {

@@ -3,6 +3,9 @@
 // 올라가 500 이 나갔다 — 프론트가 "잠시 후 다시"를 띄우려면 상태 코드로 구분돼야 한다
 // (2026-07-17. 이때 실제로 화면에 뜬 오류의 원인은 다른 것[nginx 15초 타임아웃]이었지만,
 // 이 구멍 자체는 실재해 함께 막았다).
+// 판정 대상 = PENDING 대표만, 전체 대표 목록은 참고 자료(2026-07-18) — 사전이 커질수록 응답이
+// 자라 max_tokens 를 넘기던 문제(gikka-local 503)의 근본 수정. 트레이드오프(확정 대표끼리의
+// 뒤늦은 묶기 제안 소실)는 skipsLlmWhenNoPendingRepresentatives 가 고정한다.
 package com.chs.springboot.domain.recipe.registration;
 
 import java.util.List;
@@ -48,7 +51,22 @@ class IngredientAuditControllerTest {
                 () -> controller().auditDictionary(STRANGER_ID));
 
         assertEquals(HttpStatus.FORBIDDEN, e.getStatusCode());
-        verify(auditor, never()).audit(anyList());
+        verify(auditor, never()).audit(anyList(), anyList());
+    }
+
+    @Test
+    @DisplayName("PENDING 대표가 하나도 없으면 LLM 호출 자체를 생략한다 — 확정 대표끼리의 뒤늦은 "
+            + "묶기는 더 이상 제안하지 않는다(안전한 실패 모드로 받아들인 트레이드오프)")
+    void skipsLlmWhenNoPendingRepresentatives() {
+        when(dictionary.all()).thenReturn(List.of(
+                entry("라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN),
+                entry("신라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN)));
+
+        List<IngredientAuditor.Proposal> proposals = controller().auditDictionary(OWNER_ID);
+
+        assertEquals(List.of(), proposals);
+        verify(auditor, never()).audit(anyList(), anyList());
+        verify(localAuditor, never()).audit(anyList(), anyList());
     }
 
     @Test
@@ -56,9 +74,9 @@ class IngredientAuditControllerTest {
     void transientFailureBecomes503WhenLocalAlsoUnavailable() {
         when(dictionary.all()).thenReturn(List.of(new IngredientDictionaryRepository.Entry(
                 "굴소스", "굴소스", IngredientDictionaryRepository.STATUS_PENDING)));
-        when(auditor.audit(anyList()))
+        when(auditor.audit(anyList(), anyList()))
                 .thenThrow(new RecipeExtractor.TransientFailureException("429 quota"));
-        when(localAuditor.audit(anyList()))
+        when(localAuditor.audit(anyList(), anyList()))
                 .thenThrow(new LocalRecipeExtractor.LocalUnavailableException("service down", null));
 
         ResponseStatusException e = assertThrows(ResponseStatusException.class,
@@ -72,9 +90,9 @@ class IngredientAuditControllerTest {
     void transientFailureFallsBackToLocal() {
         when(dictionary.all()).thenReturn(List.of(
                 entry("굴소스", IngredientDictionaryRepository.STATUS_PENDING)));
-        when(auditor.audit(anyList()))
+        when(auditor.audit(anyList(), anyList()))
                 .thenThrow(new RecipeExtractor.TransientFailureException("503 overloaded"));
-        when(localAuditor.audit(List.of("굴소스")))
+        when(localAuditor.audit(List.of("굴소스"), List.of("굴소스")))
                 .thenReturn(List.of(tier("굴소스", IngredientAuditor.TIER_SEASONING)));
 
         List<IngredientAuditor.Proposal> proposals = controller().auditDictionary(OWNER_ID);
@@ -100,19 +118,19 @@ class IngredientAuditControllerTest {
     }
 
     @Test
-    @DisplayName("대표만 LLM 에 보낸다 — 이미 묶인 멤버는 성격이 대표에서 나오므로 판정 대상이 "
-            + "아니다. 확정된 이름도 보낸다(묶기 제안의 대표 후보가 될 수 있어야 하므로 — "
-            + "PENDING 만 보내면 '라면'이 이미 CONFIRMED_MAIN 일 때 묶을 곳이 사라진다)")
-    void sendsRepresentativesOnly() {
+    @DisplayName("판정 대상은 PENDING 대표만, 참고용 전체 대표 목록엔 확정된 이름도 포함한다 — "
+            + "묶기 제안의 대표 후보가 될 수 있어야 하므로(대표 후보 '라면'이 이미 CONFIRMED_MAIN "
+            + "이어도 참고 목록엔 남아 있어야 묶을 곳이 있다)")
+    void sendsPendingOnlyWithFullReferenceList() {
         when(dictionary.all()).thenReturn(List.of(
                 entry("굴소스", IngredientDictionaryRepository.STATUS_PENDING),
                 entry("라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN),
                 member("신라면", "라면")));
-        when(auditor.audit(List.of("굴소스", "라면"))).thenReturn(List.of());
+        when(auditor.audit(List.of("굴소스"), List.of("굴소스", "라면"))).thenReturn(List.of());
 
         controller().auditDictionary(OWNER_ID);
 
-        verify(auditor).audit(List.of("굴소스", "라면"));
+        verify(auditor).audit(List.of("굴소스"), List.of("굴소스", "라면"));
     }
 
     @Test
@@ -124,7 +142,7 @@ class IngredientAuditControllerTest {
                 entry("물", IngredientDictionaryRepository.STATUS_PENDING),
                 entry("두부", IngredientDictionaryRepository.STATUS_PENDING),
                 entry("간장", IngredientDictionaryRepository.STATUS_CONFIRMED_BASIC)));
-        when(auditor.audit(anyList())).thenReturn(List.of(
+        when(auditor.audit(anyList(), anyList())).thenReturn(List.of(
                 tier("굴소스", IngredientAuditor.TIER_SEASONING),
                 tier("물", IngredientAuditor.TIER_BASIC),
                 tier("두부", IngredientAuditor.TIER_MAIN),          // 안전 기본값 — 바꿀 게 없다
@@ -136,12 +154,13 @@ class IngredientAuditControllerTest {
     }
 
     @Test
-    @DisplayName("묶기 제안은 확정된 이름에도 나온다 — 분류와 달리 묶기는 status 와 무관하다")
-    void keepsMergeProposalsRegardlessOfStatus() {
+    @DisplayName("묶기 제안의 대상(mergeInto)은 확정된 대표여도 된다 — 주체(판정 대상)만 PENDING 이면 된다")
+    void mergeTargetCanBeConfirmed() {
         when(dictionary.all()).thenReturn(List.of(
                 entry("라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN),
-                entry("신라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN)));
-        when(auditor.audit(anyList())).thenReturn(List.of(merge("신라면", "라면")));
+                entry("신라면", IngredientDictionaryRepository.STATUS_PENDING)));
+        when(auditor.audit(List.of("신라면"), List.of("라면", "신라면")))
+                .thenReturn(List.of(merge("신라면", "라면")));
 
         List<IngredientAuditor.Proposal> proposals = controller().auditDictionary(OWNER_ID);
 
@@ -153,7 +172,7 @@ class IngredientAuditControllerTest {
     void dropsProposalsAboutUnknownNames() {
         when(dictionary.all()).thenReturn(List.of(
                 entry("라면", IngredientDictionaryRepository.STATUS_PENDING)));
-        when(auditor.audit(anyList())).thenReturn(List.of(
+        when(auditor.audit(anyList(), anyList())).thenReturn(List.of(
                 tier("없는재료", IngredientAuditor.TIER_SEASONING), // 사전에 없는 이름
                 merge("라면", "없는대표")));                        // 사전에 없는 대표
 
@@ -168,7 +187,7 @@ class IngredientAuditControllerTest {
                 entry("라면", IngredientDictionaryRepository.STATUS_CONFIRMED_MAIN),
                 member("신라면", "라면"),
                 entry("사각라면", IngredientDictionaryRepository.STATUS_PENDING)));
-        when(auditor.audit(anyList())).thenReturn(List.of(merge("사각라면", "신라면")));
+        when(auditor.audit(anyList(), anyList())).thenReturn(List.of(merge("사각라면", "신라면")));
 
         assertEquals(List.of(), controller().auditDictionary(OWNER_ID));
     }

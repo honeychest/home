@@ -9,6 +9,7 @@ package com.chs.springboot.domain.recipe.registration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +22,23 @@ public class RegistrationWorker {
     private static final Logger log = LoggerFactory.getLogger(RegistrationWorker.class);
     private static final int MAX_ATTEMPTS = 3;
     private static final int TRANSIENT_FAILURE_BACKOFF_SECONDS = 60;
+
+    /** IngredientPipelineStep 한 개짜리 즉석 구현 — 이름 붙은 람다일 뿐, 별 클래스 없이도
+        목록 순서·구성을 그대로 유지한다. */
+    private record Step(String name, BiConsumer<RecipeExtractor.ExtractionResult, IngredientDictionaryRepository> action)
+            implements IngredientPipelineStep {
+        @Override
+        public void apply(RecipeExtractor.ExtractionResult result, IngredientDictionaryRepository dictionary) {
+            action.accept(result, dictionary);
+        }
+    }
+
+    /** RECIPE 분석 직후 재료 사전에 적용되는 절차 — 순서대로 실행된다(2026-07-18 확정).
+        단계를 추가·제거·순서 교체는 이 목록만 바꾸면 된다. 확신 없는 것은 PENDING(=MAIN 안전
+        기본값)으로 남아 오너·AI 점검(IngredientAuditController)이 나중에 판정한다. */
+    private static final List<IngredientPipelineStep> INGREDIENT_PIPELINE = List.of(
+            new Step("신규 재료 등록(PENDING)", (result, dict) -> dict.upsertPending(result.ingredients())),
+            new Step("확신 있는 양념 자동 승격", (result, dict) -> dict.confirmSeasoningIfPending(result.confidentSeasonings())));
 
     private final VideoRepository videos;
     private final GeminiRateLimiter rateLimiter;
@@ -69,10 +87,9 @@ public class RegistrationWorker {
             videos.markDone(item.videoId(), result.category(), recipe,
                     result.summary(), result.tags(), RecipeExtractor.SUMMARY_VERSION, signals);
             if ("RECIPE".equals(result.category()) && result.ingredients() != null) {
-                // 추출된 재료 이름을 사전에 이어서 채우고(PENDING), 모델이 확신한 양념은 자동 확정 (5차-4 슬라이스1).
-                // 확신 없는 것은 PENDING(=MAIN 안전 기본값)으로 남아 오너·AI 점검이 나중에 판정한다.
-                dictionary.upsertPending(result.ingredients());
-                dictionary.confirmSeasoningIfPending(result.confidentSeasonings());
+                for (IngredientPipelineStep step : INGREDIENT_PIPELINE) {
+                    step.apply(result, dictionary);
+                }
             }
             log.info("[gikka] 분석 완료 video={} category={}", item.videoId(), result.category());
         } catch (RecipeExtractor.TransientFailureException e) {

@@ -4,6 +4,12 @@
 // (영상 세계지식 추론과 성격이 다름). 그래도 안전 비대칭 원칙상 제안까지만.
 // Gemini 호출 봉투·일시적 실패 매핑은 GeminiJsonClient seam 이 소유 — 여기는 프롬프트·스키마·
 // 알맹이 파싱만 (2026-07-17 아키텍처 점검에서 GeminiRecipeExtractor 와 공유 seam 으로 통합).
+//
+// 판정 대상 = PENDING 이름만, 전체 대표 목록 = mergeInto 후보를 찾기 위한 참고 자료(2026-07-18
+// 확정). 예전엔 대표 전체(사전 커질수록 커짐, 실측 243개)를 판정 대상으로 보내 응답 크기가
+// 사전 크기에 비례해 자라다가 gikka-local max_tokens 를 넘겨 503 이 재발했다. 이제 응답 크기는
+// 신규(PENDING) 개수에만 비례한다. 트레이드오프: 이미 CONFIRMED 인 대표끼리 뒤늦게 묶자는 제안은
+// 더 이상 안 나온다(그 경우 어차피 "매칭이 덜 될 뿐"인 안전한 실패 모드 — CONTEXT.md 참고).
 package com.chs.springboot.domain.recipe.registration;
 
 import java.util.ArrayList;
@@ -18,7 +24,8 @@ import org.springframework.stereotype.Component;
 public class IngredientAuditor {
 
     private static final String PROMPT = """
-            아래는 요리 레시피에서 추출된 재료 이름 목록입니다. 각 이름에 대해 두 가지를 판정하세요.
+            아래 "판정 대상" 목록의 각 이름에 대해서만 두 가지를 판정하세요.
+            "참고용 전체 대표 목록"은 판정하지 마세요 — mergeInto 값을 고를 때만 참고하는 자료입니다.
 
             [1] tier — BASIC / SEASONING / MAIN 중 하나.
             - BASIC: 어느 집에나 늘 있는 상비 양념. 물·소금·설탕·간장·식용유·후추·참기름·통깨·
@@ -32,7 +39,8 @@ public class IngredientAuditor {
             [2] mergeInto — 이 이름을 흡수할 대표 이름. 묶을 필요가 없으면 빈 문자열.
             같은 것이 여러 이름으로 흩어져 있으면 대표 하나로 묶습니다. 냉장고에 대표가 있으면
             멤버도 있는 것으로 칩니다.
-            - 대표 이름은 반드시 아래 목록 안에 있는 이름이어야 합니다. 새 이름을 만들지 마세요.
+            - 대표 이름은 반드시 "참고용 전체 대표 목록" 안에 있는 이름이어야 합니다(판정 대상
+              자기 자신은 제외 — 자기 자신으로 묶는 건 의미가 없습니다). 새 이름을 만들지 마세요.
             - 묶는 예: 수량·괄호 표기만 다른 것("계란 2개" → "계란"), 구성품("라면 건더기스프" →
               "라면", 후레이크·스프도 같음), 상표·세부 변형이라 서로 대체되는 것("신라면" → "라면",
               "밀떡" → "떡", "대파" → "파").
@@ -42,7 +50,8 @@ public class IngredientAuditor {
               묶으세요. 조금이라도 애매하면 빈 문자열로 두세요 — 안 묶으면 매칭이 덜 될 뿐이지만,
               잘못 묶으면 없는 재료를 있다고 말하게 됩니다.
 
-            주어진 이름만 판정하고 표기를 바꾸지 마세요. 결과는 각 이름에 대해 {name, tier, mergeInto}.
+            판정 대상만 판정하고 표기를 바꾸지 마세요. 결과는 판정 대상 각 이름에 대해
+            {name, tier, mergeInto}.
             """;
 
     private final GeminiJsonClient gemini;
@@ -72,32 +81,40 @@ public class IngredientAuditor {
         }
     }
 
-    /** names 를 판정해 제안 목록을 돌려준다. 키가 없거나 이름이 없으면 빈 목록. */
-    public List<Proposal> audit(List<String> names) {
-        if (names.isEmpty() || properties.getGeminiApiKey().isBlank()) {
+    /**
+     * pendingNames 만 판정해 제안 목록을 돌려준다 — allRepresentatives 는 mergeInto 후보를
+     * 찾기 위한 참고 자료일 뿐 판정 대상이 아니다(응답 크기가 사전 전체가 아니라 신규 개수에
+     * 비례하게 만드는 핵심, 2026-07-18). pendingNames 가 비면 신규가 없다는 뜻이라 LLM 호출
+     * 자체를 생략한다(한도 절약).
+     */
+    public List<Proposal> audit(List<String> pendingNames, List<String> allRepresentatives) {
+        if (pendingNames.isEmpty() || properties.getGeminiApiKey().isBlank()) {
             return List.of();
         }
         List<Map<String, Object>> parts = List.of(
                 Map.of("text", PROMPT),
-                Map.of("text", "재료 이름 목록:\n" + String.join("\n", names)));
+                Map.of("text", "판정 대상:\n" + String.join("\n", pendingNames)),
+                Map.of("text", "참고용 전체 대표 목록(mergeInto 후보):\n"
+                        + String.join("\n", allRepresentatives)));
         // thinkingBudget 0 = 사고 끄기. 재료 이름만 보고 양념/주재료를 가르는 건 폐쇄적 어휘
         // 판단이라 사고가 거의 기여하지 않는다 — 2026-07-17 실측(243개): 사고 ON 24.7초·양념 88개
         // vs OFF 10.9초·양념 86개(차이는 파슬리·육수류 같은 경계 6개뿐, 어차피 오너가 확정하는
         // "제안"이라 무해). 사고 토큰 4,706개도 함께 절약된다(무료 한도).
         Map<String, Object> generationConfig = Map.of(
                 "responseMimeType", "application/json",
-                "responseSchema", responseSchema(),
+                "responseSchema", responseSchema(pendingNames),
                 "thinkingConfig", Map.of("thinkingBudget", 0));
         return parse(gemini.generate(properties.getGeminiModel(), parts, generationConfig));
     }
 
-    private static Map<String, Object> responseSchema() {
+    /** name 필드를 pendingNames 로 enum 강제 — 판정 대상 밖 이름을 스키마 차원에서 막는다. */
+    private static Map<String, Object> responseSchema(List<String> pendingNames) {
         return Map.of(
                 "type", "ARRAY",
                 "items", Map.of(
                         "type", "OBJECT",
                         "properties", Map.of(
-                                "name", Map.of("type", "STRING"),
+                                "name", Map.of("type", "STRING", "enum", pendingNames),
                                 "tier", Map.of("type", "STRING",
                                         "enum", List.of(TIER_MAIN, TIER_SEASONING, TIER_BASIC)),
                                 "mergeInto", Map.of("type", "STRING")),
