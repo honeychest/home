@@ -1,7 +1,7 @@
 // [AGENT] 전 사용자 대기열 모니터링 데이터 모양 — 오너 전용 (2026-07-13 확정, 검증단계 필수 기능)
 // registrationTypes.ts 와 별도 타입인 이유: 이 화면은 여러 사용자(email)를 넘나들며 보는
 // 관리 관점 데이터라 RegistrationItem(내 것만) 계약과 섞지 않는다.
-import type { RegistrationStatus, VideoCategory } from './registrationTypes';
+import type { ExtractedRecipe, RegistrationStatus, VideoCategory } from './registrationTypes';
 
 export interface MonitorItem {
     userId: number;
@@ -92,5 +92,16 @@ export interface MonitorSnapshot {
     nextRetryAt: string | null;
     /** null = 로컬 추출기를 지금 못 씀 (죽었거나 /health 없는 옛 버전) → 전부 Gemini 로 간다 */
     localExtractor: LocalExtractorHealth | null;
+    /** 전체(limit 무관) 상태별 등록 행 수 — 상태 칩 필터의 개수 (2026-07-18) */
+    statusCounts: Partial<Record<RegistrationStatus, number>>;
     items: MonitorItem[];
+}
+
+/** 모니터 시트의 분석 내용 — 탭한 1건만 조회 (2026-07-18. 폴링 목록에 안 실음 — payload 낭비) */
+export interface MonitorAnalysis {
+    category: VideoCategory | null;
+    recipe: ExtractedRecipe | null;
+    summary: string | null;
+    tags: string[] | null;
+    analysisSignals: string[] | null;
 }

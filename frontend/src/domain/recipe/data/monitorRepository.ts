@@ -1,15 +1,20 @@
 // [AGENT] 전 사용자 대기열 모니터링 저장소 — 오너 전용 화면(MonitorPage) 전용 (2026-07-13 확정)
 // 재료 사전 관리(2026-07-17 5차-4)도 오너 전용이라 같은 저장소에 둔다(모니터 화면 한 곳 정책).
 import type {
-    DictionaryEntry, DictionaryStatus, IngredientMerge, IngredientProposal, MonitorSnapshot,
+    DictionaryEntry, DictionaryStatus, IngredientMerge, IngredientProposal, MonitorAnalysis,
+    MonitorSnapshot,
 } from './monitorTypes';
+import type { RegistrationStatus } from './registrationTypes';
 import { HttpError, jsonBody, request } from './http';
 
 export const MONITOR_LIMIT = 100;
 
 export interface MonitorRepository {
-    /** 전 사용자 대기열 스냅샷 — 최신 등록이 앞. 오너가 아니면 403 (HttpError) */
-    list(limit: number): Promise<MonitorSnapshot>;
+    /** 전 사용자 대기열 스냅샷 — 최신 등록이 앞. q(제목·요리명·태그)·status 는 선택 필터
+        (2026-07-18 — 최신 limit 개 밖 영상 탐색용). 오너가 아니면 403 (HttpError) */
+    list(limit: number, q?: string, status?: RegistrationStatus | null): Promise<MonitorSnapshot>;
+    /** 탭한 영상 1건의 분석 내용 — 시트 표시용 (목록 폴링에 안 실음). 없는 영상=404 */
+    analysis(videoId: string): Promise<MonitorAnalysis>;
     /** 강제 재분석 — 상태·분류 무관, 요청자가 등록했는지도 무관 (오너 전용) */
     reanalyze(videoId: string): Promise<void>;
     /** 영상 삭제 — 분석정보만 지우고 REMOVED 로 표시(영상정보·연결은 유지, 오너 전용) */
@@ -41,8 +46,15 @@ export interface IngredientDecision {
 
 export function createApiMonitorRepository(): MonitorRepository {
     return {
-        list(limit) {
-            return request<MonitorSnapshot>(`/api/recipe/registrations/monitor?limit=${limit}`);
+        list(limit, q, status) {
+            const params = new URLSearchParams({ limit: String(limit) });
+            if (q && q.trim() !== '') params.set('q', q.trim());
+            if (status) params.set('status', status);
+            return request<MonitorSnapshot>(`/api/recipe/registrations/monitor?${params.toString()}`);
+        },
+        analysis(videoId) {
+            return request<MonitorAnalysis>(
+                `/api/recipe/registrations/monitor/${encodeURIComponent(videoId)}/analysis`);
         },
         reanalyze(videoId) {
             return request<void>(`/api/recipe/registrations/monitor/${encodeURIComponent(videoId)}/reanalyze`,

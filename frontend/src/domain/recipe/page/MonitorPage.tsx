@@ -12,8 +12,9 @@
 // 이 화면은 운영자 모드의 "대기열" 탭이다 — 재료 사전은 형제 탭(DictionaryPage)으로 분리됐다
 // (2026-07-17: 한 화면에 대기열 + 사전 243행이 같이 쌓여 스크롤로는 못 썼음. 탭이 나뉘면서
 // 사전을 보는 동안 이 화면의 2초 폴링이 아예 안 도는 이득도 함께 생김 — 언마운트되므로).
-import { useCallback, useEffect, useState } from 'react';
-import type { MonitorItem, MonitorSnapshot } from '../data/monitorTypes';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { MonitorAnalysis, MonitorItem, MonitorSnapshot } from '../data/monitorTypes';
+import type { VideoCategory } from '../data/registrationTypes';
 import { MONITOR_LIMIT, isForbidden, monitorRepository } from '../data/monitorRepository';
 import { localExtractorStatus } from '../data/localExtractorStatus';
 import { useMutation } from './useMutation';
@@ -46,6 +47,25 @@ const STATUS_LABEL: Record<MonitorItem['status'], string> = {
     TOO_LONG: '긴 영상',
     FAILED: '실패',
     REMOVED: '삭제됨',
+};
+const STATUS_FILTERS = Object.keys(STATUS_LABEL) as MonitorItem['status'][];
+
+// 탐색 3종 (2026-07-18 — "최신 100개 밖 영상은 존재 자체가 안 보인다" 지적): 검색·상태 칩·무한 스크롤
+const SEARCH_PLACEHOLDER = '제목·요리 이름·태그 검색 (전체 대상)';
+const SEARCH_DEBOUNCE_MS = 300; // 타이핑 중 매 글자 요청 방지 (RecipesPage 와 동일 패턴)
+const FILTERED_EMPTY_TEXT = '조건에 맞는 영상이 없어요.';
+const statusChipText = (label: string, count: number) => `${label} ${count}`;
+
+// 시트의 분석 내용 (2026-07-18) — 탭한 1건만 조회 (폴링 목록에 실으면 payload 낭비)
+const ANALYSIS_LOADING_TEXT = '분석 내용 불러오는 중…';
+const ANALYSIS_LOAD_FAIL_TEXT = '분석 내용을 불러오지 못했어요 — 시트를 다시 열어 주세요';
+const NO_ANALYSIS_TEXT = '아직 분석 결과가 없어요.';
+const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;
+const recipeNameText = (name: string) => `추출된 요리 이름: ${name}`;
+// 분류 배지 — RecipesPage 와 같은 카테고리 팔레트 (cat-1~3 고정 순서, CONTEXT.md 배지 색 체계)
+const CATEGORY_LABEL: Record<VideoCategory, string> = { RECIPE: '레시피', TIP: '유틸', ETC: '기타' };
+const CATEGORY_BADGE: Record<VideoCategory, RcpBadgeVariant> = {
+    RECIPE: 'cat-1', TIP: 'cat-2', ETC: 'cat-3',
 };
 /** 로컬 추출기 상태 → 배지 색. 상태 팔레트만 쓴다(카테고리 색과 절대 혼용 금지 — 2026-07-14 재설계) */
 const LOCAL_BADGE: Record<ReturnType<typeof localExtractorStatus>['level'], RcpBadgeVariant> = {
@@ -101,8 +121,17 @@ const nextRetrySecondsLeft = (nextRetryAt: string | null, nowMs: number): number
 export default function MonitorPage() {
     const [now, setNow] = useState(() => Date.now());
     const [selected, setSelected] = useState<MonitorItem | null>(null); // 항목 탭 → 액션 시트
+    const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState<MonitorItem['status'] | null>(null);
+    const [limit, setLimit] = useState(MONITOR_LIMIT); // 무한 스크롤 — 끝에 닿으면 한 페이지씩 늘린다
+    const [analysis, setAnalysis] = useState<MonitorAnalysis | null>(null);
+    const [analysisError, setAnalysisError] = useState<string | null>(null);
+    const sentinelRef = useRef<HTMLDivElement>(null);
 
-    const load = useCallback(() => monitorRepository.list(MONITOR_LIMIT), []);
+    const load = useCallback(
+        () => monitorRepository.list(limit, debouncedSearch, statusFilter),
+        [limit, debouncedSearch, statusFilter]);
     const query = useQuery<MonitorSnapshot>(load, loadMessage);
     const { data: snapshot, error: loadError, reload, refresh } = query;
     // 접근 거부는 "다시 시도"가 의미 없는 다른 화면이라 원인으로 갈라낸다 (useQuery 는 403 을 모른다)
@@ -127,6 +156,48 @@ export default function MonitorPage() {
         const timer = window.setInterval(() => setNow(Date.now()), TICK_MS);
         return () => window.clearInterval(timer);
     }, []);
+
+    // 검색 디바운스 — 조건이 바뀌면 무한 스크롤 범위도 처음(1페이지)으로 되돌린다
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            setDebouncedSearch(search.trim());
+            setLimit(MONITOR_LIMIT);
+        }, SEARCH_DEBOUNCE_MS);
+        return () => window.clearTimeout(timer);
+    }, [search]);
+
+    const toggleStatus = (status: MonitorItem['status']) => {
+        setStatusFilter((prev) => (prev === status ? null : status));
+        setLimit(MONITOR_LIMIT);
+    };
+
+    // 무한 스크롤 — 목록 끝(sentinel)이 화면에 들어오면 다음 페이지.
+    // 방금 늘린 만큼 다 못 받았으면(= 끝까지 왔음) 더 안 늘린다 — 무한 증식 방지
+    const itemCount = snapshot?.items.length ?? 0;
+    useEffect(() => {
+        const sentinel = sentinelRef.current;
+        if (!sentinel) return undefined;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting) && itemCount >= limit) {
+                setLimit((prev) => prev + MONITOR_LIMIT);
+            }
+        });
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [itemCount, limit]);
+
+    // 시트 열 때 분석 내용 1건 조회 — 화면 진입 1회 자동 실행 흐름이라 직접 catch 허용
+    // (useMutation 은 사용자 버튼 조작용 — AGENTS.md 경계, ShareTargetPage 패턴)
+    useEffect(() => {
+        setAnalysis(null);
+        setAnalysisError(null);
+        if (selected === null) return undefined;
+        let cancelled = false;
+        monitorRepository.analysis(selected.videoId)
+            .then((result) => { if (!cancelled) setAnalysis(result); })
+            .catch(() => { if (!cancelled) setAnalysisError(ANALYSIS_LOAD_FAIL_TEXT); });
+        return () => { cancelled = true; };
+    }, [selected]);
 
     const handleReanalyze = (item: MonitorItem) => mutation.run(async () => {
         await monitorRepository.reanalyze(item.videoId);
@@ -165,9 +236,8 @@ export default function MonitorPage() {
 
             {snapshot !== null && (
                 <>
-                    <div className="rcp-summary-row" id="rcp-monitor-summary" aria-label="대기열·워커 요약">
-                        <RcpBadge variant="neutral">대기 {snapshot.waitingCount}</RcpBadge>
-                        <RcpBadge variant="analyzing">분석 중 {snapshot.analyzingCount}</RcpBadge>
+                    {/* 대기/분석중 개수는 아래 상태 칩(전체 개수 겸 필터)으로 옮겨갔다 (2026-07-18) */}
+                    <div className="rcp-summary-row" id="rcp-monitor-summary" aria-label="워커·한도 요약">
                         <RcpBadge variant={isWorkerStale(snapshot.workerHeartbeatAt, now) ? 'critical' : 'good'}>
                             워커 {workerStatusText(snapshot.workerHeartbeatAt, now)}
                         </RcpBadge>
@@ -190,8 +260,38 @@ export default function MonitorPage() {
                         <p className="rcp-monitor-error" role="alert" key={problem}>{problem}</p>
                     ))}
 
+                    {/* 탐색 3종 (2026-07-18): 검색은 제목·요리명·태그, 상태 칩은 전체 개수 겸 필터.
+                        칩 스타일은 사전 화면과 동일(.rcp-dict-action — "고른 것 = 그린 실선" 한 가지 말) */}
+                    <input
+                        className="rcp-input rcp-dict-search"
+                        type="search"
+                        inputMode="search"
+                        value={search}
+                        placeholder={SEARCH_PLACEHOLDER}
+                        aria-label={SEARCH_PLACEHOLDER}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                    <div className="rcp-dict-filters" role="group" aria-label="상태 필터">
+                        {STATUS_FILTERS.map((status) => (
+                            <button
+                                type="button"
+                                key={status}
+                                className={`rcp-dict-action ${statusFilter === status ? 'rcp-dict-action-on' : ''}`.trim()}
+                                aria-pressed={statusFilter === status}
+                                onClick={() => toggleStatus(status)}
+                            >
+                                {statusChipText(STATUS_LABEL[status], snapshot.statusCounts[status] ?? 0)}
+                            </button>
+                        ))}
+                    </div>
+
                     <section id="rcp-monitor-list" aria-label="전 사용자 분석 대기열">
-                        {snapshot.items.length === 0 && <p className="rcp-empty">대기열이 비어 있어요.</p>}
+                        {snapshot.items.length === 0 && (
+                            <p className="rcp-empty">
+                                {debouncedSearch !== '' || statusFilter !== null
+                                    ? FILTERED_EMPTY_TEXT : '대기열이 비어 있어요.'}
+                            </p>
+                        )}
                         {snapshot.items.map((item) => (
                             <button
                                 type="button"
@@ -220,6 +320,8 @@ export default function MonitorPage() {
                             </button>
                         ))}
                     </section>
+                    {/* 무한 스크롤 감지점 — 여기가 화면에 들어오면 다음 페이지를 붙인다 */}
+                    <div ref={sentinelRef} aria-hidden="true" />
                 </>
             )}
 
@@ -237,6 +339,64 @@ export default function MonitorPage() {
                         {selected.lastError && (
                             <p className="rcp-monitor-error" role="alert">{selected.lastError}</p>
                         )}
+
+                        {/* 분석 내용 (2026-07-18) — 재분석 전후 비교 검증용. 표시 구조는 보관함
+                            결과 시트(renderDoneDetail)와 같은 시각 언어 */}
+                        {analysisError && (
+                            <p className="rcp-monitor-error" role="alert">{analysisError}</p>
+                        )}
+                        {!analysisError && analysis === null && (
+                            <p className="rcp-sheet-meta">{ANALYSIS_LOADING_TEXT}</p>
+                        )}
+                        {analysis !== null && analysis.category === null && (
+                            <p className="rcp-sheet-meta">{NO_ANALYSIS_TEXT}</p>
+                        )}
+                        {analysis !== null && analysis.category !== null && (
+                            <>
+                                <div className="rcp-chip-group">
+                                    <RcpBadge variant={CATEGORY_BADGE[analysis.category]}>
+                                        {CATEGORY_LABEL[analysis.category]}
+                                    </RcpBadge>
+                                </div>
+                                {analysis.summary && (
+                                    <>
+                                        <h3 className="rcp-section-label">요점 요약</h3>
+                                        <p className="rcp-sheet-detail">{analysis.summary}</p>
+                                    </>
+                                )}
+                                {analysis.recipe && (
+                                    <>
+                                        <p className="rcp-sheet-meta">{recipeNameText(analysis.recipe.name)}</p>
+                                        <h3 className="rcp-section-label">재료 (영상에 나온 그대로)</h3>
+                                        <div className="rcp-chip-group">
+                                            {analysis.recipe.ingredients.map((name) => (
+                                                <span key={name} className="rcp-sticker">{name}</span>
+                                            ))}
+                                        </div>
+                                        {analysis.recipe.cookMinutes !== null && (
+                                            <p className="rcp-sheet-meta">
+                                                {cookMinutesText(analysis.recipe.cookMinutes)}
+                                            </p>
+                                        )}
+                                        <h3 className="rcp-section-label">조리 순서 요약</h3>
+                                        <ol className="rcp-step-list">
+                                            {analysis.recipe.steps.map((step) => <li key={step}>{step}</li>)}
+                                        </ol>
+                                    </>
+                                )}
+                                {analysis.tags && analysis.tags.length > 0 && (
+                                    <>
+                                        <h3 className="rcp-section-label">검색 태그</h3>
+                                        <div className="rcp-chip-group">
+                                            {analysis.tags.map((tag) => (
+                                                <span key={tag} className="rcp-sticker">{tag}</span>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </>
+                        )}
+
                         <a
                             className="rcp-btn rcp-btn-ghost"
                             id="rcp-monitor-open-source"

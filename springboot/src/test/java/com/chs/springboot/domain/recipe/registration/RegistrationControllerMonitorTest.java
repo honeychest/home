@@ -112,7 +112,7 @@ class RegistrationControllerMonitorTest {
     @DisplayName("오너가 아니면 모니터링 조회는 403")
     void monitorRequiresOwner() {
         ResponseStatusException e = assertThrows(ResponseStatusException.class,
-                () -> controller().monitor(STRANGER_ID, 50));
+                () -> controller().monitor(STRANGER_ID, 50, null, null));
 
         assertEquals(HttpStatus.FORBIDDEN, e.getStatusCode());
     }

@@ -208,6 +208,10 @@ public class RegistrationController {
                                   String registeredAt, String analyzingStartedAt, int geminiRetryCount) {
     }
 
+    /** status 필터 허용값 — 잘못된 값은 400 (프론트 STATUS_LABEL 과 1:1) */
+    private static final Set<String> MONITOR_STATUSES = Set.of(
+            "WAITING", "ANALYZING", "DONE", "TOO_LONG", "FAILED", "REMOVED");
+
     /** 프론트 MonitorSnapshot 과 1:1 — 대기열 크기·워커 생존·429 이력 + 항목 목록 한 번에 (2026-07-13 확정).
         nextRetryAt: Gemini 백오프 중이면 다음 재시도 가능 시각, 아니면 과거 시각 (2026-07-14 확정 —
         모니터링 화면의 카운트다운 표시용, gemini_rate.last_call_at 재사용) */
@@ -217,16 +221,23 @@ public class RegistrationController {
     public record MonitorSnapshot(int waitingCount, int analyzingCount, String workerHeartbeatAt,
                                   int rateLimitCount, String lastRateLimitedAt, String nextRetryAt,
                                   com.fasterxml.jackson.databind.JsonNode localExtractor,
+                                  Map<String, Integer> statusCounts,
                                   List<MonitorResponse> items) {
     }
 
-    /** 전 사용자 대기열 실시간 조회 — 오너 전용 (허용 목록 재사용, 목록 비면 아무도 접근 불가) */
+    /** 전 사용자 대기열 실시간 조회 — 오너 전용 (허용 목록 재사용, 목록 비면 아무도 접근 불가).
+        q(제목·요리명·태그 검색)·status 는 선택 필터 (2026-07-18 — 최신 limit 개 밖 영상 탐색용) */
     @GetMapping("/monitor")
-    public MonitorSnapshot monitor(@GikkaUserId long userId, @RequestParam int limit) {
+    public MonitorSnapshot monitor(@GikkaUserId long userId, @RequestParam int limit,
+                                   @RequestParam(required = false) String q,
+                                   @RequestParam(required = false) String status) {
         requireOwner(userId);
+        if (status != null && !MONITOR_STATUSES.contains(status)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 status 필터");
+        }
         VideoRepository.QueueCounts counts = videos.queueCounts();
         GeminiRateLimiter.WorkerStatus worker = rateLimiter.workerStatus();
-        List<MonitorResponse> items = repository.listForMonitor(limit).stream()
+        List<MonitorResponse> items = repository.listForMonitor(limit, q, status).stream()
                 .map(row -> new MonitorResponse(
                         row.userId(), row.email(), row.videoId(), row.url(), row.title(),
                         row.category(), row.status(), row.durationSeconds(), row.attemptCount(),
@@ -241,7 +252,27 @@ public class RegistrationController {
                 worker.lastRateLimitedAt() == null ? null : worker.lastRateLimitedAt().toString(),
                 worker.nextRetryAt() == null ? null : worker.nextRetryAt().toString(),
                 localExtractor.health(),
+                repository.monitorStatusCounts(),
                 items);
+    }
+
+    /** 모니터 시트의 분석 내용 — 탭한 1건만 조회 (2026-07-18. 목록 폴링에 실으면 100행×재료·단계가
+        2초마다 반복 전송돼 낭비 — 추천 슬림화와 같은 원칙). 프론트 MonitorAnalysis 와 1:1 */
+    public record MonitorAnalysisResponse(String category, JsonNode recipe, String summary,
+                                          JsonNode tags, JsonNode analysisSignals) {
+    }
+
+    @GetMapping("/monitor/{videoId}/analysis")
+    public MonitorAnalysisResponse monitorAnalysis(@GikkaUserId long userId, @PathVariable String videoId) {
+        requireOwner(userId);
+        VideoRepository.Row row = videos.findById(videoId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "없는 영상"));
+        return new MonitorAnalysisResponse(
+                row.category(),
+                readJson(row.recipeJson(), "recipe_json", row.videoId()),
+                row.summary(),
+                readJson(row.tagsJson(), "tags", row.videoId()),
+                readJson(row.analysisSignalsJson(), "analysis_signals", row.videoId()));
     }
 
     /** 모니터링 화면 전용 강제 재분석 — 오너 전용, 요청자 본인이 등록했는지 여부와 무관 (2026-07-13 확정).

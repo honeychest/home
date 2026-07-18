@@ -103,6 +103,13 @@ public class VideoRepository {
                 .query(Integer.class).single() > 0;
     }
 
+    /** 영상 1건 전체 행 — 모니터 시트의 분석 내용 표시용 (2026-07-18, 오너 전용 조회) */
+    public Optional<Row> findById(String videoId) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM video WHERE video_id = :videoId")
+                .param("videoId", videoId)
+                .query(this::mapRow).optional();
+    }
+
     /** 추천 후보 전용 슬림 행 — 추천이 실제로 쓰는 5컬럼만 (2026-07-18 성능 점검). */
     public record RecipeCandidateRow(String videoId, String url, String title, String thumbnailUrl,
                                      String recipeJson) {

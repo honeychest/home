@@ -6,6 +6,7 @@ package com.chs.springboot.domain.recipe.registration;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -152,20 +153,38 @@ public class RegistrationRepository {
                              int geminiRetryCount) {
     }
 
-    /** 전 사용자 대기열 — 최신 등록이 앞. limit 필수(표시 개수 원본은 프론트 상수 하나뿐) */
-    public List<MonitorRow> listForMonitor(int limit) {
-        return jdbc.sql("""
+    /** 전 사용자 대기열 — 최신 등록이 앞. limit 필수(표시 개수 원본은 프론트 상수 하나뿐).
+        query(검색어)·status 는 선택 필터 (2026-07-18 — 최신 100개 밖의 영상은 화면에 존재
+        자체가 안 해 탐색 불가하던 문제. 검색 매칭 규칙은 보관함 검색과 같은 SEARCH_MATCH 재사용). */
+    public List<MonitorRow> listForMonitor(int limit, String query, String status) {
+        StringBuilder sql = new StringBuilder("""
                         SELECT r.user_id, u.email, v.video_id, v.url, v.title, v.category, v.status,
                                v.duration_seconds, v.attempt_count, v.last_error, v.analysis_seconds,
                                r.registered_at, v.analyzing_started_at, v.gemini_retry_count
                         FROM registration r
                             JOIN video v ON v.video_id = r.video_id
                             JOIN gikka_user u ON u.id = r.user_id
-                        ORDER BY r.registered_at DESC
-                        LIMIT :limit
-                        """)
-                .param("limit", limit)
-                .query((rs, i) -> new MonitorRow(
+                        """);
+        boolean hasQuery = query != null && !query.isBlank();
+        List<String> conditions = new java.util.ArrayList<>();
+        if (hasQuery) {
+            conditions.add(SEARCH_MATCH);
+        }
+        if (status != null) {
+            conditions.add("v.status = :status");
+        }
+        if (!conditions.isEmpty()) {
+            sql.append(" WHERE ").append(String.join(" AND ", conditions));
+        }
+        sql.append(" ORDER BY r.registered_at DESC LIMIT :limit");
+        var spec = jdbc.sql(sql.toString()).param("limit", limit);
+        if (hasQuery) {
+            spec = spec.param("like", likeParam(query.trim()));
+        }
+        if (status != null) {
+            spec = spec.param("status", status);
+        }
+        return spec.query((rs, i) -> new MonitorRow(
                         rs.getLong("user_id"), rs.getString("email"), rs.getString("video_id"),
                         rs.getString("url"), rs.getString("title"), rs.getString("category"),
                         rs.getString("status"), rs.getObject("duration_seconds", Integer.class),
@@ -175,6 +194,19 @@ public class RegistrationRepository {
                         rs.getObject("analyzing_started_at", OffsetDateTime.class),
                         rs.getInt("gemini_retry_count")))
                 .list();
+    }
+
+    /** 모니터 상태 칩용 — 전체(LIMIT 무관) 상태별 등록 행 수. "완료만 훑기·실패만 모아보기"의
+        칩 개수가 화면에 잘린 100개가 아니라 전체 사실을 말하게 한다 (2026-07-18) */
+    public Map<String, Integer> monitorStatusCounts() {
+        return jdbc.sql("""
+                        SELECT v.status, COUNT(*) AS cnt
+                        FROM registration r JOIN video v ON v.video_id = r.video_id
+                        GROUP BY v.status
+                        """)
+                .query((rs, i) -> Map.entry(rs.getString("status"), rs.getInt("cnt")))
+                .list().stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private Row mapRow(java.sql.ResultSet rs, int i) throws java.sql.SQLException {
