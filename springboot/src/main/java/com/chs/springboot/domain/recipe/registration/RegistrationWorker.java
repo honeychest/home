@@ -71,7 +71,8 @@ public class RegistrationWorker {
 
     private void analyze(VideoRepository.Row item) {
         try {
-            RecipeExtractor.ExtractionResult result = extractor.extract(item.url(), item.description());
+            RecipeExtractor.ExtractionResult result =
+                    extractor.extract(item.url(), item.title(), item.description());
             Map<String, Object> recipe = null;
             if ("RECIPE".equals(result.category())) {
                 // 프론트 registrationTypes.ts 의 ExtractedRecipe 와 1:1 (cookMinutes 는 null 허용)

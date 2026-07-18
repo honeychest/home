@@ -28,30 +28,26 @@ interface RcpCoverflowProps<T> {
 export default function RcpCoverflow<T>({ items, keyOf, renderCard, onCardClick, cardClassOf }: RcpCoverflowProps<T>) {
     const trackRef = useRef<HTMLDivElement>(null);
     const draggedRef = useRef(false);
+    /** setup() 이 1번만 실측해 두는 값 — paint() 는 DOM 을 전혀 읽지 않고 이 숫자로만 계산한다 */
+    const metricsRef = useRef<{
+        cards: HTMLElement[]; cardWidth: number; firstCardLeft: number; trackWidth: number;
+    } | null>(null);
 
-    const applyLayout = useCallback(() => {
+    // 스크롤 매 프레임 실행 — 순수 산수 + 스타일 쓰기만. 이전 구현은 프레임마다 카드 20장의
+    // getBoundingClientRect 읽기와 스타일 쓰기가 섞여 카드마다 강제 레이아웃 재계산이 일어났고
+    // (읽기-쓰기 교차 = layout thrashing), 폰에서 스크롤이 뚝뚝 끊기는 원인이었다 (2026-07-18).
+    // 카드 위치는 마진·폭이 고정이라 scrollLeft 에서 계산으로 나온다 — DOM 읽기가 필요 없다.
+    const paint = useCallback(() => {
         const track = trackRef.current;
-        if (!track) return;
-        const cards = track.querySelectorAll<HTMLElement>('.rcp-coverflow-card');
+        const metrics = metricsRef.current;
+        if (!track || !metrics || metrics.cardWidth === 0) return;
+        const { cards, cardWidth, firstCardLeft, trackWidth } = metrics;
+        const step = cardWidth + OVERLAP_PX; // 카드 하나만큼 전진하는 거리 (겹침 포함)
+        const viewCenter = trackWidth / 2;
+        const scrollLeft = track.scrollLeft;
         cards.forEach((card, i) => {
-            card.style.marginLeft = i === 0 ? '0px' : `${OVERLAP_PX}px`;
-        });
-        // 카드 폭이 고정 px 가 아니라 섹션 높이에서 역산(aspect-ratio)되므로, 첫/끝 카드도
-        // 가운데에 스냅되도록 좌우 padding 을 실측한 폭으로 매번 다시 계산한다.
-        // offsetWidth 사용(transform scale 은 시각적 효과일 뿐 레이아웃 박스 크기는 안 바꿈 —
-        // getBoundingClientRect 를 쓰면 확대·축소된 값이 섞여 계산이 틀어짐)
-        const firstCard = cards[0];
-        if (firstCard) {
-            const halfWidth = firstCard.offsetWidth / 2;
-            track.style.paddingLeft = `calc(50% - ${halfWidth}px)`;
-            track.style.paddingRight = `calc(50% - ${halfWidth}px)`;
-        }
-        const rect = track.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        cards.forEach((card) => {
-            const cRect = card.getBoundingClientRect();
-            const cardCenter = cRect.left + cRect.width / 2;
-            const norm = Math.min(Math.abs(cardCenter - centerX) / (rect.width / 2), 1); // 0=중앙, 1=가장자리
+            const cardCenter = firstCardLeft + i * step + cardWidth / 2 - scrollLeft;
+            const norm = Math.min(Math.abs(cardCenter - viewCenter) / viewCenter, 1); // 0=중앙, 1=가장자리
             const scale = CENTER_SCALE - norm * (CENTER_SCALE - SIDE_SCALE);
             const opacity = 1 - norm * (1 - SIDE_OPACITY);
             card.style.transform = `scale(${scale.toFixed(3)}) translateY(${(norm * 10).toFixed(1)}px)`;
@@ -60,11 +56,39 @@ export default function RcpCoverflow<T>({ items, keyOf, renderCard, onCardClick,
         });
     }, []);
 
+    // 마운트·리사이즈·items 변경 때만 — 마진·padding 세팅과 실측을 여기로 몰아 스크롤 경로에서 뺀다
+    const setup = useCallback(() => {
+        const track = trackRef.current;
+        if (!track) return;
+        const cards = Array.from(track.querySelectorAll<HTMLElement>('.rcp-coverflow-card'));
+        cards.forEach((card, i) => {
+            card.style.marginLeft = i === 0 ? '0px' : `${OVERLAP_PX}px`;
+        });
+        // 카드 폭이 고정 px 가 아니라 섹션 높이에서 역산(aspect-ratio)되므로, 첫/끝 카드도
+        // 가운데에 스냅되도록 좌우 padding 을 실측한 폭으로 계산한다.
+        // offsetWidth/offsetLeft 사용(transform scale 은 시각적 효과일 뿐 레이아웃 박스는 안 바꿈)
+        const firstCard = cards[0];
+        const cardWidth = firstCard ? firstCard.offsetWidth : 0;
+        if (firstCard) {
+            const halfWidth = cardWidth / 2;
+            track.style.paddingLeft = `calc(50% - ${halfWidth}px)`;
+            track.style.paddingRight = `calc(50% - ${halfWidth}px)`;
+        }
+        metricsRef.current = {
+            cards,
+            cardWidth,
+            // padding 반영 후의 실제 시작 위치 — paint 의 산수가 여기서 출발한다
+            firstCardLeft: firstCard ? firstCard.offsetLeft : 0,
+            trackWidth: track.clientWidth,
+        };
+        paint();
+    }, [paint]);
+
     useEffect(() => {
-        applyLayout();
-        window.addEventListener('resize', applyLayout);
-        return () => window.removeEventListener('resize', applyLayout);
-    }, [applyLayout, items]);
+        setup();
+        window.addEventListener('resize', setup);
+        return () => window.removeEventListener('resize', setup);
+    }, [setup, items]);
 
     useEffect(() => {
         const track = trackRef.current;
@@ -73,11 +97,11 @@ export default function RcpCoverflow<T>({ items, keyOf, renderCard, onCardClick,
         const onScroll = () => {
             if (ticking) return;
             ticking = true;
-            requestAnimationFrame(() => { applyLayout(); ticking = false; });
+            requestAnimationFrame(() => { paint(); ticking = false; });
         };
         track.addEventListener('scroll', onScroll, { passive: true });
         return () => track.removeEventListener('scroll', onScroll);
-    }, [applyLayout]);
+    }, [paint]);
 
     // 데스크톱(마우스 드래그) 지원 — 터치는 네이티브 스크롤 사용
     useEffect(() => {

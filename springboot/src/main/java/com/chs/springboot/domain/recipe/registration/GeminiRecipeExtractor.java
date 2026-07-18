@@ -33,6 +33,9 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                  (3) 요리 이름이 가리키는 주재료를 빠뜨리지 마세요 (예: 떡볶이의 떡,
                      단호박 튀김의 단호박). 단, 그 재료를 실제로 안 쓰는 영상이면(예: 양념장만
                      만드는 영상) 넣지 마세요 — 영상에 실제로 쓰인 것만 적는 원칙이 우선입니다.
+                 함께 주어지는 영상 제목·설명란 원문에 상품명·요리명이 적혀 있으면(예: 라면
+                 제품명) 음성에서 들리는 이름보다 그 표기를 우선하세요 — 음성은 비슷한 발음의
+                 다른 상품명으로 잘못 들릴 수 있습니다.
                - cookMinutes: 예상 조리 시간(분). 영상에서 알 수 없으면 생략.
                - steps: 조리 순서 요약. 각 단계를 짧은 한 문장으로, 3~7개.
                - confidentSeasonings: 위 ingredients 중 소금·간장·설탕·고춧가루·참기름처럼 명백히
@@ -69,10 +72,10 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
     }
 
     @Override
-    public ExtractionResult extract(String videoUrl, String description) {
+    public ExtractionResult extract(String videoUrl, String title, String description) {
         String model = failedOver ? properties.getGeminiFallbackModel() : properties.getGeminiModel();
         try {
-            return callGemini(model, videoUrl, description);
+            return callGemini(model, videoUrl, title, description);
         } catch (HttpClientErrorException.NotFound e) {
             if (failedOver) {
                 throw e; // 폴백 모델까지 404 — 일반 실패 경로(3회 후 FAILED)로
@@ -82,14 +85,18 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
             log.warn("[gikka] Gemini 모델 {} 404 — {} 로 페일오버", model, fallback);
             notifier.notify("[기까] Gemini 모델 '" + model + "' 이 404(폐쇄 추정)입니다. '"
                     + fallback + "' 로 자동 전환해 분석을 계속합니다. 설정 모델 교체가 필요합니다.");
-            return callGemini(fallback, videoUrl, description);
+            return callGemini(fallback, videoUrl, title, description);
         }
     }
 
-    private ExtractionResult callGemini(String model, String videoUrl, String description) {
+    private ExtractionResult callGemini(String model, String videoUrl, String title, String description) {
         List<Map<String, Object>> parts = new ArrayList<>();
         parts.add(Map.of("fileData", Map.of("fileUri", videoUrl)));
         parts.add(Map.of("text", PROMPT));
+        // 제목 원문 — 상품명·요리명이 정확히 적힌 경우가 많아 STT 오인식 교정 소스 (2026-07-18)
+        if (title != null && !title.isBlank()) {
+            parts.add(Map.of("text", "영상 제목 원문:\n" + title));
+        }
         // 설명란(본문) 원문 — 재료가 여기 적힌 경우가 많아 최우선 활용 (2026-07-13 확정)
         if (description != null && !description.isBlank()) {
             parts.add(Map.of("text", "영상 설명란 원문:\n" + description));

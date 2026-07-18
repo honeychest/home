@@ -43,7 +43,7 @@ class LocalRecipeExtractorTest {
                          "cookMinutes":20,"steps":["끓인다","넣는다"],"tags":["참치무조림"]}
                         """, MediaType.APPLICATION_JSON));
 
-        var result = extractor.extract("https://www.youtube.com/watch?v=abc", null);
+        var result = extractor.extract("https://www.youtube.com/watch?v=abc", null, null);
 
         assertEquals("RECIPE", result.category());
         assertEquals("참치무조림", result.name());
@@ -60,7 +60,7 @@ class LocalRecipeExtractorTest {
                         {"category":"TIP","summary":"신발끈 묶는 법","tags":["신발끈"]}
                         """, MediaType.APPLICATION_JSON));
 
-        var result = extractor.extract("https://www.youtube.com/watch?v=abc", null);
+        var result = extractor.extract("https://www.youtube.com/watch?v=abc", null, null);
 
         assertEquals("TIP", result.category());
         assertNull(result.name());
@@ -75,7 +75,7 @@ class LocalRecipeExtractorTest {
                 .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
 
         assertThrows(LocalRecipeExtractor.LocalUnavailableException.class,
-                () -> extractor.extract("https://www.youtube.com/watch?v=abc", null));
+                () -> extractor.extract("https://www.youtube.com/watch?v=abc", null, null));
     }
 
     @Test
@@ -86,6 +86,6 @@ class LocalRecipeExtractorTest {
         LocalRecipeExtractor disabled = new LocalRecipeExtractor(RestClient.builder(), properties);
 
         assertThrows(LocalRecipeExtractor.LocalUnavailableException.class,
-                () -> disabled.extract("https://www.youtube.com/watch?v=abc", null));
+                () -> disabled.extract("https://www.youtube.com/watch?v=abc", null, null));
     }
 }

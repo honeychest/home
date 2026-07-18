@@ -92,7 +92,7 @@ class RegistrationWorkerTest {
     void recipeIsStoredInFrontendShape() {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row("설명란 원문")));
-        when(extractor.extract(URL, "설명란 원문")).thenReturn(new RecipeExtractor.ExtractionResult(
+        when(extractor.extract(URL, "제목", "설명란 원문")).thenReturn(new RecipeExtractor.ExtractionResult(
                 "RECIPE", "김치찌개", List.of("김치", "두부"), 20, List.of("끓인다"),
                 null, List.of("김치찌개"), 300, List.of()));
 
@@ -116,7 +116,7 @@ class RegistrationWorkerTest {
     void recipeFeedsIngredientDictionary() {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row("설명란 원문")));
-        when(extractor.extract(URL, "설명란 원문")).thenReturn(new RecipeExtractor.ExtractionResult(
+        when(extractor.extract(URL, "제목", "설명란 원문")).thenReturn(new RecipeExtractor.ExtractionResult(
                 "RECIPE", "김치찌개", List.of("김치", "두부", "간장"), 20, List.of("끓인다"),
                 null, List.of("김치찌개"), 300, List.of("간장")));
 
@@ -131,7 +131,7 @@ class RegistrationWorkerTest {
     void nonRecipeStoresSummaryOnly() {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row(null)));
-        when(extractor.extract(URL, null)).thenReturn(new RecipeExtractor.ExtractionResult(
+        when(extractor.extract(URL, "제목", null)).thenReturn(new RecipeExtractor.ExtractionResult(
                 "TIP", null, null, null, null, "신발끈 묶는 법", List.of("신발끈"), null, List.of()));
 
         worker().processOne();
@@ -145,7 +145,7 @@ class RegistrationWorkerTest {
     void analysisSignalsAreDerivedAndStored() {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row("설명란 원문")));
-        when(extractor.extract(URL, "설명란 원문")).thenReturn(new RecipeExtractor.ExtractionResult(
+        when(extractor.extract(URL, "제목", "설명란 원문")).thenReturn(new RecipeExtractor.ExtractionResult(
                 "RECIPE", "김치찌개", List.of("김치"), null, List.of("끓인다"), null, List.of(), 300, List.of()));
 
         worker().processOne();
@@ -160,7 +160,7 @@ class RegistrationWorkerTest {
     void transientFailureBacksOffWithoutBurningAttempt() {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row(null)));
-        when(extractor.extract(anyString(), any()))
+        when(extractor.extract(anyString(), any(), any()))
                 .thenThrow(new RecipeExtractor.TransientFailureException("429 한도"));
 
         worker().processOne();
@@ -175,7 +175,7 @@ class RegistrationWorkerTest {
     void permanentFailureCountsAttempt() {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row(null)));
-        when(extractor.extract(anyString(), any()))
+        when(extractor.extract(anyString(), any(), any()))
                 .thenThrow(new IllegalStateException("응답 파싱 실패"));
 
         worker().processOne();
@@ -201,7 +201,7 @@ class RegistrationWorkerTest {
     void recipeWithoutNameIsStoredSafely() {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row(null)));
-        when(extractor.extract(anyString(), any())).thenReturn(new RecipeExtractor.ExtractionResult(
+        when(extractor.extract(anyString(), any(), any())).thenReturn(new RecipeExtractor.ExtractionResult(
                 "RECIPE", null, null, null, null, null, List.of(), null, List.of()));
 
         worker().processOne();

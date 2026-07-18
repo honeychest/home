@@ -71,13 +71,19 @@ public class LocalRecipeExtractor implements RecipeExtractor {
     }
 
     @Override
-    public ExtractionResult extract(String videoUrl, String description) {
+    public ExtractionResult extract(String videoUrl, String title, String description) {
         if (!properties.isLocalExtractorEnabled()) {
             throw new LocalUnavailableException("로컬 추출기 비활성화 설정", null);
         }
-        Map<String, Object> body = description == null
-                ? Map.of("videoUrl", videoUrl)
-                : Map.of("videoUrl", videoUrl, "description", description);
+        // title·description 은 없을 수 있어 있는 것만 싣는다 (Map.of 는 null 값을 못 담는다)
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("videoUrl", videoUrl);
+        if (title != null && !title.isBlank()) {
+            body.put("title", title);
+        }
+        if (description != null) {
+            body.put("description", description);
+        }
         try {
             JsonNode response = rest.post()
                     .uri("/extract")

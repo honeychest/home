@@ -56,7 +56,7 @@ class GeminiRecipeExtractorTest {
                  "cookMinutes":15,"steps":["두부를 썬다","조린다"],"tags":["두부조림","두부","밑반찬"]}
                 """);
 
-        var result = extractor.extract("https://www.youtube.com/shorts/abc", null);
+        var result = extractor.extract("https://www.youtube.com/shorts/abc", null, null);
 
         assertEquals("RECIPE", result.category());
         assertEquals("두부조림", result.name());
@@ -77,7 +77,7 @@ class GeminiRecipeExtractorTest {
                         {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"TIP\\"}"}]}}]}
                         """, MediaType.APPLICATION_JSON));
 
-        extractor.extract("https://www.youtube.com/shorts/abc", "재료: 두부 1모, 대파 1대");
+        extractor.extract("https://www.youtube.com/shorts/abc", null, "재료: 두부 1모, 대파 1대");
 
         server.verify();
     }
@@ -91,7 +91,7 @@ class GeminiRecipeExtractorTest {
                         {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"TIP\\"}"}]}}]}
                         """, MediaType.APPLICATION_JSON));
 
-        extractor.extract("https://www.youtube.com/shorts/abc", null);
+        extractor.extract("https://www.youtube.com/shorts/abc", null, null);
 
         server.verify();
     }
@@ -104,7 +104,7 @@ class GeminiRecipeExtractorTest {
                  "tags":["신발끈","매듭","운동화"]}
                 """);
 
-        var result = extractor.extract("https://www.youtube.com/shorts/abc", null);
+        var result = extractor.extract("https://www.youtube.com/shorts/abc", null, null);
 
         assertEquals("TIP", result.category());
         assertNull(result.name());
@@ -120,7 +120,7 @@ class GeminiRecipeExtractorTest {
                 {"category":"TIP"}
                 """);
 
-        var result = extractor.extract("https://www.youtube.com/shorts/abc", null);
+        var result = extractor.extract("https://www.youtube.com/shorts/abc", null, null);
 
         assertEquals("TIP", result.category());
         assertNull(result.summary());
@@ -134,7 +134,7 @@ class GeminiRecipeExtractorTest {
                 .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
 
         assertThrows(RecipeExtractor.TransientFailureException.class,
-                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null, null));
     }
 
     @Test
@@ -144,7 +144,7 @@ class GeminiRecipeExtractorTest {
                 .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
 
         assertThrows(RecipeExtractor.TransientFailureException.class,
-                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null, null));
     }
 
     @Test
@@ -154,7 +154,7 @@ class GeminiRecipeExtractorTest {
                 .andRespond(request -> { throw new java.io.IOException("Request timed out"); });
 
         assertThrows(RecipeExtractor.TransientFailureException.class,
-                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null, null));
     }
 
     @Test
@@ -163,7 +163,7 @@ class GeminiRecipeExtractorTest {
         geminiReturns("이것은 JSON 이 아님");
 
         assertThrows(IllegalStateException.class,
-                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null, null));
     }
 
     @Test
@@ -176,8 +176,8 @@ class GeminiRecipeExtractorTest {
         expectFallbackSuccess();
         expectFallbackSuccess();
 
-        assertEquals("TIP", extractor.extract("https://www.youtube.com/shorts/abc", null).category());
-        assertEquals("TIP", extractor.extract("https://www.youtube.com/shorts/def", null).category());
+        assertEquals("TIP", extractor.extract("https://www.youtube.com/shorts/abc", null, null).category());
+        assertEquals("TIP", extractor.extract("https://www.youtube.com/shorts/def", null, null).category());
 
         server.verify();
     }
@@ -191,7 +191,7 @@ class GeminiRecipeExtractorTest {
                 .andRespond(withStatus(HttpStatus.NOT_FOUND));
 
         assertThrows(org.springframework.web.client.HttpClientErrorException.NotFound.class,
-                () -> extractor.extract("https://www.youtube.com/shorts/abc", null));
+                () -> extractor.extract("https://www.youtube.com/shorts/abc", null, null));
         server.verify();
     }
 

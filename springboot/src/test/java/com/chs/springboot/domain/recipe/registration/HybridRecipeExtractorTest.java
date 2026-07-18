@@ -47,7 +47,7 @@ class HybridRecipeExtractorTest {
                         {"category":"RECIPE","name":"참치무조림","ingredients":["무","참치"],"steps":["끓인다"]}
                         """, MediaType.APPLICATION_JSON));
 
-        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", null);
+        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", null, null);
 
         assertEquals("RECIPE", result.category());
         assertEquals("참치무조림", result.name());
@@ -66,7 +66,7 @@ class HybridRecipeExtractorTest {
                         {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"ETC\\",\\"summary\\":\\"Gemini 요약\\"}"}]}}]}
                         """, MediaType.APPLICATION_JSON));
 
-        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", null);
+        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", null, null);
 
         assertEquals("ETC", result.category());
         assertEquals("Gemini 요약", result.summary());
@@ -82,7 +82,7 @@ class HybridRecipeExtractorTest {
                         {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"RECIPE\\",\\"name\\":\\"두부조림\\",\\"ingredients\\":[\\"두부\\"],\\"steps\\":[\\"조린다\\"]}"}]}}]}
                         """, MediaType.APPLICATION_JSON));
 
-        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", null);
+        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", null, null);
 
         assertEquals("RECIPE", result.category());
         assertEquals("두부조림", result.name());
@@ -98,7 +98,7 @@ class HybridRecipeExtractorTest {
         geminiServer.expect(method(org.springframework.http.HttpMethod.POST))
                 .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
 
-        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", null);
+        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", null, null);
 
         assertEquals("TIP", result.category());
         assertEquals("로컬 요약", result.summary());
@@ -114,6 +114,6 @@ class HybridRecipeExtractorTest {
 
         org.junit.jupiter.api.Assertions.assertThrows(
                 RecipeExtractor.TransientFailureException.class,
-                () -> hybrid.extract("https://www.youtube.com/watch?v=abc", null));
+                () -> hybrid.extract("https://www.youtube.com/watch?v=abc", null, null));
     }
 }

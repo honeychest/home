@@ -66,6 +66,10 @@ PROMPT_TEMPLATE = """\
      (3) 요리 이름이 가리키는 주재료를 빠뜨리지 마세요 (예: 떡볶이의 떡,
          단호박 튀김의 단호박). 단, 그 재료를 실제로 안 쓰는 영상이면(예: 양념장만
          만드는 영상) 넣지 마세요 — 영상에 실제로 쓰인 것만 적는 원칙이 우선입니다.
+     함께 주어지는 영상 제목·설명란 원문에 상품명·요리명이 적혀 있으면(예: 라면 제품명)
+     음성 전사에서 들리는 이름보다 그 표기를 우선하세요 — 음성 전사는 비슷한 발음의 다른
+     상품명으로 잘못 인식될 수 있습니다 (실측: "오징어짬뽕"이 전사에서 다른 라면 이름으로
+     잘못 잡힌 사례).
    - cookMinutes: 예상 조리 시간(분). 영상에서 알 수 없으면 생략.
    - steps: 조리 순서 요약. 각 단계를 짧은 한 문장으로, 3~7개.
    - confidentSeasonings: 위 ingredients 중 소금·간장·설탕·고춧가루·참기름처럼 명백히 양념·조미료라고
@@ -86,6 +90,7 @@ PROMPT_TEMPLATE = """\
 {transcript}
 """
 
+TITLE_SUFFIX = "\n\n영상 제목 원문:\n{title}"
 DESCRIPTION_SUFFIX = "\n\n영상 설명란 원문:\n{description}"
 
 # 재료 사전 감사 프롬프트 — IngredientAuditor.PROMPT(springboot)과 동일한 지시 (일관성 유지).
@@ -183,8 +188,10 @@ def transcribe(audio_path, work_dir):
         return f.read().strip()
 
 
-def build_payload(frames, transcript, description):
+def build_payload(frames, transcript, title, description):
     prompt_text = PROMPT_TEMPLATE.format(transcript=transcript or "(음성 없음)")
+    if title:
+        prompt_text += TITLE_SUFFIX.format(title=title)
     if description:
         prompt_text += DESCRIPTION_SUFFIX.format(description=description)
     content = [{"type": "text", "text": prompt_text}]
@@ -229,7 +236,7 @@ def sweep_orphaned_temp_dirs():
             shutil.rmtree(os.path.join(base, name), ignore_errors=True)
 
 
-def extract(video_url, description):
+def extract(video_url, title, description):
     work_dir = tempfile.mkdtemp(prefix=TEMP_DIR_PREFIX)
     try:
         video_path = download_video(video_url, work_dir)
@@ -237,7 +244,7 @@ def extract(video_url, description):
         frames = extract_frames(video_path, work_dir, duration)
         audio_path = extract_audio(video_path, work_dir)
         transcript = transcribe(audio_path, work_dir)
-        payload = build_payload(frames, transcript, description)
+        payload = build_payload(frames, transcript, title, description)
         result = parse_model_json(call_local_model(payload))
         # 음성 인식이 실제로 얼마나 됐는지 — 백엔드가 분석 품질 신호로 저장 (2026-07-14 확정,
         # 이 자체는 판단이 아니라 사실이라 여기선 개수만 실어 보낸다. 경고 여부 판정은 백엔드 몫)
@@ -347,7 +354,7 @@ class Handler(BaseHTTPRequestHandler):
             # 대비해 직렬화 — LM Studio·whisper 는 한 번에 하나씩만 처리 (2026-07-14 확정)
             with _lock:
                 if self.path == "/extract":
-                    result = extract(req["videoUrl"], req.get("description"))
+                    result = extract(req["videoUrl"], req.get("title"), req.get("description"))
                 else:
                     result = audit_ingredients(req["pendingNames"], req.get("allRepresentatives", []))
             body = json.dumps(result, ensure_ascii=False).encode("utf-8")

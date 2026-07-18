@@ -31,11 +31,11 @@ public class HybridRecipeExtractor implements RecipeExtractor {
     }
 
     @Override
-    public ExtractionResult extract(String videoUrl, String description) {
+    public ExtractionResult extract(String videoUrl, String title, String description) {
         Integer transcriptChars = null; // 로컬이 아예 안 돌면 null 그대로 (2026-07-14, pattern-raw-signal)
         ExtractionResult localFallback = null; // Gemini 검증 실패 시 대신 쓸 로컬 TIP/ETC 결과
         try {
-            ExtractionResult localResult = local.extract(videoUrl, description);
+            ExtractionResult localResult = local.extract(videoUrl, title, description);
             transcriptChars = localResult.transcriptChars();
             if ("RECIPE".equals(localResult.category())) {
                 return localResult;
@@ -48,7 +48,7 @@ public class HybridRecipeExtractor implements RecipeExtractor {
         // TIP/ETC 로 버려진 로컬 결과라도 transcriptChars(음성 인식 신호)는 최종 채택 결과에 이어붙인다 —
         // "이 영상에 음성 정보가 얼마나 있었나"는 어느 쪽이 채택되든 변하지 않는 사실이므로
         try {
-            return gemini.extract(videoUrl, description).withTranscriptChars(transcriptChars);
+            return gemini.extract(videoUrl, title, description).withTranscriptChars(transcriptChars);
         } catch (RecipeExtractor.TransientFailureException e) {
             if (localFallback != null) {
                 log.warn("[gikka] Gemini 검증 실패({}) — 로컬 {} 결과로 대신 완료: {}",

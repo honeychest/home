@@ -44,6 +44,8 @@ public interface RecipeExtractor {
         }
     }
 
-    /** description: 유튜브 설명란(본문). 재료가 원문으로 적힌 경우가 많아 최우선 활용 (2026-07-13 확정) */
-    ExtractionResult extract(String videoUrl, String description);
+    /** title: 영상 제목 원문 (2026-07-18 추가 — 상품명·요리명이 제목에 정확히 적힌 경우가 많은데
+        분석 입력에 안 들어가 STT 오인식("오징어짬뽕"→"진라면", TqtR1cSDnm8 실사례)을 못 잡았다).
+        description: 유튜브 설명란(본문). 재료가 원문으로 적힌 경우가 많아 최우선 활용 (2026-07-13 확정) */
+    ExtractionResult extract(String videoUrl, String title, String description);
 }
