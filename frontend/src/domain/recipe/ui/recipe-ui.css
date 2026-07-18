@@ -482,6 +482,27 @@
   font-size: var(--rcp-fs-sm);
 }
 
+/* ── 스켈레톤: rcp-skeleton-row > rcp-skeleton-card (2026-07-18 추천 체감 로딩 개선) ──
+   치수 고정 원칙: 데이터 도착 전에 "실제와 같은 치수의 틀"(섹션 3분할 높이·카드 aspect-ratio·
+   커버플로우와 같은 상하 여백)을 그려, 내용으로 갈아끼워도 세로 치수가 전혀 안 변하게 한다
+   (스켈레톤은 개수를 흉내 내는 게 아니라 치수를 흉내 낸다 — 개수는 뷰포트에 보이는 만큼만). */
+.rcp-skeleton-row {
+  flex: 1; min-height: 0;
+  display: flex; align-items: stretch; gap: var(--rcp-space-2);
+  padding-block: 18px; /* .rcp-coverflow 와 동일 — 갈아끼울 때 카드 높이가 안 변하게 */
+  overflow: hidden;
+}
+.rcp-skeleton-card {
+  flex: 0 0 auto; aspect-ratio: 0.86; /* .rcp-coverflow-card 와 동일 비율 */
+  border-radius: var(--rcp-radius-lg);
+  background: var(--rcp-surface-dim);
+  animation: rcp-skeleton-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rcp-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 /* ── 겹침형 커버플로우: rcp-coverflow-wrap > rcp-coverflow > rcp-coverflow-card ──
    (2026-07-14 확정, 4차 추천 화면. 목업에서 사용자가 직접 슬라이더로 맞춘 값을 RcpCoverflow.tsx
    상수로 고정. 카드는 부모가 주는 높이를 그대로 채우고(aspect-ratio 로 폭을 계산) — 고정

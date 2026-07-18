@@ -189,6 +189,18 @@ export default function StyleguidePage() {
             <Label>{'<RcpLoadError message onRetry> — useQuery 의 error·reload 를 그대로 전달, null 이면 안 그림. RcpInlineError(조작 실패)와 짝이다. 화면 안에서는 .rcp-shell-status(100dvh, 셸 전용)를 쓰지 말 것 — 화면 하나만큼 부풀거나(냉장고·보관함) 잘렸다(추천)'}</Label>
             <RcpLoadError message="목록을 불러오지 못했어요 — 네트워크 확인 후 다시 시도해 주세요" onRetry={() => {}} />
 
+            <h2 className="rcp-section-label">스켈레톤 — .rcp-skeleton-row / .rcp-skeleton-card</h2>
+            <Label>
+                {'로딩 중 자리표시 (2026-07-18, 추천 화면). 치수 고정 원칙: 실제 컴포넌트와 같은 '
+                    + '치수의 틀을 흉내 낸다(개수 흉내 금지 — 뷰포트에 보이는 만큼만). 내용으로 '
+                    + '갈아끼워도 세로 치수가 변하면 결함'}
+            </Label>
+            <div className="rcp-skeleton-row" style={{ height: 120 }}>
+                <div className="rcp-skeleton-card" />
+                <div className="rcp-skeleton-card" />
+                <div className="rcp-skeleton-card" />
+            </div>
+
             <h2 className="rcp-section-label">하단 시트 — RcpBottomSheet (.rcp-sheet)</h2>
             <RcpButton variant="ghost" onClick={() => setSheetOpen(true)}>시트 열어보기</RcpButton>
             <RcpBottomSheet open={sheetOpen} title="시트 제목" onClose={() => setSheetOpen(false)}>

@@ -4,21 +4,15 @@
 package com.chs.springboot.domain.recipe.recommend;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
 import com.chs.springboot.domain.recipe.fridge.FridgeItemResponse;
 import com.chs.springboot.domain.recipe.fridge.FridgeRepository;
-import com.chs.springboot.domain.recipe.registration.IngredientDictionaryRepository;
 import com.chs.springboot.domain.recipe.registration.RegistrationRepository;
-import com.chs.springboot.domain.recipe.registration.VideoRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,17 +23,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class RecommendController {
 
     private final RegistrationRepository registrations;
-    private final VideoRepository videos;
     private final FridgeRepository fridge;
-    private final IngredientDictionaryRepository dictionary;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final RecommendCandidateCache cache;
 
-    public RecommendController(RegistrationRepository registrations, VideoRepository videos,
-                              FridgeRepository fridge, IngredientDictionaryRepository dictionary) {
+    public RecommendController(RegistrationRepository registrations, FridgeRepository fridge,
+                              RecommendCandidateCache cache) {
         this.registrations = registrations;
-        this.videos = videos;
         this.fridge = fridge;
-        this.dictionary = dictionary;
+        this.cache = cache;
     }
 
     /** missing: 완전 가능=빈 목록, 양념만 부족=부족한 양념 이름, 재료 부족=부족한 재료 이름
@@ -67,16 +58,13 @@ public class RecommendController {
         // 후보는 gikka 전체 완료 요리(콜드스타트 대응) — 냉장고 매칭은 그대로 내 것 기준.
         // 내 등록 videoId 집합은 "내 보관함" 표시 + 섹션 상한(내 것 10/남의 것 10)에 쓴다.
         Set<String> myVideoIds = new HashSet<>(registrations.videoIdsForUser(userId));
-        // 사전 3종은 늘 같이 다닌다 — 저장소가 멤버까지 대표 기준으로 펼쳐서 주므로 여기선 조립만.
-        // basicNames = 상비 양념(부족분에서 아예 뺀다), matchKeys = 그룹 매칭 키(2026-07-17 슬라이스2)
-        var dict = new RecommendRules.Dictionary(
-                dictionary.matchKeys(), dictionary.seasoningNames(), dictionary.basicNames());
+        // 전 사용자 공통 입력(후보 목록·사전)은 캐시에서 — 요청당 DB 는 위 개인 쿼리 2개뿐 (2026-07-18)
+        RecommendCandidateCache.Snapshot snapshot = cache.get();
+        var dict = snapshot.dictionary();
         Set<String> fridgeKeys = RecommendRules.keysOf(fridgeNames, dict); // 후보마다 다시 계산하지 않게 한 번만
         Set<String> expiringKeys = RecommendRules.keysOf(expiringNames, dict);
 
-        List<RecommendRules.Match> matches = videos.allDoneRecipes().stream()
-                .map(this::toCandidate)
-                .flatMap(Optional::stream)
+        List<RecommendRules.Match> matches = snapshot.candidates().stream()
                 .map(candidate -> RecommendRules.match(candidate, fridgeKeys, expiringKeys, dict))
                 .toList();
 
@@ -90,27 +78,8 @@ public class RecommendController {
                 toItems(sections.needsIngredients(), myVideoIds));
     }
 
-    /** recipe_json 이 없으면(이론상 RECIPE+DONE 인데 비어있는 이상 상태) 추천 대상에서 조용히 제외 */
-    private Optional<RecommendRules.Candidate> toCandidate(VideoRepository.Row row) {
-        if (row.recipeJson() == null) {
-            return Optional.empty();
-        }
-        JsonNode node;
-        try {
-            node = mapper.readTree(row.recipeJson());
-        } catch (Exception e) {
-            throw new IllegalStateException("recipe_json 파싱 실패: video=" + row.videoId(), e);
-        }
-        String name = node.hasNonNull("name") && !node.get("name").asText().isBlank()
-                ? node.get("name").asText() : row.title();
-        List<String> ingredients = new ArrayList<>();
-        node.path("ingredients").forEach(n -> ingredients.add(n.asText()));
-        Integer cookMinutes = node.hasNonNull("cookMinutes") ? node.get("cookMinutes").asInt() : null;
-        List<String> steps = new ArrayList<>();
-        node.path("steps").forEach(n -> steps.add(n.asText()));
-        return Optional.of(new RecommendRules.Candidate(
-                row.videoId(), row.url(), name, row.thumbnailUrl(), ingredients, cookMinutes, steps));
-    }
+    // recipe_json 파싱(toCandidate)은 RecommendCandidateCache 로 이관 (2026-07-18 — 캐시가
+    // 파싱 결과를 들고 있어야 요청마다 재파싱이 없어진다)
 
     private List<RecommendItem> toItems(List<RecommendRules.Match> matches, Set<String> myVideoIds) {
         return matches.stream().map(match -> toItem(match, myVideoIds)).toList();

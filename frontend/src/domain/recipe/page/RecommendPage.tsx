@@ -38,6 +38,11 @@ interface Section {
     items: RecommendItem[];
 }
 
+// 스켈레톤용 — 섹션 틀(라벨 포함)은 정적이라 빈 스냅샷으로 진짜 toSections 를 재사용한다
+const EMPTY_SNAPSHOT: RecommendSnapshot = { complete: [], seasoningOnly: [], needsIngredients: [] };
+// 카드 자리 개수 = 첫 화면에 보이는 만큼만 (치수 고정 원칙 — 개수를 흉내 내는 게 아니다)
+const SKELETON_KEYS = ['s1', 's2', 's3', 's4'];
+
 // 3단계 레이아웃은 항목 유무와 무관하게 항상 표시한다 (2026-07-14 확정 — 일부 섹션만 있을 때
 // 레이아웃이 들쭉날쭉해지는 걸 사용자가 지적함). 빈 섹션은 emptyText 로 채워 자리를 지킨다.
 function toSections(snapshot: RecommendSnapshot): Section[] {
@@ -63,7 +68,9 @@ function RecommendCard({ item }: { item: RecommendItem }) {
     return (
         <>
             {item.thumbnailUrl ? (
-                <img className="rcp-coverflow-thumb" src={item.thumbnailUrl} alt="" />
+                // lazy: 화면 밖 카드(가로 스크롤 뒤 수십 장)의 썸네일을 미리 안 받는다 —
+                // 첫 화면에 보이는 카드만 즉시 로드 (2026-07-18 체감 로딩 개선)
+                <img className="rcp-coverflow-thumb" src={item.thumbnailUrl} alt="" loading="lazy" />
             ) : (
                 <div className="rcp-coverflow-thumb-fallback"><ChefHat size={40} /></div>
             )}
@@ -111,7 +118,24 @@ export default function RecommendPage() {
             </header>
 
             <RcpLoadError message={loadError} onRetry={() => void query.reload()} />
-            {!loadError && snapshot === null && <p className="rcp-empty">불러오는 중…</p>}
+            {/* 스켈레톤 — "불러오는 중…" 글자 대신 실제와 같은 치수의 틀을 즉시 그린다.
+                섹션 라벨은 정적 데이터라 진짜를 그대로 쓰고 카드 자리만 회색 펄스.
+                이 화면은 세로 치수가 화면 높이 고정(3분할)이라 내용이 와도 흔들림이 0 이다 */}
+            {!loadError && snapshot === null && (
+                <div className="rcp-recommend-sections" aria-hidden="true">
+                    {toSections(EMPTY_SNAPSHOT).map((section) => (
+                        <section className="rcp-recommend-section" key={section.key}>
+                            <div className="rcp-recommend-section-head">
+                                <span className="rcp-recommend-section-title">{section.label}</span>
+                                <span className="rcp-recommend-section-sub">{section.subtitle}</span>
+                            </div>
+                            <div className="rcp-skeleton-row">
+                                {SKELETON_KEYS.map((key) => <div className="rcp-skeleton-card" key={key} />)}
+                            </div>
+                        </section>
+                    ))}
+                </div>
+            )}
 
             {!loadError && isEmpty && (
                 <p className="rcp-empty">

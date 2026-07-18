@@ -103,13 +103,23 @@ public class VideoRepository {
                 .query(Integer.class).single() > 0;
     }
 
+    /** 추천 후보 전용 슬림 행 — 추천이 실제로 쓰는 5컬럼만 (2026-07-18 성능 점검). */
+    public record RecipeCandidateRow(String videoId, String url, String title, String thumbnailUrl,
+                                     String recipeJson) {
+    }
+
     /** 추천 후보 풀 — gikka 전체의 완료된 요리(DONE+RECIPE). 사용자 무관(누구 것이든)이다:
         "내 보관함" 여부는 컨트롤러가 registration 으로 따로 표시한다 (2026-07-16 5차, 콜드스타트
-        대응 — 등록 몇 개 안 되는 신규 사용자도 전체 풀에서 추천이 뜨게). 최신 분석이 앞. */
-    public List<Row> allDoneRecipes() {
-        return jdbc.sql("SELECT " + COLUMNS + " FROM video "
-                        + "WHERE status = 'DONE' AND category = 'RECIPE' ORDER BY queued_at DESC")
-                .query(this::mapRow).list();
+        대응 — 등록 몇 개 안 되는 신규 사용자도 전체 풀에서 추천이 뜨게).
+        (2026-07-18 슬림화) COLUMNS 전체를 실으면 추천에 안 쓰는 description(설명란 원문) 등이
+        후보 수에 비례해 운반돼 낭비가 컸다. 정렬도 뺐다 — 순서는 RecommendRules.bucket 이 다시 정한다. */
+    public List<RecipeCandidateRow> allDoneRecipes() {
+        return jdbc.sql("SELECT video_id, url, title, thumbnail_url, recipe_json FROM video "
+                        + "WHERE status = 'DONE' AND category = 'RECIPE'")
+                .query((rs, i) -> new RecipeCandidateRow(
+                        rs.getString("video_id"), rs.getString("url"), rs.getString("title"),
+                        rs.getString("thumbnail_url"), rs.getString("recipe_json")))
+                .list();
     }
 
     /** 영상이 이미 있으면 아무 일도 안 함(메타 조회·분석 0회 — CONTEXT.md 확정). 없으면 새로 생성.
