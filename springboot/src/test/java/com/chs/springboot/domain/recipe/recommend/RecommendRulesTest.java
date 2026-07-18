@@ -233,7 +233,8 @@ class RecommendRulesTest {
     }
 
     @Test
-    @DisplayName("섹션 상한은 내 것 10 + 남의 것 10 을 따로 센다 — 남의 것이 많아도 내 것 자리를 안 뺏는다")
+    @DisplayName("섹션 = 내 것 블록(최대 10) 먼저 + 남의 것 블록(최대 10) 뒤 — 남의 레시피가 "
+            + "아무리 랭킹이 높아도 내 것 앞에 오지 않는다 (2026-07-18 그룹핑 확정)")
     void capsMineAndOthersSeparately() {
         var matches = completeMatches(30); // c0~c29 전부 완전 가능
         Set<String> mine = java.util.stream.IntStream.range(0, 15)
@@ -242,8 +243,10 @@ class RecommendRulesTest {
         var sections = RecommendRules.bucket(matches, mine, 1L);
 
         assertEquals(20, sections.complete().size());
-        assertEquals(10, sections.complete().stream()
-                .filter(m -> mine.contains(m.candidate().videoId())).count());
+        assertTrue(sections.complete().subList(0, 10).stream()
+                .allMatch(m -> mine.contains(m.candidate().videoId())), "앞 10개는 전부 내 것");
+        assertTrue(sections.complete().subList(10, 20).stream()
+                .noneMatch(m -> mine.contains(m.candidate().videoId())), "뒤 10개는 전부 남의 것");
     }
 
     @Test

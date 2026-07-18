@@ -166,9 +166,12 @@ final class RecommendRules {
     }
 
     /**
-     * 완전 가능 / 양념만 부족 / 재료 부족 — 섹션마다 랭킹 순으로 내 보관함 10 + 남의 것 10.
+     * 완전 가능 / 양념만 부족 / 재료 부족 — 섹션마다 내 보관함 블록(최대 10, 랭킹순) 먼저,
+     * 남의 것 블록(최대 10, 랭킹순) 뒤 (2026-07-18 그룹핑 확정 — 처음엔 랭킹 인터리브였는데
+     * "내가 저장한 걸 꺼내준다"는 앱 취지와 어긋나 남의 레시피가 맨 앞에 오는 게 실사용에서
+     * 혼동을 줬다. 남의 것은 발견용 보조라 뒤가 맞다).
      *
-     * @param myVideoIds 내 보관함 videoId 집합 — 상한을 내 것/남의 것 따로 센다
+     * @param myVideoIds 내 보관함 videoId 집합 — 블록 분리·상한의 기준
      * @param shuffleSeed 동점 셔플 시드 — 호출부가 사용자+날짜로 만든다 (하루 동안 고정)
      */
     static Sections bucket(List<Match> matches, Set<String> myVideoIds, long shuffleSeed) {
@@ -185,22 +188,21 @@ final class RecommendRules {
                         myVideoIds));
     }
 
-    /** 랭킹 순서는 지키면서 내 것/남의 것 상한만 따로 센다 — 상위(완전 매칭·임박)가 밀리지 않는다 */
+    /** 내 것 블록(랭킹순) + 남의 것 블록(랭킹순) — 각 블록 안의 순서는 랭킹 그대로 */
     private static List<Match> pick(List<Match> ranked, Set<String> myVideoIds) {
-        List<Match> out = new ArrayList<>();
-        int mine = 0;
-        int others = 0;
+        List<Match> mine = new ArrayList<>();
+        List<Match> others = new ArrayList<>();
         for (Match match : ranked) {
-            boolean isMine = myVideoIds.contains(match.candidate().videoId());
-            if (isMine && mine < MAX_MINE_PER_SECTION) {
-                out.add(match);
-                mine++;
-            } else if (!isMine && others < MAX_OTHERS_PER_SECTION) {
-                out.add(match);
-                others++;
+            if (myVideoIds.contains(match.candidate().videoId())) {
+                if (mine.size() < MAX_MINE_PER_SECTION) {
+                    mine.add(match);
+                }
+            } else if (others.size() < MAX_OTHERS_PER_SECTION) {
+                others.add(match);
             }
         }
-        return out;
+        mine.addAll(others);
+        return mine;
     }
 
     /** 동점 셔플 키 — 같은 시드에선 항상 같은 값(하루 동안 목록 고정), 시드가 바뀌면 뒤섞인다.

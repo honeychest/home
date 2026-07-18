@@ -545,12 +545,18 @@
   will-change: transform, opacity;
   transform-origin: center center;
 }
-/* 카드 성격 구분(추천의 "내 보관함") — inset box-shadow 로 안쪽 테두리를 그린다.
-   border 를 쓰면 카드 폭이 바뀌어 RcpCoverflow.applyLayout 의 폭 실측(가운데 스냅 padding
-   계산)이 틀어진다. inset 그림자는 레이아웃에 전혀 영향이 없고 border-radius 도 따라간다.
-   (2026-07-17 — 이전의 카드 안 배지 방식은 좁은 카드에서 제목을 통째로 가려 폐기) */
-.rcp-coverflow-card-mine {
-  box-shadow: var(--rcp-shadow-magnet), inset 0 0 0 3px var(--rcp-accent);
+/* 카드 성격 구분(추천의 "내 보관함") — 썸네일 위에 ::after 링으로 그린다.
+   2026-07-18 수정: 구 inset box-shadow 는 자식(썸네일 img 가 inset:0 으로 카드 전체를 덮음)보다
+   아래에 그려져 도입(2026-07-17) 이후 물리적으로 한 번도 화면에 보인 적이 없었다(실사용 제보로
+   발견). 가상 요소는 형제들 위에 그려져 썸네일·비네트를 뚫고 보이고, absolute 라 카드 폭에
+   영향이 없어 border 를 기각했던 이유(applyLayout 폭 실측 틀어짐)도 그대로 회피한다.
+   (2026-07-17 — 카드 안 배지 방식은 좁은 카드에서 제목을 통째로 가려 폐기) */
+.rcp-coverflow-card-mine::after {
+  content: '';
+  position: absolute; inset: 0;
+  border: 3px solid var(--rcp-accent);
+  border-radius: inherit;
+  pointer-events: none;
 }
 .rcp-coverflow-thumb {
   position: absolute; inset: 0;
