@@ -51,6 +51,8 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
             4. tags: 모든 영상 공통. 이 영상을 검색할 때 쓸 만한 키워드 3~8개
                (예: 신발 끈 묶는 영상이면 ["신발끈", "매듭", "운동화"]). 짧은 명사 위주로.
                이 태그들이 나중에 이 영상을 다시 찾는 핵심 단서이니 summary 보다 중요합니다.
+               태그의 철자는 name·ingredients·summary 에 쓴 표기와 정확히 일치시키세요 —
+               같은 단어를 다르게 적으면(예: 요약은 "밥간장", 태그는 "밥간정") 검색이 깨집니다.
             모든 텍스트는 한국어로.
             """;
 

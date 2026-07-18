@@ -38,7 +38,19 @@ public class RegistrationWorker {
         기본값)으로 남아 오너·AI 점검(IngredientAuditController)이 나중에 판정한다. */
     private static final List<IngredientPipelineStep> INGREDIENT_PIPELINE = List.of(
             new Step("신규 재료 등록(PENDING)", (result, dict) -> dict.upsertPending(result.ingredients())),
-            new Step("확신 있는 양념 자동 승격", (result, dict) -> dict.confirmSeasoningIfPending(result.confidentSeasonings())));
+            new Step("확신 있는 양념 자동 승격", (result, dict) -> dict.confirmSeasoningIfPending(result.confidentSeasonings())),
+            // 기계적으로 확실한 변형("계란 2개")만 즉시 병합 — 오타·동의어는 AI 점검+오너 확정 경로 유지
+            new Step("수량·단위 변형 자동 병합", (result, dict) -> {
+                for (String name : result.ingredients()) {
+                    if (name == null || name.isBlank()) {
+                        continue;
+                    }
+                    String rep = RegistrationRules.representativeCandidate(name);
+                    if (rep != null) {
+                        dict.autoMergeVariant(name.trim(), rep);
+                    }
+                }
+            }));
 
     private final VideoRepository videos;
     private final GeminiRateLimiter rateLimiter;

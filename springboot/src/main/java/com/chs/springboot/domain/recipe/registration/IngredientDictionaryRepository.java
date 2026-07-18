@@ -136,6 +136,26 @@ public class IngredientDictionaryRepository {
     }
 
     /**
+     * 수량·단위만 다른 변형의 자동 병합 (2026-07-18 확정 — RegistrationWorker 파이프라인 전용).
+     * 오너 판정을 절대 덮지 않도록 아직 판정 전(PENDING)·미병합(match_key=자기 이름)인 행만,
+     * 대표가 사전에 실재할 때만 묶는다. 대표가 이미 남의 멤버면 그 대표의 대표를 따라간다
+     * (깊이 1 평탄화 — merge 와 같은 규칙을 SQL 조인 한 번으로).
+     */
+    public boolean autoMergeVariant(String name, String representative) {
+        if (name.equals(representative)) {
+            return false;
+        }
+        return jdbc.sql("""
+                        UPDATE ingredient_dictionary d
+                        SET match_key = rep.match_key, updated_at = now()
+                        FROM ingredient_dictionary rep
+                        WHERE d.name = :name AND rep.name = :rep
+                          AND d.status = 'PENDING' AND d.match_key = d.name
+                        """)
+                .param("name", name).param("rep", representative).update() > 0;
+    }
+
+    /**
      * 오너의 그룹 확정 (2026-07-17 슬라이스2) — name 을 matchKey 그룹에 넣는다.
      * name.equals(matchKey) 면 그룹 해제(자기 이름으로 되돌림).
      *

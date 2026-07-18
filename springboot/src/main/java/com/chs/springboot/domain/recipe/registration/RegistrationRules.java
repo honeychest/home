@@ -46,6 +46,28 @@ final class RegistrationRules {
         return tooLong ? STATUS_TOO_LONG : STATUS_WAITING;
     }
 
+    /**
+     * 재료 이름에서 수량·단위·괄호 보충 설명을 뗀 대표 후보 ("계란 2개" → "계란", 2026-07-18 확정).
+     * 기계적으로 확실한 변형만 다룬다 — 오타·동의어("고웃 고춧가루" 등) 판단은 AI 점검+오너 확정
+     * 경로가 담당한다(안전 비대칭 규칙: 묶기를 틀리면 없는 재료를 있다고 하게 됨).
+     * 뗄 게 없거나(원형 그대로) 떼고 나면 아무것도 안 남으면(이름이 수량으로 시작하는 상품명 등)
+     * null — 병합 후보 아님.
+     */
+    static String representativeCandidate(String name) {
+        if (name == null) {
+            return null;
+        }
+        String stripped = name
+                .replaceAll("\\([^)]*\\)", " ")
+                // 꼬리의 "숫자(+분수·범위) + 짧은 단위" — 2개, 1/2모, 2~3개, 300g, 1.5큰술
+                .replaceAll("\\s*\\d[\\d./~\\-]*\\s*[가-힣a-zA-Z]{0,3}\\s*$", " ")
+                .trim().replaceAll("\\s+", " ");
+        if (stripped.isBlank() || stripped.equals(name.trim())) {
+            return null;
+        }
+        return stripped;
+    }
+
     /** 재생목록 일괄 등록용: 메타 목록을 영상 ID 로 색인 (중복 ID 는 첫 항목 우선) */
     static Map<String, VideoMetadataClient.VideoMetadata> metadataById(
             List<VideoMetadataClient.VideoMetadata> metas) {

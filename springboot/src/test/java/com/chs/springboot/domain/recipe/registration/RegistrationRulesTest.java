@@ -78,4 +78,44 @@ class RegistrationRulesTest {
     void blankDescriptionIsNotCountedAsSignal() {
         assertEquals(List.of("FRAMES"), RegistrationRules.analysisSignals("   ", null));
     }
+
+    @Test
+    @DisplayName("변형 대표 후보: 꼬리 수량·단위를 뗀다 (계란 2개 → 계란)")
+    void stripsTrailingQuantityAndUnit() {
+        assertEquals("계란", RegistrationRules.representativeCandidate("계란 2개"));
+        assertEquals("계란", RegistrationRules.representativeCandidate("계란2개"));
+        assertEquals("두부", RegistrationRules.representativeCandidate("두부 1/2모"));
+        assertEquals("청양고추", RegistrationRules.representativeCandidate("청양고추 2~3개"));
+        assertEquals("돼지고기", RegistrationRules.representativeCandidate("돼지고기 300g"));
+        assertEquals("간장", RegistrationRules.representativeCandidate("간장 1.5큰술"));
+    }
+
+    @Test
+    @DisplayName("변형 대표 후보: 괄호 보충 설명을 뗀다 (고춧가루(고운 것) → 고춧가루)")
+    void stripsParentheticalNote() {
+        assertEquals("고춧가루", RegistrationRules.representativeCandidate("고춧가루(고운 것)"));
+        assertEquals("계란", RegistrationRules.representativeCandidate("계란 (선택) 2개"));
+    }
+
+    @Test
+    @DisplayName("뗄 게 없으면(원형) null — 병합 후보 아님")
+    void unchangedNameIsNotCandidate() {
+        assertNull(RegistrationRules.representativeCandidate("계란"));
+        assertNull(RegistrationRules.representativeCandidate("고운 고춧가루"));
+        assertNull(RegistrationRules.representativeCandidate(null));
+    }
+
+    @Test
+    @DisplayName("떼고 나면 아무것도 안 남는 이름(수량으로 시작하는 상품명 등)은 null — 통째 삭제 방지")
+    void nameThatStripsToNothingIsNotCandidate() {
+        assertNull(RegistrationRules.representativeCandidate("3분카레"));
+        assertNull(RegistrationRules.representativeCandidate("2개"));
+    }
+
+    @Test
+    @DisplayName("오타·동의어 수준 차이는 기계 규칙이 건드리지 않는다 (AI 점검+오너 확정 경로 소관)")
+    void typosAndSynonymsAreLeftAlone() {
+        assertNull(RegistrationRules.representativeCandidate("고웃 고춧가루"));
+        assertNull(RegistrationRules.representativeCandidate("고운고추가루"));
+    }
 }

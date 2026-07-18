@@ -6,6 +6,7 @@
 // 등록 분기(영상 우선)는 registerLink 공용 모듈 — 홈·공유 수신과 같은 단일 원본.
 // 붙여넣기(버튼·입력창 둘 다)는 즉시 등록으로 이어진다 — pasteAndRegister 한 곳.
 import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type {
     GikkaVideo, RegistrationItem, RegistrationStatus, SearchResults, VideoCategory,
 } from '../data/registrationTypes';
@@ -162,6 +163,18 @@ export default function RecipesPage() {
     const load = useCallback(() => registrationRepository.list(), []);
     const query = useQuery<RegistrationItem[]>(load, loadMessage);
     const { data: items, setData: setItems, error: loadError, reload, refresh } = query;
+
+    // 홈 섬네일 탭 → 해당 영상의 결과 시트 자동 열기 (2026-07-18 확정 — navigation state 로 전달).
+    // 소진 후 state 를 비워 뒤로가기·폴링 재렌더에서 다시 열리지 않게 한다.
+    const location = useLocation();
+    const navigate = useNavigate();
+    useEffect(() => {
+        const openVideoId = (location.state as { openVideoId?: string } | null)?.openVideoId;
+        if (!openVideoId || !items) return;
+        const target = items.find((i) => i.videoId === openVideoId);
+        if (target) setSelected(target);
+        navigate(location.pathname, { replace: true, state: null });
+    }, [items, location, navigate]);
 
     useEffect(() => {
         fridgeRepository.list().then((list) => setFridgeNames(new Set(list.map((i) => i.name)))).catch(() => undefined);
