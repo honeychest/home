@@ -6,10 +6,13 @@
 //   - 목록은 상태 칩 + 검색으로 자른다 (사전은 등록할수록 커져서 스크롤로는 못 씀).
 //   - 버튼 탭 = 즉시 저장 (미저장 상태를 안 만든다). 일괄 경로인 [제안 전체 적용]에만 확인창.
 // 그룹(슬라이스2): 멤버("계란 2개")는 성격을 대표("계란")에서 물려받으므로 분류 버튼을 안 보여준다 —
-// 보여주면 눌러도 매칭에 아무 효과가 없어 거짓말이 된다. 멤버 조작은 [그룹 해제]와 [묶기](이동)다.
+// 보여주면 눌러도 매칭에 아무 효과가 없어 거짓말이 된다.
 // 묶기는 오너 조작만 (안전 비대칭 규칙, CONTEXT.md) — 자동 병합 경로는 없다. 경로는 두 가지:
-// AI 제안 수락, 또는 행의 [묶기] → 하단 시트에서 대표 검색·선택 (2026-07-18 — 제안이 있어야만
-// 묶을 수 있던 구멍을 메움. 오너가 주도권을 가진다는 취지가 구현에 빠져 있었다).
+// AI 제안 수락, 또는 행의 [묶기] → "그룹 관리" 하단 시트 (2026-07-18 — 제안이 있어야만 묶을 수
+// 있던 구멍을 메움). 시트는 그룹의 상세 컨텍스트다: 멤버 목록에서 [빼기]하면 그 자리에
+// [다시 묶기]로 남아 실수 복구가 즉시 된다 — 목록 위에서 해제하면 필터 조건에서 빠져 행이
+// 눈앞에서 사라지던 문제(2026-07-18 사용자 지적)의 구조적 해결. 시트를 연 시점의 멤버 스냅샷을
+// 유지하는 이유가 이것이다(라이브로만 그리면 빼는 순간 행이 또 사라진다).
 // 목록 구성 판정은 data/dictionaryFilter (순수 모듈 + vitest), 3상태 조회·조작 실행기는 공용 훅.
 import { useCallback, useState } from 'react';
 import type { DictionaryEntry, DictionaryStatus, IngredientProposal } from '../data/monitorTypes';
@@ -39,12 +42,16 @@ const AUDIT_FAIL_TEXT = 'AI 점검을 하지 못했어요 — 잠시 후 다시 
 const AUDIT_TEXT = 'AI 점검';
 const AUDIT_BUSY_TEXT = '점검 중…';
 const SEARCH_PLACEHOLDER = '재료 이름 검색';
-const UNMERGE_TEXT = '그룹 해제';
 const MERGE_TEXT = '묶기';
 const MERGE_PICK_TEXT = '이 그룹으로';
 const MERGE_SEARCH_PLACEHOLDER = '대표 재료 검색';
 const NO_CANDIDATE_TEXT = '묶을 수 있는 대표가 없어요.';
-const mergeSheetTitle = (name: string) => `"${name}" 그룹 정하기`;
+const MEMBER_UNMERGE_TEXT = '빼기';
+const MEMBER_REMERGE_TEXT = '다시 묶기';
+const MEMBERS_LABEL = '묶인 재료';
+const NO_MEMBERS_TEXT = '아직 묶인 재료가 없어요.';
+const groupSheetTitle = (rep: string) => `"${rep}" 그룹 관리`;
+const moveSectionLabel = (name: string) => `"${name}" 옮길 그룹 찾기`;
 const EMPTY_TEXT = '해당하는 재료가 없어요.';
 const NO_PROPOSAL_TEXT = '새로 분류할 만한 제안이 없어요.';
 const applyAllText = (n: number) => `제안 ${n}개 전체 적용`;
@@ -107,8 +114,10 @@ export default function DictionaryPage() {
     const [proposals, setProposals] = useState<IngredientProposal[] | null>(null);
     const [filter, setFilter] = useState<DictionaryFilter>('ATTENTION');
     const [search, setSearch] = useState('');
-    // 묶기 시트 — null 이 아니면 이 이름의 대표를 고르는 중 (2026-07-18 오너 직접 묶기)
-    const [mergeTarget, setMergeTarget] = useState<string | null>(null);
+    // 그룹 관리 시트 (2026-07-18) — name: [묶기]를 누른 재료, rep: 그 그룹의 대표(연 시점 고정),
+    // members: 연 시점의 멤버 스냅샷 ([빼기] 후에도 행이 남아 [다시 묶기]로 즉시 복구 가능)
+    const [groupSheet, setGroupSheet] =
+        useState<{ name: string; rep: string; members: string[] } | null>(null);
     const [mergeSearch, setMergeSearch] = useState('');
 
     /** 이 이름의 제안은 역할이 끝났다 — 오너가 직접 정했으므로 제안 칩에서 바로 뺀다 */
@@ -132,16 +141,21 @@ export default function DictionaryPage() {
         await monitorRepository.mergeIngredient(name, matchKey);
     });
 
-    const openMerge = (name: string) => {
-        setMergeTarget(name);
+    const openGroupSheet = (row: DictionaryRow) => {
+        if (entries === null) return;
+        const rep = row.mergedInto ?? row.name;
+        const members = entries.filter((e) => e.matchKey === rep && e.name !== rep)
+            .map((e) => e.name)
+            .sort((a, b) => a.localeCompare(b));
+        setGroupSheet({ name: row.name, rep, members });
         setMergeSearch('');
     };
-    const closeMerge = () => setMergeTarget(null);
-    /** 시트에서 대표 선택 — 닫고 즉시 저장 (버튼 탭 = 즉시 저장 원칙) */
-    const pickRepresentative = (representative: string) => {
-        if (mergeTarget === null) return;
-        const name = mergeTarget;
-        closeMerge();
+    const closeGroupSheet = () => setGroupSheet(null);
+    /** 다른 그룹 선택 — 그룹 컨텍스트(rep)가 바뀌므로 시트를 닫고 즉시 저장 */
+    const moveToGroup = (representative: string) => {
+        if (groupSheet === null) return;
+        const { name } = groupSheet;
+        closeGroupSheet();
         void merge(name, representative);
     };
 
@@ -184,8 +198,12 @@ export default function DictionaryPage() {
 
     const rows = entries === null ? null : buildRows(entries, proposals ?? []);
     const visible = rows === null ? null : visibleRows(rows, filter, search);
-    const candidates = rows === null || mergeTarget === null
-        ? [] : mergeCandidates(rows, mergeTarget, mergeSearch);
+    // 시트의 "옮길 그룹" 후보 — 지금 그룹의 대표는 제외(같은 그룹으로 옮기기는 무의미)
+    const candidates = rows === null || groupSheet === null
+        ? [] : mergeCandidates(rows, groupSheet.name, mergeSearch)
+            .filter((c) => c.name !== groupSheet.rep);
+    // 시트 멤버 행의 [빼기]/[다시 묶기] 판정용 — 스냅샷이 아니라 지금 상태를 본다
+    const entryByName = new Map((entries ?? []).map((e) => [e.name, e]));
     // 점검 전에는 "제안" 칩을 감춘다 — 항상 0인 칩은 자리만 차지한다
     const chips = FILTERS.filter((f) => f.key !== 'PROPOSED' || proposals !== null);
 
@@ -258,82 +276,88 @@ export default function DictionaryPage() {
                             </p>
                         )}
                         {visible.map((row) => (
+                            // 2단 행: 이름 줄(전체 폭, 1줄 말줄임) / 조작 줄. 확정 상태 배지는 안 둔다 —
+                            // 버튼 불(그린)이 이미 같은 말을 해서 이름 자리만 뺏었다 (2026-07-18 제거)
                             <div className="rcp-dict-row" key={row.name}>
                                 <span className="rcp-dict-name">{row.name}</span>
-
-                                {row.mergedInto !== null ? (
-                                    // 멤버 — 성격은 대표가 정한다. 분류 버튼을 주면 눌러도 효과가 없어 거짓말이 된다
-                                    <>
+                                <div className="rcp-dict-foot">
+                                    {row.mergedInto !== null && (
                                         <RcpBadge variant="neutral">{mergedText(row.mergedInto)}</RcpBadge>
-                                        <div className="rcp-dict-actions">
+                                    )}
+                                    <div className="rcp-dict-actions">
+                                        {/* 멤버는 분류 버튼 없음 — 성격은 대표가 정한다. 묶기 제안이
+                                            있으면 분류 버튼 대신 그것부터(묶이면 분류는 대표가 정한다) */}
+                                        {row.mergedInto === null && (row.proposedMergeInto !== null ? (
                                             <button
                                                 type="button"
-                                                className="rcp-dict-action"
-                                                onClick={() => void merge(row.name, row.name)}
+                                                className="rcp-dict-action rcp-dict-action-proposed"
+                                                aria-label={proposedMergeLabel(row.proposedMergeInto)}
+                                                onClick={() => void merge(row.name, row.proposedMergeInto!)}
                                             >
-                                                {UNMERGE_TEXT}
+                                                {mergedText(row.proposedMergeInto)}
                                             </button>
-                                            {/* 다른 그룹으로 이동 — 해제 후 다시 묶는 2단계를 1탭으로 */}
+                                        ) : ROW_ACTIONS.map(({ status, label }) => (
                                             <button
                                                 type="button"
-                                                className="rcp-dict-action"
-                                                onClick={() => openMerge(row.name)}
+                                                key={status}
+                                                className={actionClass(row, status)}
+                                                // 색만으로는 제안인지 안 보이는 경우(색맹·스크린리더)를 위해 이름에도 실음
+                                                aria-label={row.proposedStatus === status
+                                                    ? proposedTierLabel(label) : undefined}
+                                                onClick={() => void classify(row.name, status)}
                                             >
-                                                {MERGE_TEXT}
+                                                {label}
                                             </button>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <RcpBadge variant={STATUS_BADGE[row.status]}>
-                                            {STATUS_LABEL[row.status]}
-                                        </RcpBadge>
-                                        <div className="rcp-dict-actions">
-                                            {/* 묶기 제안이 있으면 분류 버튼 대신 그것부터 — 묶이면 분류는 대표가 정한다 */}
-                                            {row.proposedMergeInto !== null ? (
-                                                <button
-                                                    type="button"
-                                                    className="rcp-dict-action rcp-dict-action-proposed"
-                                                    aria-label={proposedMergeLabel(row.proposedMergeInto)}
-                                                    onClick={() => void merge(row.name, row.proposedMergeInto!)}
-                                                >
-                                                    {mergedText(row.proposedMergeInto)}
-                                                </button>
-                                            ) : ROW_ACTIONS.map(({ status, label }) => (
-                                                <button
-                                                    type="button"
-                                                    key={status}
-                                                    className={actionClass(row, status)}
-                                                    // 색만으로는 제안인지 안 보이는 경우(색맹·스크린리더)를 위해 이름에도 실음
-                                                    aria-label={row.proposedStatus === status
-                                                        ? proposedTierLabel(label) : undefined}
-                                                    onClick={() => void classify(row.name, status)}
-                                                >
-                                                    {label}
-                                                </button>
-                                            ))}
-                                            {/* AI 제안 유무와 무관하게 항상 — 묶기의 주도권은 오너에게 있다 */}
-                                            <button
-                                                type="button"
-                                                className="rcp-dict-action"
-                                                onClick={() => openMerge(row.name)}
-                                            >
-                                                {MERGE_TEXT}
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
+                                        )))}
+                                        {/* AI 제안 유무와 무관하게 항상 — 그룹 관리 시트를 연다 */}
+                                        <button
+                                            type="button"
+                                            className="rcp-dict-action"
+                                            onClick={() => openGroupSheet(row)}
+                                        >
+                                            {MERGE_TEXT}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         ))}
                     </div>
 
-                    {/* 묶기 시트 — 대표 검색·선택. 후보 판정은 dictionaryFilter.mergeCandidates (순수 모듈) */}
-                    {mergeTarget !== null && (
+                    {/* 그룹 관리 시트 — 멤버 검수([빼기]↔[다시 묶기] 즉시 복구)와 옮기기를
+                        그룹 컨텍스트 안에서 처리. 후보 판정은 dictionaryFilter.mergeCandidates */}
+                    {groupSheet !== null && (
                         <RcpBottomSheet
                             open
-                            title={mergeSheetTitle(mergeTarget)}
-                            onClose={closeMerge}
+                            title={groupSheetTitle(groupSheet.rep)}
+                            onClose={closeGroupSheet}
                         >
+                            <h3 className="rcp-section-label">{MEMBERS_LABEL}</h3>
+                            {groupSheet.members.length === 0 && (
+                                <p className="rcp-empty">{NO_MEMBERS_TEXT}</p>
+                            )}
+                            {groupSheet.members.map((member) => {
+                                // 스냅샷으로 행을 유지하되 버튼은 지금 상태 기준 — 빼도 행이 안 사라진다
+                                const stillMerged = entryByName.get(member)?.matchKey === groupSheet.rep;
+                                return (
+                                    <div className="rcp-dict-row" key={member}>
+                                        <span className="rcp-dict-name">{member}</span>
+                                        <div className="rcp-dict-foot">
+                                            <div className="rcp-dict-actions">
+                                                <button
+                                                    type="button"
+                                                    className="rcp-dict-action"
+                                                    onClick={() => void merge(
+                                                        member, stillMerged ? member : groupSheet.rep)}
+                                                >
+                                                    {stillMerged ? MEMBER_UNMERGE_TEXT : MEMBER_REMERGE_TEXT}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            <h3 className="rcp-section-label">{moveSectionLabel(groupSheet.name)}</h3>
                             <input
                                 className="rcp-input rcp-dict-search"
                                 type="search"
@@ -346,17 +370,19 @@ export default function DictionaryPage() {
                                 {candidates.map((candidate) => (
                                     <div className="rcp-dict-row" key={candidate.name}>
                                         <span className="rcp-dict-name">{candidate.name}</span>
-                                        <RcpBadge variant={STATUS_BADGE[candidate.status]}>
-                                            {STATUS_LABEL[candidate.status]}
-                                        </RcpBadge>
-                                        <div className="rcp-dict-actions">
-                                            <button
-                                                type="button"
-                                                className="rcp-dict-action"
-                                                onClick={() => pickRepresentative(candidate.name)}
-                                            >
-                                                {MERGE_PICK_TEXT}
-                                            </button>
+                                        <div className="rcp-dict-foot">
+                                            <RcpBadge variant={STATUS_BADGE[candidate.status]}>
+                                                {STATUS_LABEL[candidate.status]}
+                                            </RcpBadge>
+                                            <div className="rcp-dict-actions">
+                                                <button
+                                                    type="button"
+                                                    className="rcp-dict-action"
+                                                    onClick={() => moveToGroup(candidate.name)}
+                                                >
+                                                    {MERGE_PICK_TEXT}
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}

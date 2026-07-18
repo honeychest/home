@@ -624,6 +624,8 @@
   font-weight: var(--rcp-fw-bold);
 }
 .rcp-input-row { display: flex; gap: var(--rcp-space-2); }
+/* 보관함 검색바 — 바로 아래 필터 배지 줄과 붙어 보여 간격 분리 (2026-07-18 사용자 지적) */
+#rcp-search { margin-bottom: var(--rcp-space-3); }
 .rcp-sheet-meta { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); }
 /* 결과 시트(3차) — 상태 설명 문단 / 조리 순서 요약 목록 */
 .rcp-sheet-detail { font-size: var(--rcp-fs-md); color: var(--rcp-text); overflow-wrap: anywhere; }
@@ -751,18 +753,26 @@
 .rcp-dict-list {
   display: flex; flex-direction: column; gap: var(--rcp-space-2); margin-top: var(--rcp-space-2);
 }
+/* 행은 2단(이름 줄 / 조작 줄) — 한 줄에 다 넣으면 버튼·배지가 이름 폭을 먹어 글자가 세로로
+   무너졌다 (2026-07-18 사용자 지적: "제일 중요한 게 이름"). 세로 밀도 보존을 위해 안쪽 여백을
+   조이고 이름은 1줄 말줄임 (긴 이름 전체는 묶기 시트에서 확인). 버튼 44px 는 터치 규칙이라 유지. */
 .rcp-dict-row {
-  display: flex; align-items: center; gap: var(--rcp-space-2);
+  display: flex; flex-direction: column; gap: var(--rcp-space-1);
   background: var(--rcp-surface);
   border: 1px solid var(--rcp-line);
   border-radius: var(--rcp-radius-lg);
-  padding: var(--rcp-space-2) var(--rcp-space-3);
+  padding: var(--rcp-space-1) var(--rcp-space-3);
 }
 .rcp-dict-name {
-  flex: 1; min-width: 0; overflow-wrap: anywhere;
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-size: var(--rcp-fs-md); font-weight: var(--rcp-fw-bold); color: var(--rcp-text);
 }
-.rcp-dict-actions { display: flex; gap: var(--rcp-space-1); flex-shrink: 0; }
+.rcp-dict-foot { display: flex; align-items: center; gap: var(--rcp-space-2); }
+/* 멤버 배지("→ 대표")가 길어도 버튼을 안 밀게 — 배지 쪽이 줄어든다 */
+.rcp-dict-foot > .rcp-badge {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rcp-dict-actions { display: flex; gap: var(--rcp-space-1); flex-shrink: 0; margin-left: auto; }
 .rcp-dict-action {
   min-height: 44px; padding: 0 var(--rcp-space-2);
   border: 1px solid var(--rcp-line); border-radius: var(--rcp-radius-md);
