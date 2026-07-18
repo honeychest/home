@@ -15,7 +15,9 @@ import java.util.stream.Collectors;
 
 final class RecommendRules {
 
-    static final int MAX_PER_SECTION = 5;
+    /** 섹션당 상한 — 내 보관함 10 + 남의 것 10 = 20 (2026-07-18 사용자 확정, 구 "5+5" 계획을 대체) */
+    static final int MAX_MINE_PER_SECTION = 10;
+    static final int MAX_OTHERS_PER_SECTION = 10;
 
     private RecommendRules() {
     }
@@ -68,7 +70,9 @@ final class RecommendRules {
     record IngredientStatus(String name, boolean have) {
     }
 
-    record Match(Candidate candidate, List<String> missingMain, List<String> missingSeasoning) {
+    /** @param expiringUsed 냉장고 임박(expiring) 재료 중 이 레시피가 쓰는 것의 개수(그룹 키 기준) —
+        정렬 가중치. "임박 재료를 쓰는 레시피를 위로"(2026-07-18 확정, 4차 때 아이디어로만 남겼던 것) */
+    record Match(Candidate candidate, List<String> missingMain, List<String> missingSeasoning, int expiringUsed) {
 
         boolean isComplete() {
             return missingMain.isEmpty() && missingSeasoning.isEmpty();
@@ -117,13 +121,23 @@ final class RecommendRules {
      * 말한 이름("계란 2개")이 보여야 원문 보존 원칙과 맞다.
      *
      * @param fridgeKeys 냉장고 재료의 매칭 키 집합 (keysOf 로 미리 변환한 것)
+     * @param expiringKeys 그중 임박(expiring) 재료의 키 집합 — 이 레시피가 몇 개나 쓰는지 센다(정렬 가중치)
      */
-    static Match match(Candidate candidate, Set<String> fridgeKeys, Dictionary dictionary) {
+    static Match match(Candidate candidate, Set<String> fridgeKeys, Set<String> expiringKeys,
+                       Dictionary dictionary) {
         List<String> missingMain = new ArrayList<>();
         List<String> missingSeasoning = new ArrayList<>();
+        Set<String> expiringUsed = new HashSet<>(); // 키 기준 중복 제거 — "계란"과 "계란 2개"는 1개
         for (String raw : candidate.ingredients()) {
             String name = raw == null ? "" : raw.trim();
-            if (name.isEmpty() || fridgeKeys.contains(dictionary.keyOf(name))) {
+            if (name.isEmpty()) {
+                continue;
+            }
+            String key = dictionary.keyOf(name);
+            if (expiringKeys.contains(key)) {
+                expiringUsed.add(key);
+            }
+            if (fridgeKeys.contains(key)) {
                 continue;
             }
             Tier tier = classify(name, dictionary);
@@ -136,25 +150,66 @@ final class RecommendRules {
                 missingMain.add(name);
             }
         }
-        return new Match(candidate, missingMain, missingSeasoning);
+        return new Match(candidate, missingMain, missingSeasoning, expiringUsed.size());
     }
 
-    /* ── 3. 3단계 판정·정렬 (2026-07-14 4차 확정) ──
-       정렬 기준은 지금은 "재료 부족 섹션만 부족 개수 오름차순" 하나뿐이다. 향후 후보로
-       논의된 기준(아직 미적용, 여기에 추가할 것): 임박 재료(냉장고 expiring=true)를
-       많이 쓰는 레시피를 우선순위로 올리는 가중치 — 도입 시 Candidate 에 재료별 임박
-       여부를 실어 보내고 이 절의 정렬 Comparator 만 바꾸면 된다. */
+    /* ── 3. 3단계 판정·정렬 (2026-07-14 4차 확정 · 2026-07-18 정렬 개편 — 사용자 확정) ──
+       "목록이 항상 같다" 문제의 해결. 우선순위:
+       1) 재료 부족 섹션은 부족 개수 오름차순이 최우선 (기존 유지).
+       2) 임박 재료(냉장고 expiring)를 많이 쓰는 레시피 우선 — "완전 매칭·임박 같은 이유로
+          항상 보이는 건 OK"라는 요구의 구현.
+       3) 그 밖의 동점은 일일 셔플 — 시드(사용자+날짜)가 하루 동안 같아 새로고침·상세 팝업
+          복귀에도 목록이 안 튀고, 날이 바뀌면 다른 조합이 올라온다 (매 요청 랜덤은 방금 본
+          카드가 사라져 기각 — 2026-07-18 결정). */
 
     record Sections(List<Match> complete, List<Match> seasoningOnly, List<Match> needsIngredients) {
     }
 
-    /** 완전 가능 / 양념만 부족 / 재료 부족(부족 적은 순, 상한 없음) — 각 섹션 최대 5개 */
-    static Sections bucket(List<Match> matches) {
-        List<Match> complete = matches.stream().filter(Match::isComplete).limit(MAX_PER_SECTION).toList();
-        List<Match> seasoningOnly = matches.stream().filter(Match::isSeasoningOnly).limit(MAX_PER_SECTION).toList();
-        List<Match> needsIngredients = matches.stream().filter(Match::isMissingMain)
-                .sorted(Comparator.comparingInt(m -> m.missingMain().size()))
-                .limit(MAX_PER_SECTION).toList();
-        return new Sections(complete, seasoningOnly, needsIngredients);
+    /**
+     * 완전 가능 / 양념만 부족 / 재료 부족 — 섹션마다 랭킹 순으로 내 보관함 10 + 남의 것 10.
+     *
+     * @param myVideoIds 내 보관함 videoId 집합 — 상한을 내 것/남의 것 따로 센다
+     * @param shuffleSeed 동점 셔플 시드 — 호출부가 사용자+날짜로 만든다 (하루 동안 고정)
+     */
+    static Sections bucket(List<Match> matches, Set<String> myVideoIds, long shuffleSeed) {
+        Comparator<Match> ranking = Comparator
+                .comparingInt((Match m) -> -m.expiringUsed())
+                .thenComparingInt(m -> shuffleKey(shuffleSeed, m.candidate().videoId()));
+        Comparator<Match> byMissingThenRanking = Comparator
+                .comparingInt((Match m) -> m.missingMain().size())
+                .thenComparing(ranking);
+        return new Sections(
+                pick(matches.stream().filter(Match::isComplete).sorted(ranking).toList(), myVideoIds),
+                pick(matches.stream().filter(Match::isSeasoningOnly).sorted(ranking).toList(), myVideoIds),
+                pick(matches.stream().filter(Match::isMissingMain).sorted(byMissingThenRanking).toList(),
+                        myVideoIds));
+    }
+
+    /** 랭킹 순서는 지키면서 내 것/남의 것 상한만 따로 센다 — 상위(완전 매칭·임박)가 밀리지 않는다 */
+    private static List<Match> pick(List<Match> ranked, Set<String> myVideoIds) {
+        List<Match> out = new ArrayList<>();
+        int mine = 0;
+        int others = 0;
+        for (Match match : ranked) {
+            boolean isMine = myVideoIds.contains(match.candidate().videoId());
+            if (isMine && mine < MAX_MINE_PER_SECTION) {
+                out.add(match);
+                mine++;
+            } else if (!isMine && others < MAX_OTHERS_PER_SECTION) {
+                out.add(match);
+                others++;
+            }
+        }
+        return out;
+    }
+
+    /** 동점 셔플 키 — 같은 시드에선 항상 같은 값(하루 동안 목록 고정), 시드가 바뀌면 뒤섞인다.
+        hashCode 를 그대로 쓰면 시드가 더해져도 순서가 거의 안 변해서 곱셈·시프트 믹서로 흩는다. */
+    private static int shuffleKey(long seed, String videoId) {
+        long h = seed ^ videoId.hashCode() * 0x9E3779B97F4A7C15L;
+        h ^= h >>> 33;
+        h *= 0xFF51AFD7ED558CCDL;
+        h ^= h >>> 33;
+        return Long.hashCode(h);
     }
 }

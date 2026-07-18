@@ -3,6 +3,7 @@
 // RecommendRules 가 담당, 여기는 냉장고·완료된 레시피를 모아 넘기는 조합만 한다.
 package com.chs.springboot.domain.recipe.recommend;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -57,24 +58,32 @@ public class RecommendController {
 
     @GetMapping
     public RecommendSnapshot recommend(@GikkaUserId long userId) {
-        var fridgeNames = fridge.list(userId).stream()
+        var fridgeItems = fridge.list(userId);
+        var fridgeNames = fridgeItems.stream()
+                .map(FridgeItemResponse::name).collect(Collectors.toSet());
+        // 임박 재료 — 이걸 쓰는 레시피를 정렬에서 우대한다 (2026-07-18)
+        var expiringNames = fridgeItems.stream().filter(FridgeItemResponse::expiring)
                 .map(FridgeItemResponse::name).collect(Collectors.toSet());
         // 후보는 gikka 전체 완료 요리(콜드스타트 대응) — 냉장고 매칭은 그대로 내 것 기준.
-        // "내 보관함" 여부는 내 등록 videoId 집합으로 표시만 한다 (매칭에는 안 씀).
+        // 내 등록 videoId 집합은 "내 보관함" 표시 + 섹션 상한(내 것 10/남의 것 10)에 쓴다.
         Set<String> myVideoIds = new HashSet<>(registrations.videoIdsForUser(userId));
         // 사전 3종은 늘 같이 다닌다 — 저장소가 멤버까지 대표 기준으로 펼쳐서 주므로 여기선 조립만.
         // basicNames = 상비 양념(부족분에서 아예 뺀다), matchKeys = 그룹 매칭 키(2026-07-17 슬라이스2)
         var dict = new RecommendRules.Dictionary(
                 dictionary.matchKeys(), dictionary.seasoningNames(), dictionary.basicNames());
         Set<String> fridgeKeys = RecommendRules.keysOf(fridgeNames, dict); // 후보마다 다시 계산하지 않게 한 번만
+        Set<String> expiringKeys = RecommendRules.keysOf(expiringNames, dict);
 
         List<RecommendRules.Match> matches = videos.allDoneRecipes().stream()
                 .map(this::toCandidate)
                 .flatMap(Optional::stream)
-                .map(candidate -> RecommendRules.match(candidate, fridgeKeys, dict))
+                .map(candidate -> RecommendRules.match(candidate, fridgeKeys, expiringKeys, dict))
                 .toList();
 
-        RecommendRules.Sections sections = RecommendRules.bucket(matches);
+        // 일일 셔플 시드 — 사용자+오늘 날짜로 하루 동안 고정, 날이 바뀌면 동점 순서가 회전한다.
+        // 서버 LocalDate.now() 기준(TZ=Asia/Seoul 전제 — CONTEXT.md "시간 기준" 절과 동일한 한계).
+        long shuffleSeed = userId * 31L + LocalDate.now().hashCode();
+        RecommendRules.Sections sections = RecommendRules.bucket(matches, myVideoIds, shuffleSeed);
         return new RecommendSnapshot(
                 toItems(sections.complete(), myVideoIds),
                 toItems(sections.seasoningOnly(), myVideoIds),

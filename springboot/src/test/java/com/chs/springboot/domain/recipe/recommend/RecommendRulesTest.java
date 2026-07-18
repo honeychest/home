@@ -44,7 +44,7 @@ class RecommendRulesTest {
     @DisplayName("재료·양념 다 있으면 완전 가능")
     void completeWhenNothingMissing() {
         var c = candidate("a", List.of("두부", "고추장"));
-        var match = RecommendRules.match(c, Set.of("두부", "고추장"), DICT);
+        var match = RecommendRules.match(c, Set.of("두부", "고추장"), Set.of(), DICT);
 
         assertTrue(match.isComplete());
         assertTrue(match.missingMain().isEmpty());
@@ -57,7 +57,7 @@ class RecommendRulesTest {
             + "냉장고에 물을 넣는 사람은 없어 완전 가능이 0이었음)")
     void basicSeasoningsAreNeverMissing() {
         var c = candidate("a", List.of("두부", "물", "소금", "설탕"));
-        var match = RecommendRules.match(c, Set.of("두부"), DICT);
+        var match = RecommendRules.match(c, Set.of("두부"), Set.of(), DICT);
 
         assertTrue(match.isComplete());
         assertTrue(match.missingSeasoning().isEmpty());
@@ -76,7 +76,7 @@ class RecommendRulesTest {
     @DisplayName("재료는 다 있고 양념만 없으면 양념만 부족 — 재료 부족 판정에 안 걸림")
     void seasoningOnlyWhenMainPresent() {
         var c = candidate("a", List.of("두부", "고추장"));
-        var match = RecommendRules.match(c, Set.of("두부"), DICT);
+        var match = RecommendRules.match(c, Set.of("두부"), Set.of(), DICT);
 
         assertTrue(match.isSeasoningOnly());
         assertEquals(List.of("고추장"), match.missingSeasoning());
@@ -87,7 +87,7 @@ class RecommendRulesTest {
     @DisplayName("재료가 몇 개든 없으면 재료 부족 — 부족 개수를 그대로 담는다")
     void missingMainCarriesCount() {
         var c = candidate("a", List.of("두부", "대파", "고추장"));
-        var match = RecommendRules.match(c, Set.of(), DICT);
+        var match = RecommendRules.match(c, Set.of(), Set.of(), DICT);
 
         assertTrue(match.isMissingMain());
         assertEquals(List.of("두부", "대파"), match.missingMain());
@@ -99,7 +99,7 @@ class RecommendRulesTest {
             "완전 매칭이 하나도 없을 때 추천이 통째로 안 보이는 문제가 실사용에서 발견됨)")
     void manyMissingStillCountsAsMissingMain() {
         var c = candidate("a", List.of("두부", "대파", "돼지고기", "김치"));
-        var match = RecommendRules.match(c, Set.of(), DICT);
+        var match = RecommendRules.match(c, Set.of(), Set.of(), DICT);
 
         assertTrue(match.isMissingMain());
         assertEquals(4, match.missingMain().size());
@@ -110,7 +110,7 @@ class RecommendRulesTest {
             + "'굴소스'가 그 사례: 사전 도입 전엔 코드 상수 19개 밖이라 주재료로 잡혀 추천이 밀렸다")
     void unknownNamesAreMain() {
         var c = candidate("a", List.of("고추장", "다진 마늘", "굴소스"));
-        var match = RecommendRules.match(c, Set.of(), DICT);
+        var match = RecommendRules.match(c, Set.of(), Set.of(), DICT);
 
         assertEquals(List.of("고추장"), match.missingSeasoning()); // 사전의 SEASONING
         assertEquals(List.of("굴소스"), match.missingMain());       // 사전에 없음 → MAIN
@@ -118,8 +118,7 @@ class RecommendRulesTest {
     }
 
     @Test
-    @DisplayName("섹션 분류·정렬: 재료 부족은 적은 개수 순(상한 없이 멀리 부족한 것도 뒤에 포함), " +
-            "각 섹션 최대 5개로 자른다")
+    @DisplayName("섹션 분류·정렬: 재료 부족은 적은 개수 순이 최우선 (상한 없이 멀리 부족한 것도 뒤에 포함)")
     void bucketsSortsAndCaps() {
         var complete = candidate("complete", List.of("두부"));
         var seasoningOnly = candidate("seasoning", List.of("두부", "고추장"));
@@ -128,13 +127,13 @@ class RecommendRulesTest {
         var missingOne = candidate("missing-one", List.of("두부", "대파"));
 
         var matches = List.of(
-                RecommendRules.match(complete, Set.of("두부"), DICT),
-                RecommendRules.match(seasoningOnly, Set.of("두부"), DICT),
-                RecommendRules.match(missingFar, Set.of("두부"), DICT),
-                RecommendRules.match(missingTwo, Set.of("두부"), DICT),
-                RecommendRules.match(missingOne, Set.of("두부"), DICT));
+                RecommendRules.match(complete, Set.of("두부"), Set.of(), DICT),
+                RecommendRules.match(seasoningOnly, Set.of("두부"), Set.of(), DICT),
+                RecommendRules.match(missingFar, Set.of("두부"), Set.of(), DICT),
+                RecommendRules.match(missingTwo, Set.of("두부"), Set.of(), DICT),
+                RecommendRules.match(missingOne, Set.of("두부"), Set.of(), DICT));
 
-        var sections = RecommendRules.bucket(matches);
+        var sections = RecommendRules.bucket(matches, Set.of(), 1L);
 
         assertEquals(1, sections.complete().size());
         assertEquals("complete", sections.complete().get(0).candidate().videoId());
@@ -149,7 +148,7 @@ class RecommendRulesTest {
             + "냉장고에 없어도 '있음' — 부족분이 아니니 상세에서도 갖춘 것으로 보여야 일관된다")
     void ingredientStatusesKeepOrderAndHaveFlag() {
         var c = candidate("a", List.of("두부", "대파", "소금", "고추장"));
-        var match = RecommendRules.match(c, Set.of("두부"), DICT);
+        var match = RecommendRules.match(c, Set.of("두부"), Set.of(), DICT);
 
         assertEquals(
                 List.of(
@@ -179,7 +178,7 @@ class RecommendRulesTest {
         var c = candidate("a", List.of("계란 2개", "라면 건더기스프"));
         var fridgeKeys = RecommendRules.keysOf(Set.of("계란", "신라면"), GROUPED);
 
-        var match = RecommendRules.match(c, fridgeKeys, GROUPED);
+        var match = RecommendRules.match(c, fridgeKeys, Set.of(), GROUPED);
 
         assertTrue(match.isComplete()); // 신라면 → 라면 그룹이라 건더기스프도 있는 것으로 친다
     }
@@ -191,7 +190,7 @@ class RecommendRulesTest {
         var c = candidate("a", List.of("진간장"));
         var fridgeKeys = RecommendRules.keysOf(Set.of("간장"), GROUPED);
 
-        var match = RecommendRules.match(c, fridgeKeys, GROUPED);
+        var match = RecommendRules.match(c, fridgeKeys, Set.of(), GROUPED);
 
         assertFalse(match.isComplete());
         assertEquals(List.of("진간장"), match.missingMain());
@@ -203,7 +202,7 @@ class RecommendRulesTest {
     void missingKeepsOriginalNameNotRepresentative() {
         var c = candidate("a", List.of("계란 2개"));
 
-        var match = RecommendRules.match(c, Set.of(), GROUPED);
+        var match = RecommendRules.match(c, Set.of(), Set.of(), GROUPED);
 
         assertEquals(List.of("계란 2개"), match.missingMain());
     }
@@ -218,21 +217,76 @@ class RecommendRulesTest {
                 Set.of("고추장", "고추장 2스푼"), BASICS);
         var c = candidate("a", List.of("고추장 2스푼"));
 
-        var match = RecommendRules.match(c, Set.of(), dict);
+        var match = RecommendRules.match(c, Set.of(), Set.of(), dict);
 
         assertTrue(match.isSeasoningOnly());
         assertEquals(List.of("고추장 2스푼"), match.missingSeasoning());
     }
 
-    @Test
-    @DisplayName("각 섹션은 최대 5개 — 6개째부터는 잘린다")
-    void capsAtFivePerSection() {
-        var matches = java.util.stream.IntStream.range(0, 7)
-                .mapToObj(i -> RecommendRules.match(candidate("c" + i, List.of("두부")), Set.of("두부"), DICT))
+    /* ── 상한·정렬 개편 (2026-07-18 사용자 확정 — 내 것 10 + 남의 것 10, 임박 우선, 일일 셔플) ── */
+
+    private static List<RecommendRules.Match> completeMatches(int count) {
+        return java.util.stream.IntStream.range(0, count)
+                .mapToObj(i -> RecommendRules.match(
+                        candidate("c" + i, List.of("두부")), Set.of("두부"), Set.of(), DICT))
                 .toList();
+    }
 
-        var sections = RecommendRules.bucket(matches);
+    @Test
+    @DisplayName("섹션 상한은 내 것 10 + 남의 것 10 을 따로 센다 — 남의 것이 많아도 내 것 자리를 안 뺏는다")
+    void capsMineAndOthersSeparately() {
+        var matches = completeMatches(30); // c0~c29 전부 완전 가능
+        Set<String> mine = java.util.stream.IntStream.range(0, 15)
+                .mapToObj(i -> "c" + i).collect(java.util.stream.Collectors.toSet()); // c0~c14 = 내 것
 
-        assertEquals(5, sections.complete().size());
+        var sections = RecommendRules.bucket(matches, mine, 1L);
+
+        assertEquals(20, sections.complete().size());
+        assertEquals(10, sections.complete().stream()
+                .filter(m -> mine.contains(m.candidate().videoId())).count());
+    }
+
+    @Test
+    @DisplayName("임박 재료를 쓰는 레시피가 위로 온다 — '임박 때문에 항상 보이는 건 OK'의 구현")
+    void expiringUsedRanksFirst() {
+        var plain = RecommendRules.match(candidate("plain", List.of("두부")), Set.of("두부"), Set.of(), DICT);
+        var usesExpiring = RecommendRules.match(
+                candidate("expiring", List.of("두부")), Set.of("두부"), Set.of("두부"), DICT);
+
+        assertEquals(1, usesExpiring.expiringUsed());
+        for (long seed = 0; seed < 5; seed++) { // 어떤 셔플 시드에서도 임박이 항상 먼저
+            var sections = RecommendRules.bucket(List.of(plain, usesExpiring), Set.of(), seed);
+            assertEquals("expiring", sections.complete().get(0).candidate().videoId());
+        }
+    }
+
+    @Test
+    @DisplayName("재료 부족 섹션은 부족 개수가 임박 가중치보다 우선 — 임박을 써도 더 많이 부족하면 뒤")
+    void missingCountBeatsExpiring() {
+        var lessMissing = RecommendRules.match(
+                candidate("less", List.of("두부", "대파")), Set.of("두부"), Set.of(), DICT);
+        var moreMissingButExpiring = RecommendRules.match(
+                candidate("more", List.of("두부", "대파", "김치")), Set.of("두부"), Set.of("두부"), DICT);
+
+        var sections = RecommendRules.bucket(List.of(moreMissingButExpiring, lessMissing), Set.of(), 1L);
+
+        assertEquals(List.of("less", "more"),
+                sections.needsIngredients().stream().map(m -> m.candidate().videoId()).toList());
+    }
+
+    @Test
+    @DisplayName("동점 셔플: 같은 시드면 항상 같은 순서(하루 동안 목록 고정), 시드가 바뀌면 순서가 돈다")
+    void tieShuffleIsSeededDaily() {
+        var matches = completeMatches(30);
+
+        var today = RecommendRules.bucket(matches, Set.of(), 20260718L);
+        var todayAgain = RecommendRules.bucket(matches, Set.of(), 20260718L);
+        var tomorrow = RecommendRules.bucket(matches, Set.of(), 20260719L);
+
+        List<String> order = today.complete().stream().map(m -> m.candidate().videoId()).toList();
+        assertEquals(order, todayAgain.complete().stream().map(m -> m.candidate().videoId()).toList());
+        assertFalse(order.equals(
+                tomorrow.complete().stream().map(m -> m.candidate().videoId()).toList()),
+                "시드가 다르면 동점 순서가 달라져야 한다 (30개 동점이 우연히 같을 확률은 사실상 0)");
     }
 }

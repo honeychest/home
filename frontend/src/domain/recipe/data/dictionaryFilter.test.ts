@@ -4,6 +4,7 @@ import {
     buildRows,
     countRows,
     hasProposal,
+    mergeCandidates,
     needsAttention,
     visibleRows,
 } from './dictionaryFilter';
@@ -123,6 +124,31 @@ describe('visibleRows', () => {
 
     it('없는 이름은 빈 목록', () => {
         expect(visibleRows(rows, 'ALL', '없는재료')).toEqual([]);
+    });
+});
+
+describe('mergeCandidates', () => {
+    const rows = buildRows([
+        entry('계란', 'CONFIRMED_MAIN'),
+        entry('계란 2개', 'PENDING', '계란'),
+        entry('달걀', 'PENDING'),
+        entry('간장', 'CONFIRMED_BASIC'),
+    ], []);
+
+    it('대표만 후보 — 이미 묶인 멤버는 대표가 될 수 없다 (깊이 1 평탄화)', () => {
+        expect(mergeCandidates(rows, '간장', '').map((r) => r.name)).toEqual(['계란', '달걀']);
+    });
+
+    it('자기 자신은 후보에서 뺀다', () => {
+        expect(mergeCandidates(rows, '달걀', '').map((r) => r.name)).toEqual(['간장', '계란']);
+    });
+
+    it('미판정(PENDING) 대표도 후보다 — 대표 확정을 묶기의 선행 조건으로 강제하지 않는다', () => {
+        expect(mergeCandidates(rows, '계란', '').map((r) => r.name)).toEqual(['간장', '달걀']);
+    });
+
+    it('검색어로 자른다 (앞뒤 공백 무시)', () => {
+        expect(mergeCandidates(rows, '달걀', ' 계란 ').map((r) => r.name)).toEqual(['계란']);
     });
 });
 

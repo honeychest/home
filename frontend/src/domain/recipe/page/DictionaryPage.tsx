@@ -6,8 +6,10 @@
 //   - 목록은 상태 칩 + 검색으로 자른다 (사전은 등록할수록 커져서 스크롤로는 못 씀).
 //   - 버튼 탭 = 즉시 저장 (미저장 상태를 안 만든다). 일괄 경로인 [제안 전체 적용]에만 확인창.
 // 그룹(슬라이스2): 멤버("계란 2개")는 성격을 대표("계란")에서 물려받으므로 분류 버튼을 안 보여준다 —
-// 보여주면 눌러도 매칭에 아무 효과가 없어 거짓말이 된다. 멤버에게 주는 조작은 [그룹 해제]뿐이다.
-// 묶기는 AI 제안 → 오너 확정만 (안전 비대칭 규칙, CONTEXT.md) — 자동 병합 경로는 없다.
+// 보여주면 눌러도 매칭에 아무 효과가 없어 거짓말이 된다. 멤버 조작은 [그룹 해제]와 [묶기](이동)다.
+// 묶기는 오너 조작만 (안전 비대칭 규칙, CONTEXT.md) — 자동 병합 경로는 없다. 경로는 두 가지:
+// AI 제안 수락, 또는 행의 [묶기] → 하단 시트에서 대표 검색·선택 (2026-07-18 — 제안이 있어야만
+// 묶을 수 있던 구멍을 메움. 오너가 주도권을 가진다는 취지가 구현에 빠져 있었다).
 // 목록 구성 판정은 data/dictionaryFilter (순수 모듈 + vitest), 3상태 조회·조작 실행기는 공용 훅.
 import { useCallback, useState } from 'react';
 import type { DictionaryEntry, DictionaryStatus, IngredientProposal } from '../data/monitorTypes';
@@ -16,6 +18,7 @@ import {
     PROPOSAL_STATUS,
     buildRows,
     countRows,
+    mergeCandidates,
     visibleRows,
 } from '../data/dictionaryFilter';
 import { isForbidden, monitorRepository } from '../data/monitorRepository';
@@ -23,6 +26,7 @@ import { useMutation } from './useMutation';
 import { useQuery } from './useQuery';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
 import RcpBadge from '../ui/RcpBadge';
+import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpInlineError from '../ui/RcpInlineError';
 import RcpLoadError from '../ui/RcpLoadError';
 
@@ -36,6 +40,11 @@ const AUDIT_TEXT = 'AI 점검';
 const AUDIT_BUSY_TEXT = '점검 중…';
 const SEARCH_PLACEHOLDER = '재료 이름 검색';
 const UNMERGE_TEXT = '그룹 해제';
+const MERGE_TEXT = '묶기';
+const MERGE_PICK_TEXT = '이 그룹으로';
+const MERGE_SEARCH_PLACEHOLDER = '대표 재료 검색';
+const NO_CANDIDATE_TEXT = '묶을 수 있는 대표가 없어요.';
+const mergeSheetTitle = (name: string) => `"${name}" 그룹 정하기`;
 const EMPTY_TEXT = '해당하는 재료가 없어요.';
 const NO_PROPOSAL_TEXT = '새로 분류할 만한 제안이 없어요.';
 const applyAllText = (n: number) => `제안 ${n}개 전체 적용`;
@@ -98,6 +107,9 @@ export default function DictionaryPage() {
     const [proposals, setProposals] = useState<IngredientProposal[] | null>(null);
     const [filter, setFilter] = useState<DictionaryFilter>('ATTENTION');
     const [search, setSearch] = useState('');
+    // 묶기 시트 — null 이 아니면 이 이름의 대표를 고르는 중 (2026-07-18 오너 직접 묶기)
+    const [mergeTarget, setMergeTarget] = useState<string | null>(null);
+    const [mergeSearch, setMergeSearch] = useState('');
 
     /** 이 이름의 제안은 역할이 끝났다 — 오너가 직접 정했으므로 제안 칩에서 바로 뺀다 */
     const dropProposal = (name: string) =>
@@ -110,12 +122,28 @@ export default function DictionaryPage() {
         await monitorRepository.classifyIngredient(name, status);
     });
 
-    /** matchKey === name 이면 그룹 해제 (같은 API) */
+    /** matchKey === name 이면 그룹 해제 (같은 API). 서버는 name 을 대표로 삼던 멤버도 함께
+        옮긴다(깊이 1 평탄화) — 낙관적 업데이트도 똑같이 따라간다 (해제 때 e.matchKey === name
+        조건은 이미 같은 값이라 무해). */
     const merge = (name: string, matchKey: string) => mutation.run(async () => {
-        setData((prev) => (prev ? prev.map((e) => (e.name === name ? { ...e, matchKey } : e)) : prev));
+        setData((prev) => (prev ? prev.map(
+            (e) => (e.name === name || e.matchKey === name ? { ...e, matchKey } : e)) : prev));
         dropProposal(name);
         await monitorRepository.mergeIngredient(name, matchKey);
     });
+
+    const openMerge = (name: string) => {
+        setMergeTarget(name);
+        setMergeSearch('');
+    };
+    const closeMerge = () => setMergeTarget(null);
+    /** 시트에서 대표 선택 — 닫고 즉시 저장 (버튼 탭 = 즉시 저장 원칙) */
+    const pickRepresentative = (representative: string) => {
+        if (mergeTarget === null) return;
+        const name = mergeTarget;
+        closeMerge();
+        void merge(name, representative);
+    };
 
     const runAudit = () => audit.run(async () => {
         setProposals(await monitorRepository.auditDictionary());
@@ -156,6 +184,8 @@ export default function DictionaryPage() {
 
     const rows = entries === null ? null : buildRows(entries, proposals ?? []);
     const visible = rows === null ? null : visibleRows(rows, filter, search);
+    const candidates = rows === null || mergeTarget === null
+        ? [] : mergeCandidates(rows, mergeTarget, mergeSearch);
     // 점검 전에는 "제안" 칩을 감춘다 — 항상 0인 칩은 자리만 차지한다
     const chips = FILTERS.filter((f) => f.key !== 'PROPOSED' || proposals !== null);
 
@@ -243,6 +273,14 @@ export default function DictionaryPage() {
                                             >
                                                 {UNMERGE_TEXT}
                                             </button>
+                                            {/* 다른 그룹으로 이동 — 해제 후 다시 묶는 2단계를 1탭으로 */}
+                                            <button
+                                                type="button"
+                                                className="rcp-dict-action"
+                                                onClick={() => openMerge(row.name)}
+                                            >
+                                                {MERGE_TEXT}
+                                            </button>
                                         </div>
                                     </>
                                 ) : (
@@ -274,12 +312,60 @@ export default function DictionaryPage() {
                                                     {label}
                                                 </button>
                                             ))}
+                                            {/* AI 제안 유무와 무관하게 항상 — 묶기의 주도권은 오너에게 있다 */}
+                                            <button
+                                                type="button"
+                                                className="rcp-dict-action"
+                                                onClick={() => openMerge(row.name)}
+                                            >
+                                                {MERGE_TEXT}
+                                            </button>
                                         </div>
                                     </>
                                 )}
                             </div>
                         ))}
                     </div>
+
+                    {/* 묶기 시트 — 대표 검색·선택. 후보 판정은 dictionaryFilter.mergeCandidates (순수 모듈) */}
+                    {mergeTarget !== null && (
+                        <RcpBottomSheet
+                            open
+                            title={mergeSheetTitle(mergeTarget)}
+                            onClose={closeMerge}
+                        >
+                            <input
+                                className="rcp-input rcp-dict-search"
+                                type="search"
+                                value={mergeSearch}
+                                placeholder={MERGE_SEARCH_PLACEHOLDER}
+                                aria-label={MERGE_SEARCH_PLACEHOLDER}
+                                onChange={(e) => setMergeSearch(e.target.value)}
+                            />
+                            <div className="rcp-dict-list">
+                                {candidates.map((candidate) => (
+                                    <div className="rcp-dict-row" key={candidate.name}>
+                                        <span className="rcp-dict-name">{candidate.name}</span>
+                                        <RcpBadge variant={STATUS_BADGE[candidate.status]}>
+                                            {STATUS_LABEL[candidate.status]}
+                                        </RcpBadge>
+                                        <div className="rcp-dict-actions">
+                                            <button
+                                                type="button"
+                                                className="rcp-dict-action"
+                                                onClick={() => pickRepresentative(candidate.name)}
+                                            >
+                                                {MERGE_PICK_TEXT}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {candidates.length === 0 && (
+                                    <p className="rcp-empty">{NO_CANDIDATE_TEXT}</p>
+                                )}
+                            </div>
+                        </RcpBottomSheet>
+                    )}
                 </>
             )}
         </main>

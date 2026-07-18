@@ -92,3 +92,17 @@ export function visibleRows(rows: DictionaryRow[], filter: DictionaryFilter, sea
 
 export const countRows = (rows: DictionaryRow[], filter: DictionaryFilter): number =>
     rows.reduce((n, row) => (matchesFilter(row, filter) ? n + 1 : n), 0);
+
+/**
+ * 묶기 시트의 대표 후보 (2026-07-18 — 오너가 AI 제안 없이도 직접 묶을 수 있게).
+ * 대표(안 묶인 행)만, 자기 자신 제외. 미판정 대표도 허용한다 — 대표를 먼저 확정해야만
+ * 묶을 수 있으면 순서 강제가 생기고, 멤버 성격은 대표를 나중에 확정하면 따라온다.
+ * 고르는 자리라 "손볼 것 우선" 정렬 대신 이름순.
+ */
+export function mergeCandidates(rows: DictionaryRow[], target: string, search: string): DictionaryRow[] {
+    const query = search.trim().toLowerCase();
+    return rows
+        .filter((row) => row.mergedInto === null && row.name !== target
+            && (query === '' || row.name.toLowerCase().includes(query)))
+        .sort((a, b) => a.name.localeCompare(b.name));
+}
