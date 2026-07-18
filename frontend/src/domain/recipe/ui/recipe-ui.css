@@ -766,10 +766,22 @@
 }
 .rcp-dict-head-text { min-width: 0; } /* 다국어 대비: 제목이 길어지면 버튼이 아니라 이쪽이 줄어든다 */
 .rcp-dict-audit { width: auto; }
+/* 칩 줄 = 한 줄 고정 + 가로 스크롤 레일 (2026-07-18 확정) — 칩이 넘치면 2줄로 꺾여 높이가
+   들쭉날쭉하던 것을 대체. 다 들어가면 스크롤이 안 생겨 겉보기 변화가 없다(안전망).
+   대기열 탭·사전 탭이 같이 쓴다. */
 .rcp-dict-filters {
-  display: flex; flex-wrap: wrap; gap: var(--rcp-space-1);
+  display: flex; flex-wrap: nowrap; gap: var(--rcp-space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.rcp-dict-filters::-webkit-scrollbar { display: none; }
+.rcp-dict-filters > .rcp-dict-action { flex-shrink: 0; } /* 레일에서 칩이 짓눌리지 않게 */
 .rcp-dict-search { width: 100%; margin-top: var(--rcp-space-2); }
+/* 대기열 탭 전용 간격 (2026-07-18) — .rcp-dict-search 는 위 여백만 있어 이 화면(검색창이
+   칩 줄보다 위)에서는 검색창·칩·목록이 서로 붙어 영역이 틀어져 보였다 */
+.rcp-monitor-search { width: 100%; margin-bottom: var(--rcp-space-2); }
+.rcp-monitor-filters { margin-bottom: var(--rcp-space-2); }
 .rcp-dict-apply-all { margin-top: var(--rcp-space-2); }
 .rcp-dict-list {
   display: flex; flex-direction: column; gap: var(--rcp-space-2); margin-top: var(--rcp-space-2);

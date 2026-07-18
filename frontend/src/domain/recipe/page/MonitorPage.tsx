@@ -263,7 +263,7 @@ export default function MonitorPage() {
                     {/* 탐색 3종 (2026-07-18): 검색은 제목·요리명·태그, 상태 칩은 전체 개수 겸 필터.
                         칩 스타일은 사전 화면과 동일(.rcp-dict-action — "고른 것 = 그린 실선" 한 가지 말) */}
                     <input
-                        className="rcp-input rcp-dict-search"
+                        className="rcp-input rcp-monitor-search"
                         type="search"
                         inputMode="search"
                         value={search}
@@ -271,18 +271,22 @@ export default function MonitorPage() {
                         aria-label={SEARCH_PLACEHOLDER}
                         onChange={(e) => setSearch(e.target.value)}
                     />
-                    <div className="rcp-dict-filters" role="group" aria-label="상태 필터">
-                        {STATUS_FILTERS.map((status) => (
-                            <button
-                                type="button"
-                                key={status}
-                                className={`rcp-dict-action ${statusFilter === status ? 'rcp-dict-action-on' : ''}`.trim()}
-                                aria-pressed={statusFilter === status}
-                                onClick={() => toggleStatus(status)}
-                            >
-                                {statusChipText(STATUS_LABEL[status], snapshot.statusCounts[status] ?? 0)}
-                            </button>
-                        ))}
+                    {/* 0개 상태 칩은 숨긴다 (2026-07-18 확정 — 눌러봤자 빈 목록이라 기능 손실 없음).
+                        단 지금 선택된 칩은 0이 돼도 남긴다 — 사라지면 필터를 해제할 방법이 없다 */}
+                    <div className="rcp-dict-filters rcp-monitor-filters" role="group" aria-label="상태 필터">
+                        {STATUS_FILTERS
+                            .filter((status) => (snapshot.statusCounts[status] ?? 0) > 0 || statusFilter === status)
+                            .map((status) => (
+                                <button
+                                    type="button"
+                                    key={status}
+                                    className={`rcp-dict-action ${statusFilter === status ? 'rcp-dict-action-on' : ''}`.trim()}
+                                    aria-pressed={statusFilter === status}
+                                    onClick={() => toggleStatus(status)}
+                                >
+                                    {statusChipText(STATUS_LABEL[status], snapshot.statusCounts[status] ?? 0)}
+                                </button>
+                            ))}
                     </div>
 
                     <section id="rcp-monitor-list" aria-label="전 사용자 분석 대기열">
