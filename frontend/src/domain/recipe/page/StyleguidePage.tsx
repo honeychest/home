@@ -7,6 +7,7 @@ import RcpButton from '../ui/RcpButton';
 import RcpChip from '../ui/RcpChip';
 import RcpBadge from '../ui/RcpBadge';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
+import RcpConfirm from '../ui/RcpConfirm';
 import RcpShelf from '../ui/RcpShelf';
 import RcpVideoRow from '../ui/RcpVideoRow';
 import RcpCoverflow from '../ui/RcpCoverflow';
@@ -45,6 +46,7 @@ function Label({ children }: { children: string }) {
 export default function StyleguidePage() {
     const [chipOn, setChipOn] = useState(true);
     const [sheetOpen, setSheetOpen] = useState(false);
+    const [confirmDemo, setConfirmDemo] = useState<'normal' | 'danger' | 'long' | null>(null);
 
     return (
         <main className="rcp-screen" id="rcp-styleguide-page">
@@ -209,6 +211,36 @@ export default function StyleguidePage() {
                 </p>
                 <RcpButton onClick={() => setSheetOpen(false)}>확인</RcpButton>
             </RcpBottomSheet>
+
+            <h2 className="rcp-section-label">확인 다이얼로그 — RcpConfirm (.rcp-confirm-card)</h2>
+            <Label>{'<RcpConfirm open message confirmLabel danger? onConfirm onCancel> — window.confirm 대체(2026-07-19 확정, 시스템 창 금지). 배경 탭 = 취소. 파괴적 동작(삭제류)은 danger 로 주 버튼을 빨간색으로. z-index 60 — 하단 시트(50) 안의 동작도 덮는다'}</Label>
+            <div style={{ display: 'flex', gap: 'var(--rcp-space-2)' }}>
+                <RcpButton variant="ghost" onClick={() => setConfirmDemo('normal')}>일반 확인</RcpButton>
+                <RcpButton variant="ghost" onClick={() => setConfirmDemo('danger')}>삭제 확인 (danger)</RcpButton>
+                <RcpButton variant="ghost" onClick={() => setConfirmDemo('long')}>긴 글자 스트레스</RcpButton>
+            </div>
+            <RcpConfirm
+                open={confirmDemo === 'normal'}
+                message={'"쭈유(참기름)" 재료가 이상한가요? 영상을 다시 살펴보게 신고할까요?'}
+                confirmLabel="신고"
+                onConfirm={() => setConfirmDemo(null)}
+                onCancel={() => setConfirmDemo(null)}
+            />
+            <RcpConfirm
+                open={confirmDemo === 'danger'}
+                message={'"영상 제목"을(를) 삭제할까요? 이 영상을 등록한 모든 사용자 목록에서 "삭제됨"으로 표시돼요.'}
+                confirmLabel="삭제"
+                danger
+                onConfirm={() => setConfirmDemo(null)}
+                onCancel={() => setConfirmDemo(null)}
+            />
+            <RcpConfirm
+                open={confirmDemo === 'long'}
+                message={'"Pfannkuchen mit außergewöhnlich langer Zutatenbezeichnung 아주아주아주아주 긴 재료 이름도 카드 안에서 줄바꿈되어야 합니다" 재료가 이상한가요? 영상을 다시 살펴보게 신고할까요?'}
+                confirmLabel="아주 긴 확인 버튼 라벨"
+                onConfirm={() => setConfirmDemo(null)}
+                onCancel={() => setConfirmDemo(null)}
+            />
 
             <h2 className="rcp-section-label">긴 글자 스트레스 테스트 (다국어 대비 — 여기가 깨지면 킷 결함)</h2>
             <p style={{ fontSize: 'var(--rcp-fs-sm)', color: 'var(--rcp-text-sub)' }}>

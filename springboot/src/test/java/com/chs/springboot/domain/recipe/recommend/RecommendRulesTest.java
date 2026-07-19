@@ -41,6 +41,38 @@ class RecommendRulesTest {
     }
 
     @Test
+    @DisplayName("구매 추천: 내 레시피 중 주재료 1개 부족만 모으고, 부족 이름은 대표로 정규화해 묶는다")
+    void shoppingSuggestionsGroupByRepresentative() {
+        var dict = new RecommendRules.Dictionary(
+                Map.of("계란 2개", "계란", "달걀", "계란"), SEASONINGS, BASICS);
+        var mine1 = RecommendRules.match(candidate("a", List.of("두부", "계란 2개")), Set.of("두부"), Set.of(), dict);
+        var mine2 = RecommendRules.match(candidate("b", List.of("김치", "달걀")), Set.of("김치"), Set.of(), dict);
+        var mine3 = RecommendRules.match(candidate("c", List.of("오이")), Set.of(), Set.of(), dict); // 1개 부족
+        var tooMany = RecommendRules.match(candidate("d", List.of("무", "파프리카")), Set.of(), Set.of(), dict);
+        var notMine = RecommendRules.match(candidate("x", List.of("양파")), Set.of(), Set.of(), dict);
+
+        var suggestions = RecommendRules.shoppingSuggestions(
+                List.of(mine1, mine2, mine3, tooMany, notMine), Set.of("a", "b", "c", "d"), dict);
+
+        // "계란 2개"·"달걀" 부족 두 레시피가 대표 "계란" 한 줄로 — 레시피 많은 순 정렬
+        assertEquals(2, suggestions.size());
+        assertEquals("계란", suggestions.get(0).name());
+        assertEquals(List.of("a-title", "b-title"), suggestions.get(0).recipeTitles());
+        assertEquals("오이", suggestions.get(1).name());
+    }
+
+    @Test
+    @DisplayName("구매 추천: 주재료 2개 이상 부족·남의 레시피·완전 가능은 대상이 아니다")
+    void shoppingSuggestionsExcludeOthers() {
+        var complete = RecommendRules.match(candidate("a", List.of("두부")), Set.of("두부"), Set.of(), DICT);
+        var tooMany = RecommendRules.match(candidate("b", List.of("무", "파")), Set.of(), Set.of(), DICT);
+        var notMine = RecommendRules.match(candidate("x", List.of("양파")), Set.of(), Set.of(), DICT);
+
+        assertTrue(RecommendRules.shoppingSuggestions(
+                List.of(complete, tooMany, notMine), Set.of("a", "b"), DICT).isEmpty());
+    }
+
+    @Test
     @DisplayName("재료·양념 다 있으면 완전 가능")
     void completeWhenNothingMissing() {
         var c = candidate("a", List.of("두부", "고추장"));

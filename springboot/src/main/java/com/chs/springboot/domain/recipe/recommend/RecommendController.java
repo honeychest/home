@@ -78,6 +78,29 @@ public class RecommendController {
                 toItems(sections.needsIngredients(), myVideoIds));
     }
 
+    /** 구매 추천 한 줄 — 냉장고 재료 추가 시트 하단용 (2026-07-19 확정) */
+    public record ShoppingItem(String name, List<String> recipes) {
+    }
+
+    /** "이거 하나만 사면 만들 수 있어요" — 내 보관함 레시피 중 주재료 1개 부족인 것의 집계.
+        임박 가중치는 정렬에 안 쓰므로 expiring 은 빈 집합으로 매칭한다. */
+    @GetMapping("/shopping")
+    public List<ShoppingItem> shopping(@GikkaUserId long userId) {
+        var fridgeNames = fridge.list(userId).stream()
+                .map(FridgeItemResponse::name).collect(Collectors.toSet());
+        Set<String> myVideoIds = new HashSet<>(registrations.videoIdsForUser(userId));
+        RecommendCandidateCache.Snapshot snapshot = cache.get();
+        var dict = snapshot.dictionary();
+        Set<String> fridgeKeys = RecommendRules.keysOf(fridgeNames, dict);
+
+        List<RecommendRules.Match> matches = snapshot.candidates().stream()
+                .map(candidate -> RecommendRules.match(candidate, fridgeKeys, Set.of(), dict))
+                .toList();
+        return RecommendRules.shoppingSuggestions(matches, myVideoIds, dict).stream()
+                .map(s -> new ShoppingItem(s.name(), s.recipeTitles()))
+                .toList();
+    }
+
     // recipe_json 파싱(toCandidate)은 RecommendCandidateCache 로 이관 (2026-07-18 — 캐시가
     // 파싱 결과를 들고 있어야 요청마다 재파싱이 없어진다)
 

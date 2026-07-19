@@ -23,6 +23,7 @@ import type { RcpBadgeVariant } from '../ui/RcpBadge';
 import RcpBadge from '../ui/RcpBadge';
 import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
+import RcpConfirm from '../ui/RcpConfirm';
 import RcpFab from '../ui/RcpFab';
 import RcpInlineError from '../ui/RcpInlineError';
 import RcpLoadError from '../ui/RcpLoadError';
@@ -206,12 +207,17 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
             .then((names) => setReportedNames(new Set(names)))
             .catch(() => undefined);
     }, [canReport, reportVideoId]);
-    const handleReport = (videoId: string, name: string) => {
-        if (!window.confirm(reportConfirmText(name))) return;
+    // 확인은 킷 다이얼로그(RcpConfirm)로 — 시스템 창 금지 (2026-07-19 확정)
+    const [confirmReport, setConfirmReport] = useState<{ videoId: string; name: string } | null>(null);
+    const handleReport = (videoId: string, name: string) => setConfirmReport({ videoId, name });
+    const submitReport = () => {
+        const target = confirmReport;
+        if (target === null) return;
+        setConfirmReport(null);
         void reportMutation.run(async () => {
-            await reportRepository.report(videoId, name);
+            await reportRepository.report(target.videoId, target.name);
             // 'already' 도 접수돼 있는 상태라는 뜻 — 같은 표시(신고됨)로 수렴
-            setReportedNames((prev) => new Set(prev).add(name));
+            setReportedNames((prev) => new Set(prev).add(target.name));
         });
     };
 
@@ -642,6 +648,15 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
                     </>
                 )}
             </RcpBottomSheet>
+
+            {/* 재료 신고 확인 — 결과 시트(z 50) 위에 뜬다 (RcpConfirm z 60) */}
+            <RcpConfirm
+                open={confirmReport !== null}
+                message={confirmReport !== null ? reportConfirmText(confirmReport.name) : ''}
+                confirmLabel="신고"
+                onConfirm={submitReport}
+                onCancel={() => setConfirmReport(null)}
+            />
         </main>
     );
 }

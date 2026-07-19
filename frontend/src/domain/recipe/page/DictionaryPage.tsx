@@ -34,6 +34,7 @@ import { useQuery } from './useQuery';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
 import RcpBadge from '../ui/RcpBadge';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
+import RcpConfirm from '../ui/RcpConfirm';
 import RcpInlineError from '../ui/RcpInlineError';
 import RcpLoadError from '../ui/RcpLoadError';
 
@@ -201,10 +202,12 @@ export default function DictionaryPage() {
 
     // 전체 적용 — 제안이 80건대라 한 건씩 누르면 실질적으로 못 쓴다 (2026-07-17 실측).
     // 한 번에 여러 건을 바꾸는 유일한 경로라 여기에만 확인창을 둔다 (2026-07-17 확정).
+    // 확인은 킷 다이얼로그(RcpConfirm)로 — 시스템 창 금지 (2026-07-19 확정).
     // 두 종류(분류·묶기)를 각자의 API 로 보낸다 — 계약이 다르다(하나는 status, 하나는 대표).
+    const [confirmApplyAll, setConfirmApplyAll] = useState(false);
     const applyAll = () => {
         if (!proposals || proposals.length === 0) return;
-        if (!window.confirm(applyAllConfirmText(proposals.length))) return;
+        setConfirmApplyAll(false);
         void mutation.run(async () => {
             const tiers = proposals.filter((p) => p.suggestedTier !== null);
             const merges = proposals.filter((p) => p.mergeInto !== null);
@@ -306,12 +309,20 @@ export default function DictionaryPage() {
                         <button
                             type="button"
                             className="rcp-btn rcp-btn-full rcp-dict-apply-all"
-                            onClick={applyAll}
+                            onClick={() => setConfirmApplyAll(true)}
                             disabled={mutation.busy}
                         >
                             {applyAllText(proposals.length)}
                         </button>
                     )}
+
+                    <RcpConfirm
+                        open={confirmApplyAll}
+                        message={applyAllConfirmText(proposals?.length ?? 0)}
+                        confirmLabel="전체 적용"
+                        onConfirm={applyAll}
+                        onCancel={() => setConfirmApplyAll(false)}
+                    />
 
                     <div className="rcp-dict-list">
                         {visible.length === 0 && (

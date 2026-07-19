@@ -87,6 +87,17 @@ public class IngredientDictionaryRepository {
         return changed;
     }
 
+    /** 냉장고 자동완성용 대표 이름 목록 (2026-07-19, 이름순 — 로그인 사용자 공용).
+        멤버(변형·오타)는 제외 — "묶여진 단어 기준" 확정. SKIPPED(보류=재료 아님/못 정함) 대표도
+        제외한다(튀김 반죽을 추천 검색어로 내밀면 안 됨). */
+    public List<String> representativeNames() {
+        return jdbc.sql("""
+                        SELECT name FROM ingredient_dictionary
+                        WHERE name = match_key AND status <> 'SKIPPED' ORDER BY name
+                        """)
+                .query(String.class).list();
+    }
+
     /** 오너 사전 관리 화면용 전체 목록 (이름순). */
     public List<Entry> all() {
         return jdbc.sql("SELECT name, match_key, status FROM ingredient_dictionary ORDER BY name")

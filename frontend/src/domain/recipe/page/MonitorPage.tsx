@@ -23,6 +23,7 @@ import type { RcpBadgeVariant } from '../ui/RcpBadge';
 import RcpBadge from '../ui/RcpBadge';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpButton from '../ui/RcpButton';
+import RcpConfirm from '../ui/RcpConfirm';
 import RcpInlineError from '../ui/RcpInlineError';
 import RcpLoadError from '../ui/RcpLoadError';
 
@@ -205,10 +206,15 @@ export default function MonitorPage() {
         await reload();
     });
 
-    const handleRemove = (item: MonitorItem) => {
-        if (!window.confirm(REMOVE_CONFIRM_TEXT(item.title ?? item.url))) return;
+    // 확인은 킷 다이얼로그(RcpConfirm)로 — 시스템 창 금지 (2026-07-19 확정)
+    const [confirmRemove, setConfirmRemove] = useState<MonitorItem | null>(null);
+    const handleRemove = (item: MonitorItem) => setConfirmRemove(item);
+    const submitRemove = () => {
+        const target = confirmRemove;
+        if (target === null) return;
+        setConfirmRemove(null);
         void mutation.run(async () => {
-            await monitorRepository.remove(item.videoId);
+            await monitorRepository.remove(target.videoId);
             setSelected(null);
             await reload();
         });
@@ -415,6 +421,16 @@ export default function MonitorPage() {
                     </>
                 )}
             </RcpBottomSheet>
+
+            {/* 영상 삭제 확인 — 파괴적 동작이라 danger, 시트(z 50) 위에 뜬다 (RcpConfirm z 60) */}
+            <RcpConfirm
+                open={confirmRemove !== null}
+                message={confirmRemove !== null ? REMOVE_CONFIRM_TEXT(confirmRemove.title ?? confirmRemove.url) : ''}
+                confirmLabel="삭제"
+                danger
+                onConfirm={submitRemove}
+                onCancel={() => setConfirmRemove(null)}
+            />
         </main>
     );
 }

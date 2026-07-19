@@ -21,6 +21,9 @@ export interface FridgeRepository {
     frequentIngredients(limit: number): Promise<string[]>;
     /** 자주 사는 재료 목록에서 제거 (편집 모드). 냉장고 안의 재료에는 영향 없음 */
     removeFrequentIngredient(name: string): Promise<void>;
+    /** 재료 추가 자동완성용 사전 대표 이름 목록 (2026-07-19 — 오탈자 예방. 검증된 표기로 등록 유도).
+        API 는 registration 도메인의 사전이지만 쓰는 화면이 냉장고라 이 저장소가 나른다 */
+    suggestIngredientNames(): Promise<string[]>;
 }
 
 const BASE = '/api/recipe/fridge';
@@ -53,6 +56,10 @@ export function createApiFridgeRepository(): FridgeRepository {
 
         removeFrequentIngredient(name) {
             return request<void>(`${BASE}/frequent-ingredients/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        },
+
+        suggestIngredientNames() {
+            return request<string[]>('/api/recipe/registrations/dictionary/names');
         },
     };
 }

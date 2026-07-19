@@ -24,6 +24,13 @@ export interface RecommendItem {
     inLibrary: boolean;
 }
 
+/** 구매 추천 한 줄 (2026-07-19 확정 — 냉장고 재료 추가 시트 하단).
+    name = 사전 대표 이름(장보기 이름), recipes = 이거 하나 사면 완성되는 내 레시피의 요리 이름들 */
+export interface ShoppingSuggestion {
+    name: string;
+    recipes: string[];
+}
+
 /** 3단계 — 완전 가능 / 양념만 부족 / 재료 부족(1~3개, 부족 적은 순). 각 섹션 최대 5개 */
 export interface RecommendSnapshot {
     complete: RecommendItem[];

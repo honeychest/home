@@ -311,6 +311,14 @@ public class RegistrationController {
         return dictionary.all();
     }
 
+    /** 냉장고 재료 추가 자동완성용 대표 이름 목록 (2026-07-19 확정) — 오너 아님, 로그인 사용자
+        공용(사용자 오탈자 예방이 목적이라 모두에게 열려야 의미가 있음). 이름 목록만 노출 —
+        status·그룹 등 관리 정보는 위 오너 전용 계약에만 있다. */
+    @GetMapping("/dictionary/names")
+    public List<String> dictionaryNames() {
+        return dictionary.representativeNames();
+    }
+
     /** 자동 반영 사후 감사용 (2026-07-18) — 파이프라인이 사전을 스스로 바꾼 최근 내역.
         개수 상한은 이 상수 하나가 원본 (사후 감사는 "최근 것 훑기"라 페이징 불필요). */
     private static final int CHANGE_LOG_LIMIT = 50;

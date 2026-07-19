@@ -9,6 +9,8 @@
   직접 catch 허용 — 모범: `ShareTargetPage.tsx` (결함 아님, 고치지 말 것).
 - 공용 훅·컴포넌트가 다른 도메인에서 필요하면 import 하지 말고 그 도메인 안으로
   복사해 소유한다 (도메인 격리 — springboot 의 recipe 격리 규칙과 동일 사상).
+- 확인창: `src/domain/recipe/ui/RcpConfirm.tsx` — `window.confirm`(시스템 창) 금지(2026-07-19
+  확정, 디자인·어투 밖). 확인이 필요한 동작은 이 다이얼로그로. 파괴적 동작(삭제류)은 `danger`.
 - 실패 문구 표시 줄: `src/domain/recipe/ui/RcpInlineError.tsx` (조작 실패 = useMutation.error).
 - 조회 실패 + 다시 시도 블록: `src/domain/recipe/ui/RcpLoadError.tsx` (useQuery 의 error·reload 를
   그대로 전달 — RcpInlineError 의 짝). 화면 안에서 `.rcp-shell-status` 를 쓰지 말 것 —

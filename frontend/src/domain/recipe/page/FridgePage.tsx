@@ -6,7 +6,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import type { FridgeItem } from '../data/fridgeTypes';
+import type { ShoppingSuggestion } from '../data/recommendTypes';
 import { fridgeRepository } from '../data/fridgeRepository';
+import { recommendRepository } from '../data/recommendRepository';
 import { OLD_THRESHOLD_DAYS, classifyShelves, daysSince, formatDate, shiftDate } from '../data/fridgeShelves';
 import { useMutation } from './useMutation';
 import { useQuery } from './useQuery';
@@ -18,6 +20,13 @@ import RcpLoadError from '../ui/RcpLoadError';
 import RcpShelf from '../ui/RcpShelf';
 
 const FREQUENT_LIMIT = 12;
+// 추천 검색어(사전 대표 이름 자동완성)·구매 추천 표시 상한 (2026-07-19 확정)
+const SUGGEST_LIMIT = 6;
+const SHOPPING_LIMIT = 5;
+const SHOPPING_LABEL = '이거 하나만 사면 만들 수 있어요';
+// 문구/데이터 분리: "요리이름" 또는 "요리이름 외 N개"
+const shoppingRecipesText = (recipes: string[]) =>
+    recipes.length <= 1 ? (recipes[0] ?? '') : `${recipes[0]} 외 ${recipes.length - 1}개`;
 
 // 문구/데이터 분리 규칙(PLAYBOOK 품질 기본선 7): 개수가 바뀌어도 문구가 따라오도록 템플릿 한 곳에
 const frequentSectionLabel = (limit: number) => `자주 사는 재료 (상위 ${limit}개 표시)`;
@@ -92,6 +101,23 @@ export default function FridgePage() {
         }
         await reloadItems();
     });
+
+    // 추천 검색어(사전 대표 이름) — 오탈자 예방 자동완성 (2026-07-19 확정). 시트를 처음 열 때
+    // 1회 로드(사전은 300행 수준 — 클라이언트 필터로 충분), 실패는 조용히(보조 기능 — 자유 입력은 그대로)
+    const [dictNames, setDictNames] = useState<string[] | null>(null);
+    // 구매 추천 — 내 레시피 중 주재료 1개 부족인 것의 집계. 재료를 넣을 때마다 달라지므로
+    // 시트가 열려 있는 동안 냉장고 목록(items)이 바뀌면 다시 조회한다
+    const [shopping, setShopping] = useState<ShoppingSuggestion[]>([]);
+    useEffect(() => {
+        if (!addOpen || dictNames !== null) return;
+        fridgeRepository.suggestIngredientNames().then(setDictNames).catch(() => undefined);
+    }, [addOpen, dictNames]);
+    useEffect(() => {
+        if (!addOpen) return;
+        recommendRepository.shopping()
+            .then((list) => setShopping(list.slice(0, SHOPPING_LIMIT)))
+            .catch(() => setShopping([]));
+    }, [addOpen, items]);
 
     const openAddSheet = () => {
         setJustAdded([]);
@@ -263,6 +289,46 @@ export default function FridgePage() {
                     />
                     <RcpButton type="submit" disabled={!freeInput.trim()}>추가</RcpButton>
                 </form>
+
+                {/* 추천 검색어 — 사전 대표 이름 중 입력값 포함 매칭 (2026-07-19 확정, 오탈자 예방).
+                    탭 = 그 표기로 즉시 등록. 이미 냉장고에 있는 이름은 안 내민다 */}
+                {(() => {
+                    const term = freeInput.trim();
+                    const suggestions = dictNames === null || term === '' ? []
+                        : dictNames.filter((n) => n.includes(term) && !ownedNames.has(n)).slice(0, SUGGEST_LIMIT);
+                    if (suggestions.length === 0) return null;
+                    return (
+                        <div className="rcp-chip-group rcp-fridge-suggest" id="rcp-fridge-suggest">
+                            {suggestions.map((name) => (
+                                <button
+                                    key={name}
+                                    type="button"
+                                    className="rcp-chip rcp-chip-off"
+                                    onClick={() => void handleAdd(name)}
+                                >
+                                    {name}
+                                </button>
+                            ))}
+                        </div>
+                    );
+                })()}
+
+                {/* 구매 추천 — 이거 하나만 사면 완성되는 내 레시피 (2026-07-19 확정, 표시 전용) */}
+                {shopping.length > 0 && (
+                    <>
+                        <h3 className="rcp-section-label">{SHOPPING_LABEL}</h3>
+                        <div id="rcp-fridge-shopping">
+                            {shopping.map((s) => (
+                                <p className="rcp-fridge-shopping-row" key={s.name}>
+                                    <span className="rcp-sticker">{s.name}</span>
+                                    <span className="rcp-fridge-shopping-recipes">
+                                        {shoppingRecipesText(s.recipes)}
+                                    </span>
+                                </p>
+                            ))}
+                        </div>
+                    </>
+                )}
             </RcpBottomSheet>
 
             <RcpBottomSheet

@@ -8,6 +8,8 @@ package com.chs.springboot.domain.recipe.recommend;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -151,6 +153,39 @@ final class RecommendRules {
             }
         }
         return new Match(candidate, missingMain, missingSeasoning, expiringUsed.size());
+    }
+
+    /* ── 2-1. 구매 추천 (2026-07-19 확정 — 냉장고 재료 추가 시트 하단) ── */
+
+    /** "이거 하나만 사면 만들 수 있어요" 한 줄 — name 은 대표(match_key) 이름, recipeTitles 는
+        그 재료 하나로 완성되는 내 레시피의 요리 이름들 */
+    record ShoppingSuggestion(String name, List<String> recipeTitles) {
+    }
+
+    /**
+     * 구매 추천 집계: **내 보관함** 레시피 중 주재료가 정확히 1개만 부족한 것을 모은다.
+     * 부족 이름은 대표(match_key)로 정규화해 묶는다 — "계란 2개"와 "달걀"이 각각 부족한 두
+     * 레시피는 같은 "계란" 한 줄이 된다(부족분 원문 보존 원칙은 레시피 카드 얘기고, 여기는
+     * "무엇을 사야 하나"라 장보기 이름[대표]이 맞다). 양념 부족은 안 본다 — 양념만 부족은
+     * 이 앱에서 "만들 수 있음"급 취급(별도 섹션)이라 기준을 주재료로 통일.
+     * 정렬: 완성되는 레시피 많은 순 → 이름순(결정적).
+     */
+    static List<ShoppingSuggestion> shoppingSuggestions(List<Match> matches, Set<String> myVideoIds,
+                                                        Dictionary dictionary) {
+        Map<String, LinkedHashSet<String>> titlesByKey = new LinkedHashMap<>();
+        for (Match match : matches) {
+            if (!myVideoIds.contains(match.candidate().videoId()) || match.missingMain().size() != 1) {
+                continue;
+            }
+            String key = dictionary.keyOf(match.missingMain().get(0).trim());
+            titlesByKey.computeIfAbsent(key, k -> new LinkedHashSet<>())
+                    .add(match.candidate().title() == null ? "" : match.candidate().title());
+        }
+        return titlesByKey.entrySet().stream()
+                .map(e -> new ShoppingSuggestion(e.getKey(), List.copyOf(e.getValue())))
+                .sorted(Comparator.comparingInt((ShoppingSuggestion s) -> s.recipeTitles().size()).reversed()
+                        .thenComparing(ShoppingSuggestion::name))
+                .toList();
     }
 
     /* ── 3. 3단계 판정·정렬 (2026-07-14 4차 확정 · 2026-07-18 정렬 개편 — 사용자 확정) ──
