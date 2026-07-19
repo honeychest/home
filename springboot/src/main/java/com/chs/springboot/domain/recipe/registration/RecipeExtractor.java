@@ -48,4 +48,15 @@ public interface RecipeExtractor {
         분석 입력에 안 들어가 STT 오인식("오징어짬뽕"→"진라면", TqtR1cSDnm8 실사례)을 못 잡았다).
         description: 유튜브 설명란(본문). 재료가 원문으로 적힌 경우가 많아 최우선 활용 (2026-07-13 확정) */
     ExtractionResult extract(String videoUrl, String title, String description);
+
+    /**
+     * 신고 재점검용 (2026-07-18 확정 — CONTEXT.md "재료 신고" 절): reportedIngredient 는 사용자가
+     * "이상하다"고 신고한 재료 이름(없으면 null = 일반 분석). 기본 구현은 힌트를 무시한다 —
+     * 라우팅은 HybridRecipeExtractor 가 담당(힌트가 있으면 로컬을 건너뛰고 Gemini 직행 = 전력 분석)
+     * 하므로 LocalRecipeExtractor 는 힌트를 받을 일이 없다.
+     */
+    default ExtractionResult extract(String videoUrl, String title, String description,
+                                     String reportedIngredient) {
+        return extract(videoUrl, title, description);
+    }
 }

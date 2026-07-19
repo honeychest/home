@@ -30,6 +30,18 @@ public class HybridRecipeExtractor implements RecipeExtractor {
         this.gemini = gemini;
     }
 
+    /** 신고 재점검 (2026-07-18): 힌트가 있으면 로컬 라우팅을 건너뛰고 Gemini 직행 — "가진 역량
+        총동원" 전력 분석(사용자 확정). 저빈도 경로라 Gemini 한도 부담 없음. 일시적 실패는 그대로
+        전파돼 워커의 백오프 재시도를 탄다(힌트는 video.report_ingredient 에 남아 재시도에도 유지). */
+    @Override
+    public ExtractionResult extract(String videoUrl, String title, String description,
+                                    String reportedIngredient) {
+        if (reportedIngredient == null || reportedIngredient.isBlank()) {
+            return extract(videoUrl, title, description);
+        }
+        return gemini.extract(videoUrl, title, description, reportedIngredient);
+    }
+
     @Override
     public ExtractionResult extract(String videoUrl, String title, String description) {
         Integer transcriptChars = null; // 로컬이 아예 안 돌면 null 그대로 (2026-07-14, pattern-raw-signal)

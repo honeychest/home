@@ -73,11 +73,26 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
         this.notifier = notifier;
     }
 
+    /** 신고 재점검 파트 (2026-07-18) — 의심 항목을 지목해 교차 검증을 유도하되, "고치라니까
+        그럴듯한 걸 지어내는" 할루시네이션을 막기 위해 "확실하지 않으면 기존 유지"를 명시한다. */
+    static String reportHintText(String ingredientName) {
+        return "재점검 요청: 사용자가 이전 분석의 재료 \"" + ingredientName + "\" 이(가) 이상하다고 "
+                + "신고했습니다. 제목·설명란·화면·음성을 서로 교차 검증해 이 재료를 중점적으로 다시 "
+                + "확인하세요 (음성은 비슷한 발음의 다른 상품명으로 잘못 인식됐을 수 있습니다). "
+                + "정말 틀렸다는 확신이 들 때만 바로잡고, 확실하지 않으면 기존 표기를 그대로 유지하세요.";
+    }
+
     @Override
     public ExtractionResult extract(String videoUrl, String title, String description) {
+        return extract(videoUrl, title, description, null);
+    }
+
+    @Override
+    public ExtractionResult extract(String videoUrl, String title, String description,
+                                    String reportedIngredient) {
         String model = failedOver ? properties.getGeminiFallbackModel() : properties.getGeminiModel();
         try {
-            return callGemini(model, videoUrl, title, description);
+            return callGemini(model, videoUrl, title, description, reportedIngredient);
         } catch (HttpClientErrorException.NotFound e) {
             if (failedOver) {
                 throw e; // 폴백 모델까지 404 — 일반 실패 경로(3회 후 FAILED)로
@@ -87,11 +102,12 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
             log.warn("[gikka] Gemini 모델 {} 404 — {} 로 페일오버", model, fallback);
             notifier.notify("[기까] Gemini 모델 '" + model + "' 이 404(폐쇄 추정)입니다. '"
                     + fallback + "' 로 자동 전환해 분석을 계속합니다. 설정 모델 교체가 필요합니다.");
-            return callGemini(fallback, videoUrl, title, description);
+            return callGemini(fallback, videoUrl, title, description, reportedIngredient);
         }
     }
 
-    private ExtractionResult callGemini(String model, String videoUrl, String title, String description) {
+    private ExtractionResult callGemini(String model, String videoUrl, String title, String description,
+                                        String reportedIngredient) {
         List<Map<String, Object>> parts = new ArrayList<>();
         parts.add(Map.of("fileData", Map.of("fileUri", videoUrl)));
         parts.add(Map.of("text", PROMPT));
@@ -102,6 +118,10 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
         // 설명란(본문) 원문 — 재료가 여기 적힌 경우가 많아 최우선 활용 (2026-07-13 확정)
         if (description != null && !description.isBlank()) {
             parts.add(Map.of("text", "영상 설명란 원문:\n" + description));
+        }
+        // 신고 재점검 힌트 (2026-07-18) — 신고된 재료를 지목해 집중 교차 검증
+        if (reportedIngredient != null && !reportedIngredient.isBlank()) {
+            parts.add(Map.of("text", reportHintText(reportedIngredient)));
         }
         Map<String, Object> generationConfig = Map.of(
                 "responseMimeType", "application/json",

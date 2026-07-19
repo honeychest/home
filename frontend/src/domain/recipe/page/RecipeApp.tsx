@@ -132,7 +132,7 @@ export default function RecipeApp() {
                 />
                 <Route path="recommend" element={<RecommendPage />} />
                 <Route path="fridge" element={<FridgePage />} />
-                <Route path="recipes" element={<RecipesPage />} />
+                <Route path="recipes" element={<RecipesPage canReport={auth.canViewMonitor} />} />
                 <Route path="share" element={<ShareTargetPage />} />
 
                 <Route path="styleguide" element={<StyleguidePage />} />

@@ -136,14 +136,16 @@ public class IngredientDictionaryRepository {
     }
 
     /**
-     * 수량·단위만 다른 변형의 자동 병합 (2026-07-18 확정 — RegistrationWorker 파이프라인 전용).
-     * 오너 판정을 절대 덮지 않도록 아직 판정 전(PENDING)·미병합(match_key=자기 이름)인 행만,
+     * 파이프라인 자동 병합 (2026-07-18 확정 — 수량·단위 변형 규칙과 AI 자동 판정이 공용).
+     * 오너·과거 판정을 절대 덮지 않도록 아직 판정 전(PENDING)·미병합(match_key=자기 이름)인 행만,
      * 대표가 사전에 실재할 때만 묶는다. 대표가 이미 남의 멤버면 그 대표의 대표를 따라간다
      * (깊이 1 평탄화 — merge 와 같은 규칙을 SQL 조인 한 번으로).
+     *
+     * @return 실제로 묶였으면 최종 match_key(평탄화 반영 — 변경 로그가 정확한 값을 남기게), 아니면 empty
      */
-    public boolean autoMergeVariant(String name, String representative) {
+    public java.util.Optional<String> autoMergeVariant(String name, String representative) {
         if (name.equals(representative)) {
-            return false;
+            return java.util.Optional.empty();
         }
         return jdbc.sql("""
                         UPDATE ingredient_dictionary d
@@ -151,8 +153,25 @@ public class IngredientDictionaryRepository {
                         FROM ingredient_dictionary rep
                         WHERE d.name = :name AND rep.name = :rep
                           AND d.status = 'PENDING' AND d.match_key = d.name
+                        RETURNING d.match_key
                         """)
-                .param("name", name).param("rep", representative).update() > 0;
+                .param("name", name).param("rep", representative)
+                .query(String.class).optional();
+    }
+
+    /**
+     * 파이프라인 자동 분류 (2026-07-18) — 아직 판정 전(PENDING)인 것만 status 를 정한다.
+     * confirmSeasoningIfPending 과 같은 "사람 판정 우선" 가드의 일반형 — AI 자동 판정이
+     * SEASONING/BASIC 을 적용할 때 쓴다 (MAIN 은 PENDING 과 동작이 같아 적용할 이유가 없음).
+     * @return 실제로 바뀌었는가 (변경 로그 기록 여부 판정용)
+     */
+    public boolean updateStatusIfPending(String name, String status) {
+        return jdbc.sql("""
+                        UPDATE ingredient_dictionary
+                        SET status = :status, updated_at = now()
+                        WHERE name = :name AND status = 'PENDING'
+                        """)
+                .param("status", status).param("name", name).update() > 0;
     }
 
     /**

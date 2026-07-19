@@ -7,7 +7,9 @@
 //   - 버튼 탭 = 즉시 저장 (미저장 상태를 안 만든다). 일괄 경로인 [제안 전체 적용]에만 확인창.
 // 그룹(슬라이스2): 멤버("계란 2개")는 성격을 대표("계란")에서 물려받으므로 분류 버튼을 안 보여준다 —
 // 보여주면 눌러도 매칭에 아무 효과가 없어 거짓말이 된다.
-// 묶기는 오너 조작만 (안전 비대칭 규칙, CONTEXT.md) — 자동 병합 경로는 없다. 경로는 두 가지:
+// 사전 변경 경로 (2026-07-18 자동화): 분석 파이프라인이 신규 PENDING 을 스스로 판정·병합하고
+// (수량·단위 규칙 + AI 판정, PENDING 만 — 오너 판정 불가침), 오너는 [자동 반영] 시트에서 그
+// 내역을 사후 감사한다. 화면의 수동 경로(아래)는 교정·보완용으로 그대로 유지. 수동 경로는 두 가지:
 // AI 제안 수락, 또는 행의 [묶기] → "그룹 관리" 하단 시트 (2026-07-18 — 제안이 있어야만 묶을 수
 // 있던 구멍을 메움). 시트는 그룹의 상세 컨텍스트다: 멤버 목록에서 [빼기]하면 그 자리에
 // [다시 묶기]로 남아 실수 복구가 즉시 된다 — 목록 위에서 해제하면 필터 조건에서 빠져 행이
@@ -15,7 +17,9 @@
 // 유지하는 이유가 이것이다(라이브로만 그리면 빼는 순간 행이 또 사라진다).
 // 목록 구성 판정은 data/dictionaryFilter (순수 모듈 + vitest), 3상태 조회·조작 실행기는 공용 훅.
 import { useCallback, useState } from 'react';
-import type { DictionaryEntry, DictionaryStatus, IngredientProposal } from '../data/monitorTypes';
+import type {
+    DictionaryChange, DictionaryEntry, DictionaryStatus, IngredientProposal,
+} from '../data/monitorTypes';
 import type { DictionaryFilter, DictionaryRow } from '../data/dictionaryFilter';
 import {
     PROPOSAL_STATUS,
@@ -41,6 +45,25 @@ const ACTION_FAIL_TEXT = '반영하지 못했어요 — 다시 시도해 주세�
 const AUDIT_FAIL_TEXT = 'AI 점검을 하지 못했어요 — 잠시 후 다시 시도해 주세요';
 const AUDIT_TEXT = 'AI 점검';
 const AUDIT_BUSY_TEXT = '점검 중…';
+// 자동 반영 내역 (2026-07-18) — 파이프라인이 사전을 스스로 바꾼 기록의 사후 감사 시트
+const CHANGES_TEXT = '자동 반영';
+const CHANGES_SHEET_TITLE = '자동 반영 내역';
+const CHANGES_FAIL_TEXT = '자동 반영 내역을 불러오지 못했어요 — 다시 시도해 주세요';
+const CHANGES_LOADING_TEXT = '불러오는 중…';
+const NO_CHANGES_TEXT = '아직 자동으로 반영된 내역이 없어요.';
+const CHANGE_SOURCE_LABEL: Record<DictionaryChange['source'], string> = {
+    AUTO_VARIANT: '수량·단위 규칙',
+    AUTO_AUDIT: 'AI 판정',
+};
+/** 내역 한 줄의 변경 설명 — 병합은 "→ 대표", 분류는 status 라벨로 (문구/데이터 분리) */
+const changeDetailText = (change: DictionaryChange): string =>
+    change.action === 'MERGE'
+        ? mergedText(change.newValue)
+        : (STATUS_LABEL as Record<string, string>)[change.newValue] ?? change.newValue;
+const changeDateText = (iso: string): string => {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+};
 const SEARCH_PLACEHOLDER = '재료 이름 검색';
 const MERGE_TEXT = '묶기';
 const MERGE_PICK_TEXT = '이 그룹으로';
@@ -110,6 +133,17 @@ export default function DictionaryPage() {
     const forbidden = query.failure !== null && isForbidden(query.failure);
     const mutation = useMutation(() => ACTION_FAIL_TEXT, reload);
     const audit = useMutation(() => AUDIT_FAIL_TEXT);
+    // 자동 반영 내역 시트 — 열 때마다 새로 조회 (사후 감사라 항상 최신이어야 의미가 있다)
+    const changesLoad = useMutation(() => CHANGES_FAIL_TEXT);
+    const [changes, setChanges] = useState<DictionaryChange[] | null>(null);
+    const [changesOpen, setChangesOpen] = useState(false);
+    const openChanges = () => {
+        setChangesOpen(true);
+        setChanges(null);
+        void changesLoad.run(async () => {
+            setChanges(await monitorRepository.listDictionaryChanges());
+        });
+    };
     // null = 아직 AI 점검을 안 돌림 (그동안은 "제안" 칩 자체가 없다)
     const [proposals, setProposals] = useState<IngredientProposal[] | null>(null);
     const [filter, setFilter] = useState<DictionaryFilter>('ATTENTION');
@@ -216,17 +250,27 @@ export default function DictionaryPage() {
                         양념은 "양념만 부족"으로 살아남고, 묶은 재료는 대표가 있으면 있는 걸로 쳐요 (오너 전용)
                     </p>
                 </div>
-                {/* 동기 LLM 호출이라 10초 이상 걸린다 — 표시가 없으면 눌러도 아무 반응이 없어
-                    고장으로 보인다 (2026-07-17). busy 동안 disabled 는 useMutation 의 연타 방지를
-                    화면에도 드러내는 것 (막고 있다는 걸 보여준다) */}
-                <button
-                    type="button"
-                    className="rcp-btn rcp-btn-ghost rcp-dict-audit"
-                    onClick={runAudit}
-                    disabled={audit.busy}
-                >
-                    {audit.busy ? AUDIT_BUSY_TEXT : AUDIT_TEXT}
-                </button>
+                <div className="rcp-dict-head-actions">
+                    {/* 파이프라인이 스스로 바꾼 내역의 사후 감사 (2026-07-18) */}
+                    <button
+                        type="button"
+                        className="rcp-btn rcp-btn-ghost rcp-dict-audit"
+                        onClick={openChanges}
+                    >
+                        {CHANGES_TEXT}
+                    </button>
+                    {/* 동기 LLM 호출이라 10초 이상 걸린다 — 표시가 없으면 눌러도 아무 반응이 없어
+                        고장으로 보인다 (2026-07-17). busy 동안 disabled 는 useMutation 의 연타 방지를
+                        화면에도 드러내는 것 (막고 있다는 걸 보여준다) */}
+                    <button
+                        type="button"
+                        className="rcp-btn rcp-btn-ghost rcp-dict-audit"
+                        onClick={runAudit}
+                        disabled={audit.busy}
+                    >
+                        {audit.busy ? AUDIT_BUSY_TEXT : AUDIT_TEXT}
+                    </button>
+                </div>
             </header>
 
             <RcpInlineError message={mutation.error ?? audit.error} />
@@ -322,6 +366,32 @@ export default function DictionaryPage() {
                             </div>
                         ))}
                     </div>
+
+                    {/* 자동 반영 내역 시트 — 최신순. 복구는 시트를 닫고 해당 재료의 그룹 해제·
+                        재분류로 (내역 행에 되돌리기 버튼을 안 두는 이유: 그 사이 오너가 다른 값으로
+                        바꿨을 수 있어 "로그 시점으로 되돌리기"가 오히려 사고를 만든다) */}
+                    {changesOpen && (
+                        <RcpBottomSheet open title={CHANGES_SHEET_TITLE} onClose={() => setChangesOpen(false)}>
+                            <RcpInlineError message={changesLoad.error} />
+                            {changesLoad.busy && <p className="rcp-empty">{CHANGES_LOADING_TEXT}</p>}
+                            {changes !== null && changes.length === 0 && (
+                                <p className="rcp-empty">{NO_CHANGES_TEXT}</p>
+                            )}
+                            {(changes ?? []).map((change) => (
+                                <div className="rcp-dict-row" key={change.id}>
+                                    <span className="rcp-dict-name">{change.name}</span>
+                                    <div className="rcp-dict-foot">
+                                        <RcpBadge variant="neutral">{changeDetailText(change)}</RcpBadge>
+                                        <span className="rcp-dict-change-meta">
+                                            {CHANGE_SOURCE_LABEL[change.source]}
+                                            {' · '}
+                                            {changeDateText(change.createdAt)}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </RcpBottomSheet>
+                    )}
 
                     {/* 그룹 관리 시트 — 멤버 검수([빼기]↔[다시 묶기] 즉시 복구)와 옮기기를
                         그룹 컨텍스트 안에서 처리. 후보 판정은 dictionaryFilter.mergeCandidates */}

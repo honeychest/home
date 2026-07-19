@@ -38,6 +38,7 @@ class RegistrationControllerMonitorTest {
     /** health() 는 mock 기본값 null 을 돌려준다 = "로컬 못 씀" — 이 테스트의 관심사(404/403 계약)와 무관 */
     private final LocalRecipeExtractor localExtractor = mock(LocalRecipeExtractor.class);
     private final IngredientDictionaryRepository dictionary = mock(IngredientDictionaryRepository.class);
+    private final IngredientChangeLogRepository changeLog = mock(IngredientChangeLogRepository.class);
 
     private RegistrationController controller() {
         GikkaAuthProperties properties = new GikkaAuthProperties();
@@ -45,7 +46,7 @@ class RegistrationControllerMonitorTest {
         when(users.findEmail(OWNER_ID)).thenReturn("owner@example.com");
         when(users.findEmail(STRANGER_ID)).thenReturn("stranger@example.com");
         return new RegistrationController(repository, videos, rateLimiter, metadata, properties, users,
-                localExtractor, dictionary);
+                localExtractor, dictionary, changeLog);
     }
 
     @Test

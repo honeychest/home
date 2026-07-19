@@ -34,6 +34,12 @@ public class GikkaMediaProperties {
     // host.docker.internal 로 호출한다 (LM Studio 와 동일한 host.docker.internal 패턴).
     private String localExtractorBaseUrl = "http://host.docker.internal:8765";
     private boolean localExtractorEnabled = true;
+    // 재료 신고 → 전력 재분석 (2026-07-18 확정): 서로 다른 신고자 수가 임계값에 닿으면 재분석.
+    // 지금은 오너 혼자라 1 — 공개 시 2→10 처럼 설정만 올려 노이즈를 거른다(코드 무수정, 사용자 확정).
+    private int reportAnalyzeThreshold = 1;
+    // 같은 (영상, 재료)의 재분석 실행 상한 — "신고→같은 결과→재신고" 무한 루프(Gemini 낭비) 차단.
+    // 상한 도달 후의 신고는 기록만 남는다("재분석으로 못 고치는 부류"라는 관찰 데이터가 됨).
+    private int reportMaxRuns = 2;
 
     public String getGeminiApiKey() {
         return geminiApiKey;
@@ -113,5 +119,21 @@ public class GikkaMediaProperties {
 
     public void setLocalExtractorEnabled(boolean localExtractorEnabled) {
         this.localExtractorEnabled = localExtractorEnabled;
+    }
+
+    public int getReportAnalyzeThreshold() {
+        return reportAnalyzeThreshold;
+    }
+
+    public void setReportAnalyzeThreshold(int reportAnalyzeThreshold) {
+        this.reportAnalyzeThreshold = reportAnalyzeThreshold;
+    }
+
+    public int getReportMaxRuns() {
+        return reportMaxRuns;
+    }
+
+    public void setReportMaxRuns(int reportMaxRuns) {
+        this.reportMaxRuns = reportMaxRuns;
     }
 }

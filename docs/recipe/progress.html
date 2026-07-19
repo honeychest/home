@@ -495,7 +495,26 @@
 <div class="card next">
   <h2>다음 세션이 이어서 할 일</h2>
   <ul>
-    <li><b>2026-07-18 저녁 세션 — 미커밋 작업 있음(커밋·배포 필요)</b>: ① 재료 사전 "수량·단위 변형
+    <li><b>2026-07-19 세션 — 재료 신고(전력 재분석) 구현(미커밋, 커밋·배포 필요)</b>
+      (설계 원본: CONTEXT.md "재료 신고(전력 재분석)" 절). 내용: ① V15(ingredient_report·
+      ingredient_report_run·video.report_ingredient) ② 워커 틱에서 임계값(서로 다른 신고자 수,
+      설정 report-analyze-threshold=1) 도달 건을 기존 재분석 대기열로 승격 — Hybrid 가 힌트를
+      보면 Gemini 직행 + 신고 프롬프트 파트("확실하지 않으면 기존 유지") ③ 1인 1신고 = DB
+      UNIQUE, 실행 상한 report-max-runs=2 ④ 결과 시트 재료 칩 탭 → 신고(오너에게만 노출,
+      API 도 게이트) ⑤ 실행별 전후 재료 diff 를 report_run 에 기록(관찰 데이터 — 이걸 보고
+      다음 단계 결정하기로 함). 테스트: recipe 145(신규 9)·ArchUnit·프론트 57·빌드 통과.
+      <b>배포 후 확인 코스</b>: "쭈유(참기름)" 있는 영상 결과 시트에서 그 재료 신고 →
+      monitor 대기열에 뜨는지 → 완료 후 재료가 바뀌었는지 + ingredient_report_run diff 확인.</li>
+    <li><b>2026-07-18 심야 세션 — 재료 사전 자동 판정 구현(미커밋, 커밋·배포 필요)</b>
+      (설계 원본: CONTEXT.md "재료 사전 자동 판정" 절 — 안전 비대칭 규칙이 PENDING 한정 자동으로
+      완화된 확정 결정 포함). 내용: ① 파이프라인 순서 교체(변형 병합을 양념 승격 앞으로 — 구멍
+      막기) ② IngredientAutoJudge(분석 직후 PENDING 대표 전부 AI 판정·즉시 적용, 로컬 우선)
+      ③ ingredient_change_log(V14) + /dictionary/changes + 사전 화면 [자동 반영] 시트.
+      테스트: recipe 136·ArchUnit 2·프론트 57·빌드 통과. <b>배포 후 확인</b>: 새 RECIPE 분석 한 건
+      돌려 change_log 에 기록 쌓이는지, [자동 반영] 시트 표시 확인.
+      <b>다음 착수 예정(사용자 예고)</b>: 특정 재료 재점검(신고) 기능 설계 — CONTEXT.md 같은 절
+      "다음 단계" 참고. "SKIPPED=매칭 제외" 규칙 변경은 미승인 보류.</li>
+    <li><b>2026-07-18 저녁 세션 — 커밋·푸시 완료(사용자 확인)</b>: ① 재료 사전 "수량·단위 변형
       자동 병합" 파이프라인 단계(RegistrationRules.representativeCandidate + autoMergeVariant —
       기계적 변형만, 오타·동의어는 기존 AI 점검+오너 확정 유지). ② 태그 철자 일치 프롬프트 지시
       (Gemini·gikka/server.py 양쪽 — "밥간장/밥간정" 오타 사례. <b>server.py 는 mac-mini 별도 배포

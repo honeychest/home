@@ -42,14 +42,17 @@ public class RegistrationController {
         "로컬이 지금 쓸 수 있는 상태인가"는 라우팅과 무관한 로컬 자신의 사실이므로 (2026-07-16) */
     private final LocalRecipeExtractor localExtractor;
     private final IngredientDictionaryRepository dictionary;
+    private final IngredientChangeLogRepository changeLog;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public RegistrationController(RegistrationRepository repository, VideoRepository videos,
                                   GeminiRateLimiter rateLimiter, VideoMetadataClient metadata,
                                   GikkaAuthProperties authProperties, GikkaUserRepository users,
                                   LocalRecipeExtractor localExtractor,
-                                  IngredientDictionaryRepository dictionary) {
+                                  IngredientDictionaryRepository dictionary,
+                                  IngredientChangeLogRepository changeLog) {
         this.localExtractor = localExtractor;
+        this.changeLog = changeLog;
         this.repository = repository;
         this.videos = videos;
         this.rateLimiter = rateLimiter;
@@ -306,6 +309,16 @@ public class RegistrationController {
     public List<IngredientDictionaryRepository.Entry> dictionary(@GikkaUserId long userId) {
         requireOwner(userId);
         return dictionary.all();
+    }
+
+    /** 자동 반영 사후 감사용 (2026-07-18) — 파이프라인이 사전을 스스로 바꾼 최근 내역.
+        개수 상한은 이 상수 하나가 원본 (사후 감사는 "최근 것 훑기"라 페이징 불필요). */
+    private static final int CHANGE_LOG_LIMIT = 50;
+
+    @GetMapping("/dictionary/changes")
+    public List<IngredientChangeLogRepository.Entry> dictionaryChanges(@GikkaUserId long userId) {
+        requireOwner(userId);
+        return changeLog.recent(CHANGE_LOG_LIMIT);
     }
 
     public record ClassifyRequest(String name, String status) {

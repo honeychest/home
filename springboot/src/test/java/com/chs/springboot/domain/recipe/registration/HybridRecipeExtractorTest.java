@@ -105,6 +105,22 @@ class HybridRecipeExtractorTest {
     }
 
     @Test
+    @DisplayName("신고 재점검(힌트 있음): 로컬을 건너뛰고 Gemini 직행 — 전력 분석 (2026-07-18 확정)")
+    void reportHintSkipsLocalAndGoesStraightToGemini() {
+        // localServer 에 기대 등록 없음 — 호출되면 verify() 에서 실패한다
+        geminiServer.expect(method(org.springframework.http.HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"parts":[{"text":"{\\"category\\":\\"RECIPE\\",\\"name\\":\\"야끼우동\\",\\"ingredients\\":[\\"쯔유\\"],\\"steps\\":[\\"볶는다\\"]}"}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var result = hybrid.extract("https://www.youtube.com/watch?v=abc", "제목", null, "쭈유(참기름)");
+
+        assertEquals("RECIPE", result.category());
+        assertEquals("야끼우동", result.name());
+        localServer.verify();
+    }
+
+    @Test
     @DisplayName("로컬 자체가 불가한데 Gemini 마저 일시적으로 실패하면 대체할 결과가 없어 예외를 그대로 던짐")
     void rethrowsTransientFailureWhenNoLocalFallback() {
         localServer.expect(method(org.springframework.http.HttpMethod.POST))

@@ -13,6 +13,7 @@ import type {
 import { DuplicateVideoError } from '../data/registrationTypes';
 import { registrationRepository } from '../data/registrationRepository';
 import { fridgeRepository } from '../data/fridgeRepository';
+import { reportRepository } from '../data/reportRepository';
 import { registerLink } from '../data/registerLink';
 import { analysisQualityWarning, needsReview } from '../data/analysisQuality';
 import { parseYoutubePlaylistId, parseYoutubeVideoId } from '../data/videoUrl';
@@ -119,6 +120,14 @@ const EMPTY_SEARCH: SearchResults = { mine: [], others: [] };
 const otherMetaText = (category: VideoCategory | null) =>
     `${CATEGORY_LABEL[category ?? 'ETC']} · 아직 내 보관함에 없어요`;
 
+// 재료 신고 (2026-07-18 — CONTEXT.md "재료 신고" 절): 일반 사용자 기능이지만 공개 전이라
+// canReport(=canViewMonitor)로만 노출. 재료 칩 탭 → 확인 → 접수(즉시 응답), 처리는 서버 백그라운드.
+const reportConfirmText = (name: string) =>
+    `"${name}" 재료가 이상한가요? 영상을 다시 살펴보게 신고할까요?`;
+const reportedChipText = (name: string) => `${name} · 신고됨`;
+const reportChipLabel = (name: string) => `"${name}" 재료 신고`;
+const REPORT_FAIL_TEXT = '신고하지 못했어요 — 네트워크 확인 후 다시 시도해 주세요';
+
 // 카드 제목: AI가 추출한 요리 이름이 원본 영상 제목보다 "무슨 요리인지" 더 잘 드러남
 // (2026-07-14 확정 — 이전엔 저장만 하고 목록엔 안 보여주고 있었음)
 const itemTitle = (item: GikkaVideo): string => item.recipe?.name || item.title || item.url;
@@ -143,7 +152,12 @@ const formatRegisteredAt = (iso: string) => {
 const hasActive = (items: RegistrationItem[]) =>
     items.some((i) => i.status === 'WAITING' || i.status === 'ANALYZING');
 
-export default function RecipesPage() {
+interface RecipesPageProps {
+    /** 재료 신고 노출 조건 — 일반 기능의 공개 전 게이트(서버 판정 canViewMonitor 재사용) */
+    canReport?: boolean;
+}
+
+export default function RecipesPage({ canReport = false }: RecipesPageProps) {
     const [registerOpen, setRegisterOpen] = useState(false);
     const [urlInput, setUrlInput] = useState('');
     const [justRegistered, setJustRegistered] = useState<string[]>([]); // 이번 시트에서 넣은 것 (확인줄)
@@ -179,6 +193,27 @@ export default function RecipesPage() {
     useEffect(() => {
         fridgeRepository.list().then((list) => setFridgeNames(new Set(list.map((i) => i.name)))).catch(() => undefined);
     }, []);
+
+    // 재료 신고 (2026-07-18) — 열린 시트의 영상에 대해 내가 접수해 둔 재료를 조회해 버튼 상태로.
+    // 조회 실패는 조용히 — 신고는 보조 기능이라 시트 표시를 막지 않는다.
+    const reportMutation = useMutation(() => REPORT_FAIL_TEXT);
+    const [reportedNames, setReportedNames] = useState<Set<string>>(new Set());
+    const reportVideoId = selected?.videoId ?? selectedOther?.videoId ?? null;
+    useEffect(() => {
+        setReportedNames(new Set());
+        if (!canReport || !reportVideoId) return;
+        reportRepository.myActive(reportVideoId)
+            .then((names) => setReportedNames(new Set(names)))
+            .catch(() => undefined);
+    }, [canReport, reportVideoId]);
+    const handleReport = (videoId: string, name: string) => {
+        if (!window.confirm(reportConfirmText(name))) return;
+        void reportMutation.run(async () => {
+            await reportRepository.report(videoId, name);
+            // 'already' 도 접수돼 있는 상태라는 뜻 — 같은 표시(신고됨)로 수렴
+            setReportedNames((prev) => new Set(prev).add(name));
+        });
+    };
 
     // 조작 실행기 (공용 useMutation — 실패 문구·연타 방지·재동기화 한 곳, PLAYBOOK 관례 5)
     const mutation = useMutation(mutationMessage, reload);
@@ -314,7 +349,23 @@ export default function RecipesPage() {
                         {item.recipe.ingredients.map((name) => {
                             const haveClass = fridgeNames === null ? 'rcp-sticker'
                                 : `rcp-chip ${fridgeNames.has(name) ? 'rcp-chip-on' : 'rcp-chip-off'}`;
-                            return <span key={name} className={haveClass}>{name}</span>;
+                            if (!canReport) {
+                                return <span key={name} className={haveClass}>{name}</span>;
+                            }
+                            // 재료 신고 (2026-07-18) — 이상한 재료를 탭해 접수. 접수돼 있으면 비활성
+                            const reported = reportedNames.has(name);
+                            return (
+                                <button
+                                    key={name}
+                                    type="button"
+                                    className={haveClass}
+                                    disabled={reported}
+                                    aria-label={reportChipLabel(name)}
+                                    onClick={() => handleReport(item.videoId, name)}
+                                >
+                                    {reported ? reportedChipText(name) : name}
+                                </button>
+                            );
                         })}
                     </div>
                     {item.recipe.cookMinutes !== null && (
@@ -372,7 +423,7 @@ export default function RecipesPage() {
         />
     );
 
-    const errorLine = <RcpInlineError message={mutation.error} />;
+    const errorLine = <RcpInlineError message={mutation.error ?? reportMutation.error} />;
 
     // 요약줄: 표시 문구(레시피·유틸·기타·분석대기…) 기준으로 집계, 0인 것은 숨김
     const summary = items

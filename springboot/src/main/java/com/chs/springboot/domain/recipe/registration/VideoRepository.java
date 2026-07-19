@@ -37,13 +37,14 @@ public class VideoRepository {
                       String title, String thumbnailUrl, Integer durationSeconds, String description,
                       String recipeJson, String summary, String tagsJson,
                       int attemptCount, Integer analysisSeconds, String lastError,
-                      OffsetDateTime queuedAt, String analysisSignalsJson, int geminiRetryCount) {
+                      OffsetDateTime queuedAt, String analysisSignalsJson, int geminiRetryCount,
+                      String reportIngredient) {
     }
 
     private static final String COLUMNS =
             "video_id, url, platform, category, status, title, thumbnail_url, duration_seconds, description, "
             + "recipe_json, summary, tags, attempt_count, analysis_seconds, last_error, queued_at, "
-            + "analysis_signals, gemini_retry_count";
+            + "analysis_signals, gemini_retry_count, report_ingredient";
 
     /**
      * "분석이 남긴 것을 전부 지운다" 의 유일한 정의 — 재분석과 영상 삭제가 이걸 함께 쓴다
@@ -176,7 +177,8 @@ public class VideoRepository {
                             summary = :summary, tags = :tags::jsonb, summary_version = :version,
                             analysis_signals = :signals::jsonb,
                             analysis_seconds = EXTRACT(EPOCH FROM (now() - analyzing_started_at))::int,
-                            analyzing_started_at = NULL, last_error = NULL, gemini_retry_count = 0
+                            analyzing_started_at = NULL, last_error = NULL, gemini_retry_count = 0,
+                            report_ingredient = NULL
                         WHERE video_id = :videoId
                         """)
                 .param("category", category).param("json", json)
@@ -193,17 +195,23 @@ public class VideoRepository {
         }
     }
 
-    /** 진짜 실패: 3회 소진 시 FAILED, 아니면 대기열로 복귀. errorMessage 는 모니터링 화면 노출용 */
-    public void markFailure(String videoId, int maxAttempts, String errorMessage) {
-        jdbc.sql("""
+    /** 진짜 실패: 3회 소진 시 FAILED, 아니면 대기열로 복귀. errorMessage 는 모니터링 화면 노출용.
+        FAILED 확정이면 신고 힌트도 함께 비운다(재시도가 끝났으므로 — 신고 마감은 워커 몫).
+        @return 이번 판정의 최종 상태(FAILED/WAITING) — 워커가 신고 마감 여부를 가르는 근거 */
+    public String markFailure(String videoId, int maxAttempts, String errorMessage) {
+        return jdbc.sql("""
                         UPDATE video
                         SET status = CASE WHEN attempt_count >= :max THEN 'FAILED' ELSE 'WAITING' END,
                             analysis_seconds = EXTRACT(EPOCH FROM (now() - analyzing_started_at))::int,
-                            analyzing_started_at = NULL, last_error = :error, gemini_retry_count = 0
+                            analyzing_started_at = NULL, last_error = :error, gemini_retry_count = 0,
+                            report_ingredient = CASE WHEN attempt_count >= :max THEN NULL
+                                                     ELSE report_ingredient END
                         WHERE video_id = :videoId
+                        RETURNING status
                         """)
                 .param("max", maxAttempts).param("error", errorMessage)
-                .param("videoId", videoId).update();
+                .param("videoId", videoId)
+                .query(String.class).optional().orElse(null);
     }
 
     /** 429·503·타임아웃: 시도 횟수를 돌려주고 대기열 복귀 (기다렸다 재시도 — 횟수 소모 없음, 확정 결정).
@@ -266,6 +274,20 @@ public class VideoRepository {
                 .param("videoId", videoId).update();
     }
 
+    /**
+     * 신고 재점검 큐잉 (2026-07-18) — 재분석과 같은 초기화(분석 흔적 제거 + 대기열 맨 뒤)에
+     * 신고 힌트(report_ingredient)를 얹는다. 메타 재조회는 안 한다(신고는 재료 문제라 메타는
+     * 무관 — reanalyze 와 다른 점). 진행 중(WAITING/ANALYZING)이면 건너뛴다 — 승격 판정
+     * (IngredientReportRepository.claimEligibleCase)이 이미 거르지만 이중 방어.
+     */
+    public boolean queueReportReanalysis(String videoId, String ingredientName) {
+        return jdbc.sql("UPDATE video SET status = 'WAITING', queued_at = now(), "
+                        + "report_ingredient = :name, " + CLEAR_ANALYSIS
+                        + " WHERE video_id = :videoId AND status NOT IN ('WAITING', 'ANALYZING')")
+                .param("name", ingredientName)
+                .param("videoId", videoId).update() > 0;
+    }
+
     /** 워커가 죽어 ANALYZING 에 갇힌 영상 회수 (10분 기준) */
     public int requeueStale() {
         return jdbc.sql("""
@@ -310,6 +332,7 @@ public class VideoRepository {
                 rs.getString("last_error"),
                 rs.getObject("queued_at", OffsetDateTime.class),
                 rs.getString("analysis_signals"),
-                rs.getInt("gemini_retry_count"));
+                rs.getInt("gemini_retry_count"),
+                rs.getString("report_ingredient"));
     }
 }

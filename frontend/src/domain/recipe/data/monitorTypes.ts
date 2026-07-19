@@ -80,6 +80,22 @@ export interface IngredientMerge {
     matchKey: string;
 }
 
+/** 자동 반영 내역 한 건 (2026-07-18) — 파이프라인이 사전을 스스로 바꾼 기록.
+    오너의 역할이 사전 승인에서 사후 감사로 바뀌면서 생긴 감사 원본 — 이상하면
+    사전 화면의 그룹 해제·재분류로 복구한다. */
+export interface DictionaryChange {
+    id: number;
+    name: string;
+    action: 'CLASSIFY' | 'MERGE';
+    /** CLASSIFY: 이전 status / MERGE: 이전 match_key */
+    oldValue: string;
+    /** CLASSIFY: 새 status / MERGE: 새 match_key(대표) */
+    newValue: string;
+    /** AUTO_VARIANT = 수량·단위 기계 규칙, AUTO_AUDIT = AI 판정 */
+    source: 'AUTO_VARIANT' | 'AUTO_AUDIT';
+    createdAt: string;
+}
+
 /** 전 사용자 대기열 스냅샷 — 대기열 크기·워커 생존·429 이력 + 항목 목록 (2026-07-13 확정) */
 export interface MonitorSnapshot {
     waitingCount: number;

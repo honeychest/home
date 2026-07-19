@@ -442,6 +442,10 @@
   padding: var(--rcp-space-8) var(--rcp-space-4);
 }
 .rcp-chip-group { display: flex; flex-wrap: wrap; gap: var(--rcp-space-2); }
+/* 재료 신고 (2026-07-18) — 재료 칩이 button 으로도 쓰인다 (canReport 일 때).
+   시각은 기존 칩 클래스 그대로, 여기는 button 기본값 보정만 */
+button.rcp-chip, button.rcp-sticker { cursor: pointer; }
+button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 
 /* ── 추천 화면 골격: 세로 스크롤 없이 3단계가 폰 높이에 맞춰 나뉜다 (2026-07-14 확정,
    사용자 요청 — "폰 크기에 상관없이 세로스크롤 안 생기게"). .rcp-screen(flex:1, 100dvh 기준)
@@ -771,7 +775,10 @@
   margin-bottom: var(--rcp-space-3);
 }
 .rcp-dict-head-text { min-width: 0; } /* 다국어 대비: 제목이 길어지면 버튼이 아니라 이쪽이 줄어든다 */
+.rcp-dict-head-actions { display: flex; gap: var(--rcp-space-1); flex: none; }
 .rcp-dict-audit { width: auto; }
+/* 자동 반영 내역 시트의 출처·날짜 줄 (2026-07-18) */
+.rcp-dict-change-meta { font-size: var(--rcp-fs-2xs); color: var(--rcp-text-faint); }
 /* 칩 줄 = 한 줄 고정 + 가로 스크롤 레일 (2026-07-18 확정) — 칩이 넘치면 2줄로 꺾여 높이가
    들쭉날쭉하던 것을 대체. 다 들어가면 스크롤이 안 생겨 겉보기 변화가 없다(안전망).
    대기열 탭·사전 탭이 같이 쓴다. */

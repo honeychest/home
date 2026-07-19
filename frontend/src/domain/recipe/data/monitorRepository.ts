@@ -1,8 +1,8 @@
 // [AGENT] 전 사용자 대기열 모니터링 저장소 — 오너 전용 화면(MonitorPage) 전용 (2026-07-13 확정)
 // 재료 사전 관리(2026-07-17 5차-4)도 오너 전용이라 같은 저장소에 둔다(모니터 화면 한 곳 정책).
 import type {
-    DictionaryEntry, DictionaryStatus, IngredientMerge, IngredientProposal, MonitorAnalysis,
-    MonitorSnapshot,
+    DictionaryChange, DictionaryEntry, DictionaryStatus, IngredientMerge, IngredientProposal,
+    MonitorAnalysis, MonitorSnapshot,
 } from './monitorTypes';
 import type { RegistrationStatus } from './registrationTypes';
 import { HttpError, jsonBody, request } from './http';
@@ -36,6 +36,8 @@ export interface MonitorRepository {
         을 함께 (자동 반영 아님).
         동기 LLM 호출이라 10초 이상 걸린다 — 화면은 useMutation 의 busy 로 진행 표시할 것 */
     auditDictionary(): Promise<IngredientProposal[]>;
+    /** 자동 반영 내역 최신순 (2026-07-18) — 파이프라인이 사전을 스스로 바꾼 기록의 사후 감사용 */
+    listDictionaryChanges(): Promise<DictionaryChange[]>;
 }
 
 /** 일괄 판정 한 건 — 제안(IngredientProposal)을 오너가 적용하기로 한 결정 */
@@ -89,6 +91,9 @@ export function createApiMonitorRepository(): MonitorRepository {
             // 경로를 바꾸려면 nginx 설정도 함께 (IngredientAuditController 주석 참고).
             return request<IngredientProposal[]>('/api/recipe/llm/dictionary/audit',
                 { method: 'POST' });
+        },
+        listDictionaryChanges() {
+            return request<DictionaryChange[]>('/api/recipe/registrations/dictionary/changes');
         },
     };
 }
