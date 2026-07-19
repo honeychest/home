@@ -272,6 +272,51 @@ export default function FridgePage() {
                         );
                     })}
                 </div>
+                {/* ── 전환 영역: 빈 입력=구매 추천 / 입력 중=사전 자동완성 (2026-07-19 사용자 확정).
+                    반드시 입력창 **위**에 둔다 — 키보드·자동입력 툴바는 항상 화면 아래를 덮으므로
+                    포커스된 입력창 아래 정보는 기기에 따라 가려진다(키보드 안전 지대 규칙,
+                    frontend/AGENTS.md — 2026-07-19 삼성폰 실기기에서 가려짐 확인 후 이동) ── */}
+
+                {/* 추천 검색어 — 사전 대표 이름 중 입력값 포함 매칭 (오탈자 예방).
+                    탭 = 그 표기로 즉시 등록. 이미 냉장고에 있는 이름은 안 내민다 */}
+                {(() => {
+                    const term = freeInput.trim();
+                    const suggestions = dictNames === null || term === '' ? []
+                        : dictNames.filter((n) => n.includes(term) && !ownedNames.has(n)).slice(0, SUGGEST_LIMIT);
+                    if (suggestions.length === 0) return null;
+                    return (
+                        <div className="rcp-chip-group rcp-fridge-suggest" id="rcp-fridge-suggest">
+                            {suggestions.map((name) => (
+                                <button
+                                    key={name}
+                                    type="button"
+                                    className="rcp-chip rcp-chip-off"
+                                    onClick={() => void handleAdd(name)}
+                                >
+                                    {name}
+                                </button>
+                            ))}
+                        </div>
+                    );
+                })()}
+
+                {/* 구매 추천 — 이거 하나만 사면 완성되는 내 레시피 (표시 전용). 입력 중에는 숨김 */}
+                {freeInput.trim() === '' && shopping.length > 0 && (
+                    <>
+                        <h3 className="rcp-section-label">{SHOPPING_LABEL}</h3>
+                        <div id="rcp-fridge-shopping">
+                            {shopping.map((s) => (
+                                <p className="rcp-fridge-shopping-row" key={s.name}>
+                                    <span className="rcp-sticker">{s.name}</span>
+                                    <span className="rcp-fridge-shopping-recipes">
+                                        {shoppingRecipesText(s.recipes)}
+                                    </span>
+                                </p>
+                            ))}
+                        </div>
+                    </>
+                )}
+
                 <form
                     id="rcp-fridge-add-form"
                     className="rcp-input-row"
@@ -295,48 +340,6 @@ export default function FridgePage() {
                     />
                     <RcpButton type="submit" disabled={!freeInput.trim()}>추가</RcpButton>
                 </form>
-
-                {/* 추천 검색어 — 사전 대표 이름 중 입력값 포함 매칭 (2026-07-19 확정, 오탈자 예방).
-                    탭 = 그 표기로 즉시 등록. 이미 냉장고에 있는 이름은 안 내민다 */}
-                {(() => {
-                    const term = freeInput.trim();
-                    const suggestions = dictNames === null || term === '' ? []
-                        : dictNames.filter((n) => n.includes(term) && !ownedNames.has(n)).slice(0, SUGGEST_LIMIT);
-                    if (suggestions.length === 0) return null;
-                    return (
-                        <div className="rcp-chip-group rcp-fridge-suggest" id="rcp-fridge-suggest">
-                            {suggestions.map((name) => (
-                                <button
-                                    key={name}
-                                    type="button"
-                                    className="rcp-chip rcp-chip-off"
-                                    onClick={() => void handleAdd(name)}
-                                >
-                                    {name}
-                                </button>
-                            ))}
-                        </div>
-                    );
-                })()}
-
-                {/* 구매 추천 — 이거 하나만 사면 완성되는 내 레시피 (2026-07-19 확정, 표시 전용).
-                    입력 중에는 숨긴다 — 이 영역은 "빈 입력=구매 추천 / 입력 중=사전 자동완성"으로
-                    전환되는 한 자리다 (2026-07-19 사용자 확정, 둘이 동시에 뜨면 혼란) */}
-                {freeInput.trim() === '' && shopping.length > 0 && (
-                    <>
-                        <h3 className="rcp-section-label">{SHOPPING_LABEL}</h3>
-                        <div id="rcp-fridge-shopping">
-                            {shopping.map((s) => (
-                                <p className="rcp-fridge-shopping-row" key={s.name}>
-                                    <span className="rcp-sticker">{s.name}</span>
-                                    <span className="rcp-fridge-shopping-recipes">
-                                        {shoppingRecipesText(s.recipes)}
-                                    </span>
-                                </p>
-                            ))}
-                        </div>
-                    </>
-                )}
             </RcpBottomSheet>
 
             <RcpBottomSheet
