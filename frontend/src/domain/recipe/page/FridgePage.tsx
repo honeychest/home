@@ -280,12 +280,18 @@ export default function FridgePage() {
                         void handleAdd(freeInput);
                     }}
                 >
+                    {/* 브라우저·모바일 자판의 과거 입력 자동완성 차단 (2026-07-19 사용자 확정 —
+                        자주 넣는 재료는 위 "자주 사는 재료" 칩이 담당, 자판 제안은 중복 노이즈) */}
                     <input
                         className="rcp-input"
                         id="rcp-fridge-add-input"
                         placeholder="직접 입력 (예: 파프리카)"
                         value={freeInput}
                         onChange={(e) => setFreeInput(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
                     />
                     <RcpButton type="submit" disabled={!freeInput.trim()}>추가</RcpButton>
                 </form>
@@ -313,8 +319,10 @@ export default function FridgePage() {
                     );
                 })()}
 
-                {/* 구매 추천 — 이거 하나만 사면 완성되는 내 레시피 (2026-07-19 확정, 표시 전용) */}
-                {shopping.length > 0 && (
+                {/* 구매 추천 — 이거 하나만 사면 완성되는 내 레시피 (2026-07-19 확정, 표시 전용).
+                    입력 중에는 숨긴다 — 이 영역은 "빈 입력=구매 추천 / 입력 중=사전 자동완성"으로
+                    전환되는 한 자리다 (2026-07-19 사용자 확정, 둘이 동시에 뜨면 혼란) */}
+                {freeInput.trim() === '' && shopping.length > 0 && (
                     <>
                         <h3 className="rcp-section-label">{SHOPPING_LABEL}</h3>
                         <div id="rcp-fridge-shopping">
