@@ -3,7 +3,7 @@
 // / 자석 스티커 토글 추가 / 자유 입력 / 재등록 시 날짜 갱신
 // 저장소는 fridgeRepository 인터페이스만, 선반·날짜 판정은 fridgeShelves 순수 모듈만 사용.
 // 조작(추가·삭제·수정)은 전부 공용 실행기(useMutation)를 거친다 — 실패 문구·중복 탭 방지·재동기화 한 곳.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import type { FridgeItem } from '../data/fridgeTypes';
 import type { ShoppingSuggestion } from '../data/recommendTypes';
@@ -23,6 +23,8 @@ const FREQUENT_LIMIT = 12;
 // 추천 검색어(사전 대표 이름 자동완성)·구매 추천 표시 상한 (2026-07-19 확정)
 const SUGGEST_LIMIT = 6;
 const SHOPPING_LIMIT = 5;
+// 날짜 스테퍼 저장 디바운스 — 연타가 멈춘 뒤 최종 날짜만 1회 저장 (2026-07-19 낙관적 전환)
+const DATE_SAVE_DEBOUNCE_MS = 500;
 const SHOPPING_LABEL = '이거 하나만 사면 만들 수 있어요';
 // 문구/데이터 분리: "요리이름" 또는 "요리이름 외 N개"
 const shoppingRecipesText = (recipes: string[]) =>
@@ -77,30 +79,69 @@ export default function FridgePage() {
     const loadError = query.error ?? frequentError;
     const retryLoad = () => { void reloadItems(); loadFrequent(); };
 
-    // 조작 실행기 (공용 useMutation — 실패 문구·연타 방지·재동기화 한 곳, PLAYBOOK 관례 5)
+    // 실패 문구 표시·재동기화용 (PLAYBOOK 관례 5). run 은 안 쓴다 — 이 화면은 전부 낙관적
+    // 실행(runOptimistic)으로 전환됨 (2026-07-19 확정)
     const mutation = useMutation(mutationMessage, reloadItems);
-    const runMutation = mutation.run;
 
-    const handleAdd = (rawName: string) => runMutation(async () => {
+    /** 낙관적 실행 (2026-07-19 확정 — "탭마다 서버 왕복을 기다려 렉" 사용자 지적):
+        화면을 먼저 바꾸고 서버는 뒤에서, 실패 시에만 문구 + 재조회로 복원(보관함 "내 목록에서
+        지우기"와 같은 확정 패턴). useMutation.run 을 안 쓰는 이유 — run 의 연타 방지(진행 중
+        무시)가 낙관적 조작에선 "화면은 바뀌었는데 두 번째 탭의 서버 반영이 조용히 사라지는"
+        불일치가 된다. 냉장고 조작은 서로 독립이라 병렬 전송이 안전하다. */
+    const runOptimistic = (apply: () => void, op: () => Promise<unknown>) => {
+        mutation.setError(null);
+        apply();
+        void op().catch(async () => {
+            mutation.setError(MUTATION_ERROR_TEXT);
+            await reloadItems().catch(() => undefined);
+        });
+    };
+
+    /** 사용자 기기 기준 오늘 (CONTEXT.md 시간 기준 절 — 날짜 판정은 기기의 오늘.
+        toISOString 은 UTC 라 한국 밤에 하루 어긋난다) */
+    const localToday = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const handleAdd = (rawName: string) => {
         const name = rawName.trim();
         if (!name) return;
-        await fridgeRepository.add(name);
-        setJustAdded((prev) => (prev.includes(name) ? prev : [...prev, name]));
-        setFreeInput(''); // 성공했을 때만 비움 (실패 시 입력 유지 — 재시도 배려)
-        await reloadItems();
-    });
+        const tempId = `temp-${name}`;
+        runOptimistic(() => {
+            // 같은 이름 재등록 = 날짜만 오늘로 (서버 규칙과 동일하게 화면 선반영)
+            setItems((prev) => {
+                const list = prev ?? [];
+                const existing = list.find((i) => i.name === name);
+                if (existing) {
+                    return list.map((i) => (i.id === existing.id ? { ...i, addedDate: localToday() } : i));
+                }
+                return [...list, { id: tempId, name, addedDate: localToday(), expiring: false }];
+            });
+            setJustAdded((prev) => (prev.includes(name) ? prev : [...prev, name]));
+            setFreeInput('');
+        }, async () => {
+            const saved = await fridgeRepository.add(name);
+            // 임시 항목을 서버 실물(진짜 id)로 교체 — 재조회 없이 정합 유지
+            setItems((prev) => {
+                const rest = (prev ?? []).filter((i) => i.id !== tempId && i.name !== name);
+                return [...rest, saved];
+            });
+        });
+    };
 
-    const handleChipToggle = (name: string, isOn: boolean) => runMutation(async () => {
+    const handleChipToggle = (name: string, isOn: boolean) => {
         if (isOn) {
             const target = (items ?? []).find((item) => item.name === name);
-            if (target) await fridgeRepository.remove(target.id);
-            setJustAdded((prev) => prev.filter((n) => n !== name));
+            if (!target) return;
+            runOptimistic(() => {
+                setItems((prev) => (prev ?? []).filter((i) => i.id !== target.id));
+                setJustAdded((prev) => prev.filter((n) => n !== name));
+            }, () => fridgeRepository.remove(target.id));
         } else {
-            await fridgeRepository.add(name);
-            setJustAdded((prev) => (prev.includes(name) ? prev : [...prev, name]));
+            handleAdd(name);
         }
-        await reloadItems();
-    });
+    };
 
     // 추천 검색어(사전 대표 이름) — 오탈자 예방 자동완성 (2026-07-19 확정). 시트를 처음 열 때
     // 1회 로드(사전은 300행 수준 — 클라이언트 필터로 충분), 실패는 조용히(보조 기능 — 자유 입력은 그대로)
@@ -113,10 +154,14 @@ export default function FridgePage() {
         fridgeRepository.suggestIngredientNames().then(setDictNames).catch(() => undefined);
     }, [addOpen, dictNames]);
     useEffect(() => {
-        if (!addOpen) return;
-        recommendRepository.shopping()
-            .then((list) => setShopping(list.slice(0, SHOPPING_LIMIT)))
-            .catch(() => setShopping([]));
+        if (!addOpen) return undefined;
+        // 낙관적 조작으로 items 가 연속으로 바뀌므로 짧게 디바운스 — 연타 중 매번 조회 방지
+        const timer = window.setTimeout(() => {
+            recommendRepository.shopping()
+                .then((list) => setShopping(list.slice(0, SHOPPING_LIMIT)))
+                .catch(() => setShopping([]));
+        }, 300);
+        return () => window.clearTimeout(timer);
     }, [addOpen, items]);
 
     const openAddSheet = () => {
@@ -135,43 +180,70 @@ export default function FridgePage() {
         }
     };
 
-    const handleRemove = (id: string) => runMutation(async () => {
-        await fridgeRepository.remove(id); // 확인 없이 즉시 삭제 (확정 결정)
+    const handleRemove = (id: string) => {
         setSelected(null);
-        await reloadItems();
-    });
+        runOptimistic(
+            () => setItems((prev) => (prev ?? []).filter((i) => i.id !== id)),
+            () => fridgeRepository.remove(id)); // 확인 없이 즉시 삭제 (확정 결정)
+    };
 
-    const handleExpiringToggle = (item: FridgeItem) => runMutation(async () => {
-        await fridgeRepository.setExpiring(item.id, !item.expiring);
+    const handleExpiringToggle = (item: FridgeItem) => {
         setSelected(null);
-        await reloadItems();
-    });
+        runOptimistic(
+            () => setItems((prev) => (prev ?? []).map(
+                (i) => (i.id === item.id ? { ...i, expiring: !item.expiring } : i))),
+            () => fridgeRepository.setExpiring(item.id, !item.expiring));
+    };
 
-    const handleFrequentRemove = (name: string) => runMutation(async () => {
-        await fridgeRepository.removeFrequentIngredient(name);
+    const handleFrequentRemove = (name: string) => runOptimistic(
         // 지운 것만 빼고 나머지 순서 유지 (재정렬하지 않음)
-        setFrequentNames((prev) => prev.filter((n) => n !== name));
-    });
+        () => setFrequentNames((prev) => prev.filter((n) => n !== name)),
+        () => fridgeRepository.removeFrequentIngredient(name));
 
     const openEdit = (item: FridgeItem) => {
         setEditing(item);
         setEditName(item.name);
     };
 
-    const handleEditSave = () => runMutation(async () => {
+    const handleEditSave = () => {
         if (!editing || !editName.trim()) return;
-        await fridgeRepository.update(editing.id, { name: editName });
+        const { id } = editing;
+        const name = editName.trim();
         setEditing(null);
-        await reloadItems();
-    });
+        runOptimistic(
+            () => setItems((prev) => (prev ?? []).map((i) => (i.id === id ? { ...i, name } : i))),
+            () => fridgeRepository.update(id, { name }));
+    };
 
-    /** 날짜 즉시 저장 (2026-07-09 확정: 달력·저장 버튼 없이 스테퍼로 1탭 완결).
-        시트를 열어둔 채 하루씩 조정한다 */
-    const handleDateSet = (item: FridgeItem, addedDate: string) => runMutation(async () => {
-        await fridgeRepository.update(item.id, { addedDate });
+    /** 날짜 스테퍼 (2026-07-09 확정: 달력·저장 버튼 없이 1탭 완결 / 2026-07-19 낙관적 전환):
+        탭마다 화면은 즉시 하루씩 움직이고, 입력이 멈춘 뒤 최종 날짜만 1회 저장(디바운스) —
+        다섯 번 눌러도 요청 한 번. 다른 항목으로 넘어가면 이전 항목의 대기분을 먼저 저장한다. */
+    const pendingDate = useRef<{ id: string; addedDate: string; timer: number } | null>(null);
+    const flushDateSave = useCallback(() => {
+        const p = pendingDate.current;
+        if (!p) return;
+        pendingDate.current = null;
+        window.clearTimeout(p.timer);
+        void fridgeRepository.update(p.id, { addedDate: p.addedDate }).catch(async () => {
+            mutation.setError(MUTATION_ERROR_TEXT);
+            await reloadItems().catch(() => undefined);
+        });
+    }, [mutation, reloadItems]);
+    useEffect(() => flushDateSave, [flushDateSave]); // 화면 이탈 시 대기분 저장 (유실 방지)
+
+    const handleDateSet = (item: FridgeItem, addedDate: string) => {
+        if (pendingDate.current && pendingDate.current.id !== item.id) {
+            flushDateSave(); // 다른 항목의 대기분이 남아있으면 먼저 확정
+        }
         setSelected({ ...item, addedDate });
-        await reloadItems();
-    });
+        setItems((prev) => (prev ?? []).map((i) => (i.id === item.id ? { ...i, addedDate } : i)));
+        if (pendingDate.current) window.clearTimeout(pendingDate.current.timer);
+        pendingDate.current = {
+            id: item.id,
+            addedDate,
+            timer: window.setTimeout(flushDateSave, DATE_SAVE_DEBOUNCE_MS),
+        };
+    };
 
     const ownedNames = new Set((items ?? []).map((item) => item.name));
     const shelves = classifyShelves(items ?? []);

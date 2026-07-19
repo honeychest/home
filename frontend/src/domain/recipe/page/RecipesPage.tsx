@@ -214,10 +214,20 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
         const target = confirmReport;
         if (target === null) return;
         setConfirmReport(null);
+        // 낙관적 표시 (2026-07-19 냉장고와 같은 전환) — 확인 즉시 "신고됨", 실패 시에만 되돌림.
+        // 'already' 응답도 접수돼 있는 상태라는 뜻이라 같은 표시로 수렴
+        setReportedNames((prev) => new Set(prev).add(target.name));
         void reportMutation.run(async () => {
-            await reportRepository.report(target.videoId, target.name);
-            // 'already' 도 접수돼 있는 상태라는 뜻 — 같은 표시(신고됨)로 수렴
-            setReportedNames((prev) => new Set(prev).add(target.name));
+            try {
+                await reportRepository.report(target.videoId, target.name);
+            } catch (e) {
+                setReportedNames((prev) => {
+                    const next = new Set(prev);
+                    next.delete(target.name);
+                    return next;
+                });
+                throw e; // 실패 문구는 실행기가 표시
+            }
         });
     };
 
