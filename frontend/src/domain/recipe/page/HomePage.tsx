@@ -204,9 +204,7 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                                         disabled={xDownload.busy}
                                         onClick={() => handleXDownload(o)}
                                     >
-                                        {downloadingHeight === o.height
-                                            ? '받는 중…'
-                                            : `${o.height}p${!o.hasAudio ? ' (소리 없음)' : ''}`}
+                                        {downloadingHeight === o.height ? '받는 중…' : `${o.height}p`}
                                     </button>
                                 ))}
                             </div>

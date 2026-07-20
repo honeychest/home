@@ -42,7 +42,7 @@ public class XDownloadController {
     public record ResolveRequest(String url) {
     }
 
-    public record VideoOptionResponse(int height, String url, boolean hasAudio) {
+    public record VideoOptionResponse(int height, String url) {
     }
 
     public record ResolveResponse(String title, String thumbnail, List<VideoOptionResponse> options) {
@@ -62,7 +62,7 @@ public class XDownloadController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "다운로드 가능한 영상을 찾지 못했어요");
         }
         return new ResolveResponse(result.title(), result.thumbnail(), result.options().stream()
-                .map(o -> new VideoOptionResponse(o.height(), o.url(), o.hasAudio()))
+                .map(o -> new VideoOptionResponse(o.height(), o.url()))
                 .toList());
     }
 

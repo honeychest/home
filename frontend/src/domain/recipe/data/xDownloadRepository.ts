@@ -6,7 +6,6 @@ import { jsonBody, request } from './http';
 export interface XVideoOption {
     height: number;
     url: string;
-    hasAudio: boolean;
 }
 
 export interface XResolveResult {

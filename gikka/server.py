@@ -235,28 +235,34 @@ def resolve_x_formats(url):
     recipe 의 분석 파이프라인(extract)과 달리 서버가 영상 바이트를 만지지 않는 게 목적이라
     yt-dlp -J(메타데이터만) 로 포맷 목록을 조회해 twimg.com 주소를 그대로 돌려준다.
     """
-    out = run([YT_DLP, "-J", "--no-warnings", url], timeout=30)
+    try:
+        out = run([YT_DLP, "-J", "--no-warnings", url], timeout=30)
+    except RuntimeError as e:
+        # 영상이 아예 없는 게시물(사진·글만 있는 트윗)은 일시적 오류가 아니라 확정된 사실이라
+        # 빈 목록(200)으로 응답 — Spring 이 이미 "options 비면 404" 로 처리해 재시도 유도 문구
+        # (503) 대신 "못 찾았다"는 정확한 문구가 뜬다 (2026-07-20 실사용 제보로 구분).
+        if "No video could be found" in str(e):
+            return {"title": "", "thumbnail": "", "options": []}
+        raise
     info = json.loads(out)
     formats = info.get("formats") or []
+    # X 는 화질별로 두 종류를 같이 준다 — "https"(진짜 통짜 mp4 파일, 소리 포함)와
+    # "m3u8_native"(스트리밍 조각 재생목록 — 파일이 아니라 텍스트 매니페스트라 그대로 저장하면
+    # 재생이 안 됨, 소리도 별도 트랙으로 빠져 있음). vcodec/acodec 필드로 "소리 있는 쪽"을
+    # 고르려 했던 이전 로직은 틀렸다 — https 쪽은 yt-dlp 가 코덱을 프로브하지 않아 vcodec 이
+    # None(문자열 "none" 아님)이라 오히려 걸러졌었다(2026-07-20 실사용 다운로드 실패 제보로
+    # 원인 확인, avc1+mp4a 코덱이 실제로 들어있는 걸 바이트로 직접 검증). protocol=="https" 인
+    # 것만 남기면 된다 — X 플랫폼 특성상 이 진행형(progressive) mp4 는 항상 완성된 파일이다.
     best_by_height = {}
     for f in formats:
         height = f.get("height")
         video_url = f.get("url")
-        if not height or not video_url or f.get("vcodec") in (None, "none"):
+        if f.get("protocol") != "https" or not height or not video_url:
             continue
-        # 오디오까지 합쳐진 포맷을 우선 (별도 오디오 트랙 조합은 링크만 넘기는 방식에서 못 함)
-        has_audio = f.get("acodec") not in (None, "none")
-        existing = best_by_height.get(height)
-        if existing is None or (has_audio and not existing["hasAudio"]):
-            best_by_height[height] = {"height": height, "url": video_url, "hasAudio": has_audio}
+        best_by_height[height] = {"height": height, "url": video_url}
     options = sorted(best_by_height.values(), key=lambda o: o["height"], reverse=True)
     if not options:
         raise RuntimeError("다운로드 가능한 영상 포맷을 찾지 못함")
-    # 소리 합쳐진 화질이 하나라도 있으면 소리 없는 화질(영상 전용 트랙)은 숨긴다 — 상용 다운로더처럼
-    # "받으면 바로 재생 가능한 것"만 고른다 (2026-07-20, 소리 분리 노출 제보로 수정)
-    with_audio = [o for o in options if o["hasAudio"]]
-    if with_audio:
-        options = with_audio
     return {"title": info.get("title") or "", "thumbnail": info.get("thumbnail") or "", "options": options}
 
 
