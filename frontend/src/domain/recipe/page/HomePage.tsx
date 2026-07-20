@@ -8,7 +8,7 @@ import type { RegistrationItem } from '../data/registrationTypes';
 import { registerLink } from '../data/registerLink';
 import { HttpError } from '../data/http';
 import { xDownloadRepository } from '../data/xDownloadRepository';
-import type { XResolveResult } from '../data/xDownloadRepository';
+import type { XResolveResult, XVideoOption } from '../data/xDownloadRepository';
 import { useMutation } from './useMutation';
 import RcpButton from '../ui/RcpButton';
 import RcpInlineError from '../ui/RcpInlineError';
@@ -31,8 +31,11 @@ const X_NOT_X_LINK_TEXT = 'X(트위터) 링크만 지원해요';
 const X_NOT_FOUND_TEXT = '다운로드 가능한 영상을 찾지 못했어요 — 비공개이거나 삭제된 게시물일 수 있어요';
 const X_SERVICE_DOWN_TEXT = '지금은 영상 정보를 가져올 수 없어요 — 잠시 후 다시 시도해 주세요';
 const X_RESOLVE_FAIL_TEXT = '영상 정보를 가져오지 못했어요';
+const X_DOWNLOAD_FAIL_TEXT = '다운로드에 실패했어요 — 다시 시도해 주세요';
 const X_UNTITLED_TEXT = '제목 없는 게시물';
+class XDownloadFetchError extends Error {}
 const xDownloadMessage = (e: unknown) => {
+    if (e instanceof XDownloadFetchError) return X_DOWNLOAD_FAIL_TEXT;
     if (e instanceof HttpError && e.status === 400) return X_NOT_X_LINK_TEXT;
     if (e instanceof HttpError && e.status === 404) return X_NOT_FOUND_TEXT;
     if (e instanceof HttpError && e.status === 503) return X_SERVICE_DOWN_TEXT;
@@ -66,6 +69,31 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
         }
         setXResult(null);
         setXResult(await xDownloadRepository.resolve(url));
+    });
+
+    // <a download> 는 same-origin(또는 blob:/data:) 에서만 동작 — twimg.com 은 다른 출처라
+    // 그냥 href 로 걸면 브라우저가 다운로드 대신 그 주소로 이동(영상 플레이어 표시)해버린다
+    // (2026-07-20 실사용 제보로 확인). 그래서 폰이 fetch 로 직접 받은 뒤 blob: 주소로 바꿔
+    // 다운로드시킨다 — twimg.com CDN 이 access-control-allow-origin: * 를 내려줘서 가능
+    // (서버는 여전히 관여하지 않음, 폰이 X CDN 에서 직접 받는 것 그대로).
+    const [downloadingHeight, setDownloadingHeight] = useState<number | null>(null);
+    const handleXDownload = (o: XVideoOption) => void xDownload.run(async () => {
+        setDownloadingHeight(o.height);
+        try {
+            const res = await fetch(o.url).catch(() => { throw new XDownloadFetchError(); });
+            if (!res.ok) throw new XDownloadFetchError();
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `x-video-${o.height}p.mp4`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } finally {
+            setDownloadingHeight(null);
+        }
     });
 
     const reloadRecent = useCallback(() => {
@@ -169,15 +197,17 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                             />
                             <div className="rcp-chip-group">
                                 {xResult.options.map((o) => (
-                                    <a
+                                    <button
                                         key={o.url}
+                                        type="button"
                                         className="rcp-chip rcp-chip-on"
-                                        href={o.url}
-                                        download
-                                        rel="noopener noreferrer"
+                                        disabled={xDownload.busy}
+                                        onClick={() => handleXDownload(o)}
                                     >
-                                        {o.height}p{!o.hasAudio && ' (소리 없음)'}
-                                    </a>
+                                        {downloadingHeight === o.height
+                                            ? '받는 중…'
+                                            : `${o.height}p${!o.hasAudio ? ' (소리 없음)' : ''}`}
+                                    </button>
                                 ))}
                             </div>
                         </div>
