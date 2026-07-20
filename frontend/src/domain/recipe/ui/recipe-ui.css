@@ -774,6 +774,19 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 }
 .rcp-account-dev { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); }
 
+/* ── 홈 X 다운로드 카드 (2026-07-20 — 입력·버튼·결과가 다닥다닥 붙어 보인다는 지적으로
+   카드형 박스 + 내부 간격을 준다. 계정 줄이 쓰던 것과 같은 표면·테두리 언어 재사용) ── */
+.rcp-x-download {
+  display: flex; flex-direction: column; gap: var(--rcp-space-3);
+  padding: var(--rcp-space-4);
+  background: var(--rcp-surface);
+  border: 1px solid var(--rcp-line);
+  border-radius: var(--rcp-radius-md);
+  margin-top: var(--rcp-space-4);
+}
+.rcp-x-download > .rcp-section-label:first-child { margin: 0; } /* 카드 안 첫 줄 — 위 여백은 카드 padding 이 이미 줌 */
+.rcp-x-download-hint { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); }
+
 /* ── 모니터링 행: rcp-monitor-row (3차 — 전 사용자 대기열 실시간 추적, 오너 전용) ──
    버튼 요소(탭→액션 시트, 2026-07-13 확정) — RcpVideoRow 와 동일하게 버튼 기본값 리셋 */
 .rcp-monitor-row {
