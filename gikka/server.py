@@ -35,6 +35,12 @@ WHISPER_MODEL = os.environ.get("GIKKA_LOCAL_WHISPER_MODEL",
 LM_STUDIO_URL = os.environ.get("GIKKA_LOCAL_LM_STUDIO_URL", "http://localhost:2345/v1/chat/completions")
 LM_STUDIO_MODEL = os.environ.get("GIKKA_LOCAL_LM_STUDIO_MODEL", "Mac-mini-LLM")
 PORT = int(os.environ.get("GIKKA_LOCAL_PORT", "8765"))
+# X 다운로드 전용 부계정 로그인 세션 (2026-07-20 확정) — "민감한 콘텐츠" 플래그가 붙은 게시물은
+# 비로그인 요청엔 X 가 미디어 정보 자체를 안 내려줘서(guest token 한계, 실사용 제보로 확인)
+# 로그인 세션이 있어야 조회된다. 개인 계정이 아니라 이 기능 전용 부계정 세션만 사용 — 파일이
+# 없거나 만료돼도 비로그인 조회로 조용히 폴백한다(resolve_x_formats 참고).
+X_COOKIES_FILE = os.environ.get("GIKKA_LOCAL_X_COOKIES_FILE",
+                                 os.path.expanduser("~/gikka-local/x-cookies.txt"))
 # 12 → 24 (2026-07-16 실측). 12장이면 53초 영상에서 약 4초 간격이라 "떡을 넣는 순간"이
 # 프레임 사이로 빠져 모델이 주재료를 아예 못 보는 일이 있었다("떡볶이인데 떡이 없다" 제보의
 # 남은 2건이 정확히 이것). 같은 영상을 전사(음성)는 그대로 둔 채 프레임만 24장으로 올리자
@@ -235,8 +241,12 @@ def resolve_x_formats(url):
     recipe 의 분석 파이프라인(extract)과 달리 서버가 영상 바이트를 만지지 않는 게 목적이라
     yt-dlp -J(메타데이터만) 로 포맷 목록을 조회해 twimg.com 주소를 그대로 돌려준다.
     """
+    cmd = [YT_DLP, "-J", "--no-warnings"]
+    if os.path.isfile(X_COOKIES_FILE):
+        cmd += ["--cookies", X_COOKIES_FILE]
+    cmd.append(url)
     try:
-        out = run([YT_DLP, "-J", "--no-warnings", url], timeout=30)
+        out = run(cmd, timeout=30)
     except RuntimeError as e:
         # 영상이 아예 없는 게시물(사진·글만 있는 트윗)은 일시적 오류가 아니라 확정된 사실이라
         # 빈 목록(200)으로 응답 — Spring 이 이미 "options 비면 404" 로 처리해 재시도 유도 문구
