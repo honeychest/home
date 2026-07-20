@@ -34,7 +34,7 @@ public class XVideoResolver {
     public record VideoOption(int height, String url, boolean hasAudio) {
     }
 
-    public record ResolveResult(String title, List<VideoOption> options) {
+    public record ResolveResult(String title, String thumbnail, List<VideoOption> options) {
     }
 
     public ResolveResult resolve(String url) {
@@ -56,6 +56,6 @@ public class XVideoResolver {
             options.add(new VideoOption(o.path("height").asInt(), o.path("url").asText(),
                     o.path("hasAudio").asBoolean()));
         }
-        return new ResolveResult(node.path("title").asText(""), options);
+        return new ResolveResult(node.path("title").asText(""), node.path("thumbnail").asText(""), options);
     }
 }

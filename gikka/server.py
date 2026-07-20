@@ -252,7 +252,12 @@ def resolve_x_formats(url):
     options = sorted(best_by_height.values(), key=lambda o: o["height"], reverse=True)
     if not options:
         raise RuntimeError("다운로드 가능한 영상 포맷을 찾지 못함")
-    return {"title": info.get("title") or "", "options": options}
+    # 소리 합쳐진 화질이 하나라도 있으면 소리 없는 화질(영상 전용 트랙)은 숨긴다 — 상용 다운로더처럼
+    # "받으면 바로 재생 가능한 것"만 고른다 (2026-07-20, 소리 분리 노출 제보로 수정)
+    with_audio = [o for o in options if o["hasAudio"]]
+    if with_audio:
+        options = with_audio
+    return {"title": info.get("title") or "", "thumbnail": info.get("thumbnail") or "", "options": options}
 
 
 def sweep_orphaned_temp_dirs():

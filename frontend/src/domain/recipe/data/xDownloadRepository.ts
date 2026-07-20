@@ -11,6 +11,7 @@ export interface XVideoOption {
 
 export interface XResolveResult {
     title: string;
+    thumbnail: string;
     options: XVideoOption[];
 }
 

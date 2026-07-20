@@ -45,7 +45,7 @@ public class XDownloadController {
     public record VideoOptionResponse(int height, String url, boolean hasAudio) {
     }
 
-    public record ResolveResponse(String title, List<VideoOptionResponse> options) {
+    public record ResolveResponse(String title, String thumbnail, List<VideoOptionResponse> options) {
     }
 
     @PostMapping("/resolve")
@@ -61,7 +61,7 @@ public class XDownloadController {
         if (result.options().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "다운로드 가능한 영상을 찾지 못했어요");
         }
-        return new ResolveResponse(result.title(), result.options().stream()
+        return new ResolveResponse(result.title(), result.thumbnail(), result.options().stream()
                 .map(o -> new VideoOptionResponse(o.height(), o.url(), o.hasAudio()))
                 .toList());
     }

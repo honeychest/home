@@ -12,6 +12,7 @@ import type { XResolveResult } from '../data/xDownloadRepository';
 import { useMutation } from './useMutation';
 import RcpButton from '../ui/RcpButton';
 import RcpInlineError from '../ui/RcpInlineError';
+import RcpVideoRow from '../ui/RcpVideoRow';
 
 const RECENT_LIMIT = 10;
 
@@ -30,6 +31,7 @@ const X_NOT_X_LINK_TEXT = 'X(트위터) 링크만 지원해요';
 const X_NOT_FOUND_TEXT = '다운로드 가능한 영상을 찾지 못했어요 — 비공개이거나 삭제된 게시물일 수 있어요';
 const X_SERVICE_DOWN_TEXT = '지금은 영상 정보를 가져올 수 없어요 — 잠시 후 다시 시도해 주세요';
 const X_RESOLVE_FAIL_TEXT = '영상 정보를 가져오지 못했어요';
+const X_UNTITLED_TEXT = '제목 없는 게시물';
 const xDownloadMessage = (e: unknown) => {
     if (e instanceof HttpError && e.status === 400) return X_NOT_X_LINK_TEXT;
     if (e instanceof HttpError && e.status === 404) return X_NOT_FOUND_TEXT;
@@ -161,18 +163,23 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                     <RcpInlineError message={xDownload.error} />
                     {xResult && (
                         <div id="rcp-home-x-options">
-                            {xResult.title && <p className="rcp-thumb-name">{xResult.title}</p>}
-                            {xResult.options.map((o) => (
-                                <a
-                                    key={o.url}
-                                    className="rcp-btn-full"
-                                    href={o.url}
-                                    download
-                                    rel="noopener noreferrer"
-                                >
-                                    {o.height}p{!o.hasAudio && ' (소리 없음)'} 다운로드
-                                </a>
-                            ))}
+                            <RcpVideoRow
+                                title={xResult.title || X_UNTITLED_TEXT}
+                                thumbnailUrl={xResult.thumbnail || null}
+                            />
+                            <div className="rcp-chip-group">
+                                {xResult.options.map((o) => (
+                                    <a
+                                        key={o.url}
+                                        className="rcp-chip rcp-chip-on"
+                                        href={o.url}
+                                        download
+                                        rel="noopener noreferrer"
+                                    >
+                                        {o.height}p{!o.hasAudio && ' (소리 없음)'}
+                                    </a>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </section>
