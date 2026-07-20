@@ -6,6 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { registrationRepository } from '../data/registrationRepository';
 import type { RegistrationItem } from '../data/registrationTypes';
 import { registerLink } from '../data/registerLink';
+import { HttpError } from '../data/http';
+import { xDownloadRepository } from '../data/xDownloadRepository';
+import type { XResolveResult } from '../data/xDownloadRepository';
 import { useMutation } from './useMutation';
 import RcpButton from '../ui/RcpButton';
 import RcpInlineError from '../ui/RcpInlineError';
@@ -19,6 +22,20 @@ const REGISTER_FAIL_TEXT = '등록하지 못했어요 — 네트워크 확인 �
 const PASTE_FAIL_TEXT = '클립보드를 읽지 못했어요 — 보관함 탭에서 직접 붙여넣어 주세요';
 const UNTITLED_VIDEO_TEXT = '제목 없는 영상';
 const mutationMessage = () => REGISTER_FAIL_TEXT;
+
+// X(트위터) 다운로드 — recipe 등록·분석과 완전히 별개인 오너 전용 1회성 기능 (2026-07-20 확정,
+// 기록·이력 없음). 에러 계약: 상태 코드만 서버 계약이고 문구는 여기(화면)가 소유.
+const X_URL_MISSING_TEXT = '링크를 먼저 붙여넣어 주세요';
+const X_NOT_X_LINK_TEXT = 'X(트위터) 링크만 지원해요';
+const X_NOT_FOUND_TEXT = '다운로드 가능한 영상을 찾지 못했어요 — 비공개이거나 삭제된 게시물일 수 있어요';
+const X_SERVICE_DOWN_TEXT = '지금은 영상 정보를 가져올 수 없어요 — 잠시 후 다시 시도해 주세요';
+const X_RESOLVE_FAIL_TEXT = '영상 정보를 가져오지 못했어요';
+const xDownloadMessage = (e: unknown) => {
+    if (e instanceof HttpError && e.status === 400) return X_NOT_X_LINK_TEXT;
+    if (e instanceof HttpError && e.status === 404) return X_NOT_FOUND_TEXT;
+    if (e instanceof HttpError && e.status === 503) return X_SERVICE_DOWN_TEXT;
+    return X_RESOLVE_FAIL_TEXT;
+};
 
 interface HomePageProps {
     email: string;
@@ -34,6 +51,20 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
     const [recent, setRecent] = useState<RegistrationItem[]>([]);
     // 조작 실행기 (공용 useMutation — 연타 방지 + 실패 문구 한 곳, PLAYBOOK 관례 5)
     const mutation = useMutation(mutationMessage);
+
+    // X(트위터) 다운로드 — 붙여넣기 등록과는 별개 목적이라 실행기도 분리(문구 소유가 다름)
+    const [xUrl, setXUrl] = useState('');
+    const [xResult, setXResult] = useState<XResolveResult | null>(null);
+    const xDownload = useMutation(xDownloadMessage);
+    const handleXResolve = () => void xDownload.run(async () => {
+        const url = xUrl.trim();
+        if (!url) {
+            xDownload.setError(X_URL_MISSING_TEXT);
+            return;
+        }
+        setXResult(null);
+        setXResult(await xDownloadRepository.resolve(url));
+    });
 
     const reloadRecent = useCallback(() => {
         registrationRepository.recentDone(RECENT_LIMIT)
@@ -111,6 +142,40 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                         </button>
                     ))}
                 </div>
+            )}
+
+            {canViewMonitor && (
+                <section id="rcp-home-x-download">
+                    <h2 className="rcp-section-label">X 영상 다운로드</h2>
+                    <input
+                        className="rcp-input"
+                        id="rcp-home-x-url"
+                        placeholder="X(트위터) 게시물 링크"
+                        value={xUrl}
+                        onChange={(e) => setXUrl(e.target.value)}
+                    />
+                    <RcpButton className="rcp-btn-full" id="rcp-home-x-resolve"
+                        onClick={handleXResolve} disabled={xDownload.busy}>
+                        {xDownload.busy ? '불러오는 중…' : '해상도 불러오기'}
+                    </RcpButton>
+                    <RcpInlineError message={xDownload.error} />
+                    {xResult && (
+                        <div id="rcp-home-x-options">
+                            {xResult.title && <p className="rcp-thumb-name">{xResult.title}</p>}
+                            {xResult.options.map((o) => (
+                                <a
+                                    key={o.url}
+                                    className="rcp-btn-full"
+                                    href={o.url}
+                                    download
+                                    rel="noopener noreferrer"
+                                >
+                                    {o.height}p{!o.hasAudio && ' (소리 없음)'} 다운로드
+                                </a>
+                            ))}
+                        </div>
+                    )}
+                </section>
             )}
 
             <section className="rcp-account" id="rcp-home-account">

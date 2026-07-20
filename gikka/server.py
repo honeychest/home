@@ -230,6 +230,31 @@ def parse_model_json_array(text):
     return json.loads(match.group(0))
 
 
+def resolve_x_formats(url):
+    """X(트위터) 영상의 직접 CDN 주소만 뽑아낸다 — 다운로드하지 않는다 (2026-07-20 확정).
+    recipe 의 분석 파이프라인(extract)과 달리 서버가 영상 바이트를 만지지 않는 게 목적이라
+    yt-dlp -J(메타데이터만) 로 포맷 목록을 조회해 twimg.com 주소를 그대로 돌려준다.
+    """
+    out = run([YT_DLP, "-J", "--no-warnings", url], timeout=30)
+    info = json.loads(out)
+    formats = info.get("formats") or []
+    best_by_height = {}
+    for f in formats:
+        height = f.get("height")
+        video_url = f.get("url")
+        if not height or not video_url or f.get("vcodec") in (None, "none"):
+            continue
+        # 오디오까지 합쳐진 포맷을 우선 (별도 오디오 트랙 조합은 링크만 넘기는 방식에서 못 함)
+        has_audio = f.get("acodec") not in (None, "none")
+        existing = best_by_height.get(height)
+        if existing is None or (has_audio and not existing["hasAudio"]):
+            best_by_height[height] = {"height": height, "url": video_url, "hasAudio": has_audio}
+    options = sorted(best_by_height.values(), key=lambda o: o["height"], reverse=True)
+    if not options:
+        raise RuntimeError("다운로드 가능한 영상 포맷을 찾지 못함")
+    return {"title": info.get("title") or "", "options": options}
+
+
 def sweep_orphaned_temp_dirs():
     """실패로 남은 이전 임시 폴더 청소 — 서버 기동 시 1회 (2026-07-14 확정, 안전망)"""
     base = tempfile.gettempdir()
@@ -341,7 +366,7 @@ class Handler(BaseHTTPRequestHandler):
         return b"".join(chunks)
 
     def do_POST(self):
-        if self.path not in ("/extract", "/audit"):
+        if self.path not in ("/extract", "/audit", "/x-resolve"):
             self.send_response(404)
             self.end_headers()
             return
@@ -352,13 +377,17 @@ class Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(length)
         try:
             req = json.loads(body)
-            # 단일 워커(RegistrationWorker) 전제이나, 두 앱 인스턴스가 동시에 호출할 가능성을
-            # 대비해 직렬화 — LM Studio·whisper 는 한 번에 하나씩만 처리 (2026-07-14 확정)
-            with _lock:
-                if self.path == "/extract":
-                    result = extract(req["videoUrl"], req.get("title"), req.get("description"))
-                else:
-                    result = audit_ingredients(req["pendingNames"], req.get("allRepresentatives", []))
+            if self.path == "/x-resolve":
+                # LM Studio·whisper 를 안 쓰는 순수 조회라 _lock 대상 밖 (2026-07-20 확정)
+                result = resolve_x_formats(req["url"])
+            else:
+                # 단일 워커(RegistrationWorker) 전제이나, 두 앱 인스턴스가 동시에 호출할 가능성을
+                # 대비해 직렬화 — LM Studio·whisper 는 한 번에 하나씩만 처리 (2026-07-14 확정)
+                with _lock:
+                    if self.path == "/extract":
+                        result = extract(req["videoUrl"], req.get("title"), req.get("description"))
+                    else:
+                        result = audit_ingredients(req["pendingNames"], req.get("allRepresentatives", []))
             body = json.dumps(result, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
