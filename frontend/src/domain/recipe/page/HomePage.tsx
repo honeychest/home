@@ -3,6 +3,7 @@
 // 개발 모드(https 아님 = dev 폴백 자동 로그인)에서는 로그아웃·클립보드가 없어 안내로 대체한다.
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Settings } from 'lucide-react';
 import { registrationRepository } from '../data/registrationRepository';
 import type { RegistrationItem } from '../data/registrationTypes';
 import { registerLink } from '../data/registerLink';
@@ -11,10 +12,20 @@ import { xDownloadRepository } from '../data/xDownloadRepository';
 import type { XResolveResult, XVideoOption } from '../data/xDownloadRepository';
 import { useMutation } from './useMutation';
 import RcpButton from '../ui/RcpButton';
+import RcpBottomSheet from '../ui/RcpBottomSheet';
 import RcpInlineError from '../ui/RcpInlineError';
 import RcpVideoRow from '../ui/RcpVideoRow';
 
 const RECENT_LIMIT = 10;
+/** 헤더 계정 트리거 표시 이름 — 이메일 전문 대신 아이디 부분만 짧게 (2026-07-20 확정,
+    "7~8자 정도" 요청 반영). 전문은 계정 시트에서 확인 가능. */
+const ACCOUNT_LABEL_MAX = 8;
+function accountLabel(email: string): string {
+    const localPart = email.split('@')[0] || email;
+    return localPart.length > ACCOUNT_LABEL_MAX
+        ? `${localPart.slice(0, ACCOUNT_LABEL_MAX)}…`
+        : localPart;
+}
 
 // 에러 계약(CONTEXT.md): 사용자 문구는 프론트 소유
 const INVALID_URL_TEXT = '복사된 내용이 유튜브 링크가 아니에요 — 영상을 공유·복사한 뒤 눌러 주세요';
@@ -56,6 +67,7 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
     // dev 폴백은 http(로컬 개발)에서만, 진짜 구글 로그인은 배포(https)에서만 — CONTEXT.md 인증 절
     const isDevSession = window.location.protocol !== 'https:';
     const navigate = useNavigate();
+    const [accountSheetOpen, setAccountSheetOpen] = useState(false);
     const [recent, setRecent] = useState<RegistrationItem[]>([]);
     // 조작 실행기 (공용 useMutation — 연타 방지 + 실패 문구 한 곳, PLAYBOOK 관례 5)
     const mutation = useMutation(mutationMessage);
@@ -160,8 +172,18 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
 
     return (
         <main className="rcp-screen" id="rcp-home-page">
-            <header className="rcp-screen-header">
+            <header className="rcp-screen-header rcp-screen-header-row">
                 <h1 className="rcp-screen-title">홈</h1>
+                <button
+                    type="button"
+                    className="rcp-account-trigger"
+                    id="rcp-home-account-trigger"
+                    aria-label={`계정: ${email}`}
+                    onClick={() => setAccountSheetOpen(true)}
+                >
+                    <span>{accountLabel(email)}</span>
+                    <Settings size={18} aria-hidden="true" />
+                </button>
             </header>
 
             {canPaste ? (
@@ -201,9 +223,11 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                 </div>
             )}
 
-            {canViewMonitor && (
-                <section id="rcp-home-x-download">
-                    <h2 className="rcp-section-label">X 영상 다운로드</h2>
+            {/* 오너 전용에서 "로그인만 하면 누구나"로 완화 (2026-07-20 확정) — HomePage 는
+                RecipeApp 이 auth.phase==='in' 일 때만 렌더링하므로 이미 로그인 게이트를 통과한
+                상태, 별도 조건 불필요 */}
+            <section id="rcp-home-x-download">
+                <h2 className="rcp-section-label">X 영상 다운로드</h2>
                     <input
                         className="rcp-input"
                         id="rcp-home-x-url"
@@ -238,30 +262,30 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                         </div>
                     )}
                 </section>
-            )}
 
-            <section className="rcp-account" id="rcp-home-account">
-                <div className="rcp-account-info">
-                    <span className="rcp-account-email">{email}</span>
-                    {isDevSession && (
-                        <span className="rcp-account-dev" id="rcp-home-account-dev">
-                            개발 모드 — 구글 로그인 없이 자동 접속 중이에요
-                        </span>
-                    )}
-                </div>
+            <RcpBottomSheet open={accountSheetOpen} title="계정" onClose={() => setAccountSheetOpen(false)}>
+                <span className="rcp-account-email">{email}</span>
+                {isDevSession && (
+                    <span className="rcp-account-dev" id="rcp-home-account-dev">
+                        개발 모드 — 구글 로그인 없이 자동 접속 중이에요
+                    </span>
+                )}
                 {canViewMonitor && (
                     <RcpButton
                         variant="ghost"
+                        className="rcp-btn-full"
                         id="rcp-home-monitor-link"
-                        onClick={() => navigate('../monitor')}
+                        onClick={() => { setAccountSheetOpen(false); navigate('../monitor'); }}
                     >
                         모니터링
                     </RcpButton>
                 )}
                 {!isDevSession && (
-                    <RcpButton variant="ghost" id="rcp-home-logout" onClick={onLogout}>로그아웃</RcpButton>
+                    <RcpButton variant="ghost" className="rcp-btn-full" id="rcp-home-logout" onClick={onLogout}>
+                        로그아웃
+                    </RcpButton>
                 )}
-            </section>
+            </RcpBottomSheet>
         </main>
     );
 }

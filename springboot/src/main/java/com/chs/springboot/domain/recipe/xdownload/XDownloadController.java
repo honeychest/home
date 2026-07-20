@@ -1,4 +1,7 @@
-// [AGENT] X(트위터) 영상 다운로드 API — 오너 전용, 기록 없음(1회성 조회) (2026-07-20 확정)
+// [AGENT] X(트위터) 영상 다운로드 API — 로그인 사용자 전용, 기록 없음(1회성 조회)
+// (2026-07-20 확정 — 오너 전용에서 "로그인만 하면 누구나"로 완화. recipe 자체 로그인 제한
+// (GikkaAuthProperties.allowedEmails)은 GikkaAuthController 가 이미 걸고 있어 별도 게이트 불필요,
+// @GikkaUserId 가 미로그인 401 을 처리한다.)
 // recipe 의 등록·분석·냉장고 기능과 완전히 별개 — DB 저장·이력 없음. 링크를 주면 다운로드
 // 가능한 해상도 목록(직접 CDN 주소)만 돌려주고, 실제 다운로드는 폰 브라우저가 그 주소로 직접 한다.
 package com.chs.springboot.domain.recipe.xdownload;
@@ -8,9 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
-import com.chs.springboot.domain.recipe.user.GikkaUserRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,14 +30,9 @@ public class XDownloadController {
             "x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com");
 
     private final XVideoResolver resolver;
-    private final GikkaAuthProperties authProperties;
-    private final GikkaUserRepository users;
 
-    public XDownloadController(XVideoResolver resolver, GikkaAuthProperties authProperties,
-                               GikkaUserRepository users) {
+    public XDownloadController(XVideoResolver resolver) {
         this.resolver = resolver;
-        this.authProperties = authProperties;
-        this.users = users;
     }
 
     public record ResolveRequest(String url) {
@@ -48,9 +44,10 @@ public class XDownloadController {
     public record ResolveResponse(String title, String thumbnail, List<VideoOptionResponse> options) {
     }
 
+    // userId 자체는 안 쓰지만 @GikkaUserId 가 미로그인 요청을 401 로 막는 게이트 역할 —
+    // 파라미터를 지우면 로그인 여부를 아예 안 따지게 된다.
     @PostMapping("/resolve")
     public ResolveResponse resolve(@GikkaUserId long userId, @RequestBody ResolveRequest request) {
-        requireOwner(userId);
         String url = validUrl(request);
         XVideoResolver.ResolveResult result;
         try {
@@ -64,12 +61,6 @@ public class XDownloadController {
         return new ResolveResponse(result.title(), result.thumbnail(), result.options().stream()
                 .map(o -> new VideoOptionResponse(o.height(), o.url()))
                 .toList());
-    }
-
-    private void requireOwner(long userId) {
-        if (!authProperties.isOwner(users.findEmail(userId))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "오너 전용 기능");
-        }
     }
 
     private static String validUrl(ResolveRequest request) {
