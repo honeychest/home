@@ -39,6 +39,7 @@ class IngredientAuditControllerTest {
     private IngredientAuditController controller() {
         GikkaAuthProperties properties = new GikkaAuthProperties();
         properties.setAllowedEmails(List.of("owner@example.com"));
+        properties.setOwnerEmail("owner@example.com"); // isOwner() 는 2026-07-20 부터 이 값만 봄
         when(users.findEmail(OWNER_ID)).thenReturn("owner@example.com");
         when(users.findEmail(STRANGER_ID)).thenReturn("stranger@example.com");
         return new IngredientAuditController(dictionary, auditor, localAuditor, properties, users);

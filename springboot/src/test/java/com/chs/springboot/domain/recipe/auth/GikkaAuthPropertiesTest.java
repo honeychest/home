@@ -1,4 +1,5 @@
-// [AGENT] 오너 전용 화면 접근 판정 고정 (2026-07-13 확정 — 홈 탭 모니터링 링크 노출 조건)
+// [AGENT] 오너 전용 화면 접근 판정 고정 (2026-07-20 갱신 — ownerEmail 전용 설정으로 분리,
+// 홈 탭 모니터링 링크 노출 조건)
 package com.chs.springboot.domain.recipe.auth;
 
 import java.util.List;
@@ -12,20 +13,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class GikkaAuthPropertiesTest {
 
     @Test
-    @DisplayName("허용 목록에 있는 이메일만 오너로 판정")
-    void ownerRequiresAllowedEmail() {
+    @DisplayName("ownerEmail 과 같은 이메일만 오너로 판정")
+    void ownerRequiresOwnerEmail() {
         GikkaAuthProperties properties = new GikkaAuthProperties();
-        properties.setAllowedEmails(List.of("owner@example.com"));
+        properties.setOwnerEmail("owner@example.com");
 
         assertTrue(properties.isOwner("owner@example.com"));
         assertFalse(properties.isOwner("other@example.com"));
     }
 
     @Test
-    @DisplayName("허용 목록이 비면(2단계 공개 상태) 아무도 오너가 아님 — 안전 기본값")
-    void noOwnerWhenAllowlistEmpty() {
+    @DisplayName("ownerEmail 이 비어 있으면 아무도 오너가 아님 — 안전 기본값")
+    void noOwnerWhenOwnerEmailUnset() {
         GikkaAuthProperties properties = new GikkaAuthProperties();
 
         assertFalse(properties.isOwner("owner@example.com"));
+    }
+
+    @Test
+    @DisplayName("로그인 허용 목록(allowedEmails)이 비어 공개 상태여도 오너 판정은 그대로 동작 "
+            + "(2026-07-20 확정 — 예전엔 이 목록을 비우면 오너도 같이 막혔음)")
+    void ownerStillWorksWhenLoginIsPublic() {
+        GikkaAuthProperties properties = new GikkaAuthProperties();
+        properties.setOwnerEmail("owner@example.com");
+        properties.setAllowedEmails(List.of());
+
+        assertTrue(properties.isOwner("owner@example.com"));
     }
 }
