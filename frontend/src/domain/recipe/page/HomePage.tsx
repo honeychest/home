@@ -103,10 +103,13 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
     // 시점이 아니라 해상도 버튼이 뜨는 순간부터 미리 보여준다(아래 JSX, 2026-07-20 확정 —
     // "실패하고 나서야 안내가 뜨는 건 늦다"는 지적 반영). 콘솔 로그는 "[x-download]" 로 시작 —
     // 다음에 또 실패하면 브라우저 개발자도구 콘솔에서 이 태그로 필터링해 로그를 확인할 것.
-    const [downloadingHeight, setDownloadingHeight] = useState<number | null>(null);
-    const handleXDownload = (o: XVideoOption) => void xDownload.run(async () => {
-        setDownloadingHeight(o.height);
-        console.log('[x-download] fetch 시작', { height: o.height, url: o.url });
+    // 영상이 여러 개인 게시물에서 서로 다른 항목이 같은 화질(height)을 가질 수 있어 항목 번호까지
+    // 합친 키로 구분한다 (2026-07-20, 응답이 "영상 1개"에서 목록으로 바뀌며 함께 수정)
+    const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+    const handleXDownload = (itemIndex: number, o: XVideoOption) => void xDownload.run(async () => {
+        const key = `${itemIndex}-${o.height}`;
+        setDownloadingKey(key);
+        console.log('[x-download] fetch 시작', { itemIndex, height: o.height, url: o.url });
         try {
             let res: Response;
             try {
@@ -128,14 +131,14 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
             const blobUrl = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = blobUrl;
-            link.download = `x-video-${o.height}p.mp4`;
+            link.download = `x-video-${itemIndex + 1}-${o.height}p.mp4`;
             document.body.appendChild(link);
             link.click();
             link.remove();
             setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
             console.log('[x-download] 다운로드 트리거 완료');
         } finally {
-            setDownloadingHeight(null);
+            setDownloadingKey(null);
         }
     });
 
@@ -208,28 +211,30 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                     {xDownload.busy ? '찾는 중…' : '영상 찾기'}
                 </RcpButton>
                 <RcpInlineError message={xDownload.error} />
-                {xResult && (
-                    <div id="rcp-home-x-options">
+                {/* 영상이 여러 개인 게시물은 항목마다 하나씩 (2026-07-20 확정) */}
+                {xResult && xResult.items.map((item, itemIndex) => (
+                    // eslint-disable-next-line react/no-array-index-key -- 서버가 안정적인 id 를 안 줌, 목록이 그 자리에서 안 바뀜
+                    <div key={itemIndex} id={`rcp-home-x-item-${itemIndex}`}>
                         <RcpVideoRow
-                            title={xResult.title || X_UNTITLED_TEXT}
-                            thumbnailUrl={xResult.thumbnail || null}
+                            title={item.title || X_UNTITLED_TEXT}
+                            thumbnailUrl={item.thumbnail || null}
                         />
                         <p className="rcp-x-download-hint">{X_FALLBACK_TEXT}</p>
                         <div className="rcp-chip-group">
-                            {xResult.options.map((o) => (
+                            {item.options.map((o) => (
                                 <button
                                     key={o.url}
                                     type="button"
                                     className="rcp-chip rcp-chip-on"
                                     disabled={xDownload.busy}
-                                    onClick={() => handleXDownload(o)}
+                                    onClick={() => handleXDownload(itemIndex, o)}
                                 >
-                                    {downloadingHeight === o.height ? '받는 중…' : `${o.height}p`}
+                                    {downloadingKey === `${itemIndex}-${o.height}` ? '받는 중…' : `${o.height}p`}
                                 </button>
                             ))}
                         </div>
                     </div>
-                )}
+                ))}
             </section>
 
             <RcpBottomSheet open={accountSheetOpen} title="계정" onClose={() => setAccountSheetOpen(false)}>

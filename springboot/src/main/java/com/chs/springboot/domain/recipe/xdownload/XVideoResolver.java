@@ -34,7 +34,12 @@ public class XVideoResolver {
     public record VideoOption(int height, String url) {
     }
 
-    public record ResolveResult(String title, String thumbnail, List<VideoOption> options) {
+    /** 게시물 안 영상 하나 — 영상이 여러 개인 게시물은 이게 여러 개 온다 (2026-07-20 확정,
+        3개짜리 게시물 다운로드 실패 제보로 응답을 "영상 1개" 에서 "영상 목록"으로 바꿈) */
+    public record VideoItem(String title, String thumbnail, List<VideoOption> options) {
+    }
+
+    public record ResolveResult(List<VideoItem> items) {
     }
 
     public ResolveResult resolve(String url) {
@@ -51,10 +56,14 @@ public class XVideoResolver {
     }
 
     private static ResolveResult parse(JsonNode node) {
-        List<VideoOption> options = new ArrayList<>();
-        for (JsonNode o : node.path("options")) {
-            options.add(new VideoOption(o.path("height").asInt(), o.path("url").asText()));
+        List<VideoItem> items = new ArrayList<>();
+        for (JsonNode itemNode : node.path("items")) {
+            List<VideoOption> options = new ArrayList<>();
+            for (JsonNode o : itemNode.path("options")) {
+                options.add(new VideoOption(o.path("height").asInt(), o.path("url").asText()));
+            }
+            items.add(new VideoItem(itemNode.path("title").asText(""), itemNode.path("thumbnail").asText(""), options));
         }
-        return new ResolveResult(node.path("title").asText(""), node.path("thumbnail").asText(""), options);
+        return new ResolveResult(items);
     }
 }

@@ -8,14 +8,20 @@ export interface XVideoOption {
     url: string;
 }
 
-export interface XResolveResult {
+/** 게시물 안 영상 하나 — 영상이 여러 개인 게시물(최대 4개까지 가정)은 배열에 여러 개 온다
+    (2026-07-20 확정, 3개짜리 게시물 다운로드 실패 제보로 "영상 1개" 응답에서 목록으로 바꿈) */
+export interface XVideoItem {
     title: string;
     thumbnail: string;
     options: XVideoOption[];
 }
 
+export interface XResolveResult {
+    items: XVideoItem[];
+}
+
 export interface XDownloadRepository {
-    /** 오너 전용(서버가 403으로 게이트) — X 링크가 아니면 400, 영상을 못 찾으면 404 */
+    /** 로그인 사용자 전용(서버가 401로 게이트) — X 링크가 아니면 400, 영상을 못 찾으면 404 */
     resolve(url: string): Promise<XResolveResult>;
 }
 

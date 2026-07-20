@@ -236,10 +236,32 @@ def parse_model_json_array(text):
     return json.loads(match.group(0))
 
 
+def _x_format_options(formats):
+    # X 는 화질별로 두 종류를 같이 준다 — "https"(진짜 통짜 mp4 파일, 소리 포함)와
+    # "m3u8_native"(스트리밍 조각 재생목록 — 파일이 아니라 텍스트 매니페스트라 그대로 저장하면
+    # 재생이 안 됨, 소리도 별도 트랙으로 빠져 있음). vcodec/acodec 필드로 "소리 있는 쪽"을
+    # 고르려 했던 이전 로직은 틀렸다 — https 쪽은 yt-dlp 가 코덱을 프로브하지 않아 vcodec 이
+    # None(문자열 "none" 아님)이라 오히려 걸러졌었다(2026-07-20 실사용 다운로드 실패 제보로
+    # 원인 확인, avc1+mp4a 코덱이 실제로 들어있는 걸 바이트로 직접 검증). protocol=="https" 인
+    # 것만 남기면 된다 — X 플랫폼 특성상 이 진행형(progressive) mp4 는 항상 완성된 파일이다.
+    best_by_height = {}
+    for f in formats or []:
+        height = f.get("height")
+        video_url = f.get("url")
+        if f.get("protocol") != "https" or not height or not video_url:
+            continue
+        best_by_height[height] = {"height": height, "url": video_url}
+    return sorted(best_by_height.values(), key=lambda o: o["height"], reverse=True)
+
+
 def resolve_x_formats(url):
     """X(트위터) 영상의 직접 CDN 주소만 뽑아낸다 — 다운로드하지 않는다 (2026-07-20 확정).
     recipe 의 분석 파이프라인(extract)과 달리 서버가 영상 바이트를 만지지 않는 게 목적이라
     yt-dlp -J(메타데이터만) 로 포맷 목록을 조회해 twimg.com 주소를 그대로 돌려준다.
+
+    영상이 여러 개인 게시물은 yt-dlp 가 최상위에 formats 가 없는 "playlist" 구조(entries 목록,
+    각 항목이 독립된 영상 하나)로 돌려준다 — 응답을 항상 items 목록으로 통일해 1개짜리도
+    같은 모양으로 다룬다 (2026-07-20 확정, 3개짜리 게시물 다운로드 실패 제보로 발견).
     """
     cmd = [YT_DLP, "-J", "--no-warnings"]
     if os.path.isfile(X_COOKIES_FILE):
@@ -249,31 +271,24 @@ def resolve_x_formats(url):
         out = run(cmd, timeout=30)
     except RuntimeError as e:
         # 영상이 아예 없는 게시물(사진·글만 있는 트윗)은 일시적 오류가 아니라 확정된 사실이라
-        # 빈 목록(200)으로 응답 — Spring 이 이미 "options 비면 404" 로 처리해 재시도 유도 문구
+        # 빈 목록(200)으로 응답 — Spring 이 이미 "items 비면 404" 로 처리해 재시도 유도 문구
         # (503) 대신 "못 찾았다"는 정확한 문구가 뜬다 (2026-07-20 실사용 제보로 구분).
         if "No video could be found" in str(e):
-            return {"title": "", "thumbnail": "", "options": []}
+            return {"items": []}
         raise
     info = json.loads(out)
-    formats = info.get("formats") or []
-    # X 는 화질별로 두 종류를 같이 준다 — "https"(진짜 통짜 mp4 파일, 소리 포함)와
-    # "m3u8_native"(스트리밍 조각 재생목록 — 파일이 아니라 텍스트 매니페스트라 그대로 저장하면
-    # 재생이 안 됨, 소리도 별도 트랙으로 빠져 있음). vcodec/acodec 필드로 "소리 있는 쪽"을
-    # 고르려 했던 이전 로직은 틀렸다 — https 쪽은 yt-dlp 가 코덱을 프로브하지 않아 vcodec 이
-    # None(문자열 "none" 아님)이라 오히려 걸러졌었다(2026-07-20 실사용 다운로드 실패 제보로
-    # 원인 확인, avc1+mp4a 코덱이 실제로 들어있는 걸 바이트로 직접 검증). protocol=="https" 인
-    # 것만 남기면 된다 — X 플랫폼 특성상 이 진행형(progressive) mp4 는 항상 완성된 파일이다.
-    best_by_height = {}
-    for f in formats:
-        height = f.get("height")
-        video_url = f.get("url")
-        if f.get("protocol") != "https" or not height or not video_url:
-            continue
-        best_by_height[height] = {"height": height, "url": video_url}
-    options = sorted(best_by_height.values(), key=lambda o: o["height"], reverse=True)
-    if not options:
-        raise RuntimeError("다운로드 가능한 영상 포맷을 찾지 못함")
-    return {"title": info.get("title") or "", "thumbnail": info.get("thumbnail") or "", "options": options}
+    raw_entries = info.get("entries") if info.get("_type") == "playlist" else [info]
+    items = []
+    for entry in (raw_entries or []):
+        options = _x_format_options(entry.get("formats"))
+        if not options:
+            continue  # 이 항목만 다운로드 가능한 형식이 없음 — 나머지 항목은 그대로 살린다
+        items.append({
+            "title": entry.get("title") or "",
+            "thumbnail": entry.get("thumbnail") or "",
+            "options": options,
+        })
+    return {"items": items}
 
 
 def sweep_orphaned_temp_dirs():

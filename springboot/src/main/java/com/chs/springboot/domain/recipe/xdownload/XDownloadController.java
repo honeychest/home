@@ -41,7 +41,13 @@ public class XDownloadController {
     public record VideoOptionResponse(int height, String url) {
     }
 
-    public record ResolveResponse(String title, String thumbnail, List<VideoOptionResponse> options) {
+    /** 게시물 안 영상 하나 — 영상이 여러 개인 게시물(최대 4개까지 가정)은 이게 여러 개 온다
+        (2026-07-20 확정, 3개짜리 게시물 다운로드 실패 제보로 응답을 "영상 1개" 에서
+        "영상 목록"으로 바꿈) */
+    public record VideoItemResponse(String title, String thumbnail, List<VideoOptionResponse> options) {
+    }
+
+    public record ResolveResponse(List<VideoItemResponse> items) {
     }
 
     // userId 자체는 안 쓰지만 @GikkaUserId 가 미로그인 요청을 401 로 막는 게이트 역할 —
@@ -55,11 +61,13 @@ public class XDownloadController {
         } catch (XVideoResolver.ResolveFailedException e) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "영상 정보를 가져오지 못했어요");
         }
-        if (result.options().isEmpty()) {
+        if (result.items().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "다운로드 가능한 영상을 찾지 못했어요");
         }
-        return new ResolveResponse(result.title(), result.thumbnail(), result.options().stream()
-                .map(o -> new VideoOptionResponse(o.height(), o.url()))
+        return new ResolveResponse(result.items().stream()
+                .map(i -> new VideoItemResponse(i.title(), i.thumbnail(), i.options().stream()
+                        .map(o -> new VideoOptionResponse(o.height(), o.url()))
+                        .toList()))
                 .toList());
     }
 
