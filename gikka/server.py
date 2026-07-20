@@ -41,6 +41,11 @@ PORT = int(os.environ.get("GIKKA_LOCAL_PORT", "8765"))
 # 없거나 만료돼도 비로그인 조회로 조용히 폴백한다(resolve_x_formats 참고).
 X_COOKIES_FILE = os.environ.get("GIKKA_LOCAL_X_COOKIES_FILE",
                                  os.path.expanduser("~/gikka-local/x-cookies.txt"))
+# X 요청 속도 제한 (2026-07-20 확정) — X 가 실제로 어느 선에서 차단하는지 공개된 기준이 없어
+# ("가드레일 있냐"는 질문 계기) Gemini 쪽(GeminiRateLimiter)과 같은 사상으로 보수적으로 시작해
+# 429 를 보면 더 쉬는 적응형 방식을 쓴다. 요청 사이 최소 간격 + 429 감지 시 장기 대기.
+X_MIN_REQUEST_INTERVAL_SECONDS = 1.5
+X_BACKOFF_SECONDS = 60
 # 12 → 24 (2026-07-16 실측). 12장이면 53초 영상에서 약 4초 간격이라 "떡을 넣는 순간"이
 # 프레임 사이로 빠져 모델이 주재료를 아예 못 보는 일이 있었다("떡볶이인데 떡이 없다" 제보의
 # 남은 2건이 정확히 이것). 같은 영상을 전사(음성)는 그대로 둔 채 프레임만 24장으로 올리자
@@ -254,6 +259,34 @@ def _x_format_options(formats):
     return sorted(best_by_height.values(), key=lambda o: o["height"], reverse=True)
 
 
+_x_lock = threading.Lock()
+_x_last_request_at = 0.0
+_x_blocked_until = 0.0
+
+
+def _x_throttle():
+    """X 로 나가는 요청을 한 번에 하나씩, 최소 간격을 두고 내보낸다 — 락을 요청 전체 동안 쥐고
+    있어서 대기 중인 다른 요청은 자연스럽게 순서대로 줄을 선다(2026-07-20 확정, 별도 큐 자료구조
+    없이 lock 하나로 같은 효과)."""
+    global _x_last_request_at
+    now = time.time()
+    if now < _x_blocked_until:
+        wait_left = int(_x_blocked_until - now)
+        raise RuntimeError(f"X 요청이 일시적으로 제한돼 있음 (약 {wait_left}초 후 재시도)")
+    wait = X_MIN_REQUEST_INTERVAL_SECONDS - (now - _x_last_request_at)
+    if wait > 0:
+        time.sleep(wait)
+    _x_last_request_at = time.time()
+
+
+def _x_note_possible_rate_limit(message):
+    """429 로 보이는 실패면 한동안 아예 요청을 안 내보낸다 — X 의 실제 차단 기준은 공개돼 있지
+    않아(2026-07-20 사용자 질문 계기) 정확한 값 대신 보수적으로 길게 쉬는 쪽을 택한다."""
+    global _x_blocked_until
+    if "429" in message or "Too Many Requests" in message:
+        _x_blocked_until = time.time() + X_BACKOFF_SECONDS
+
+
 def resolve_x_formats(url):
     """X(트위터) 영상의 직접 CDN 주소만 뽑아낸다 — 다운로드하지 않는다 (2026-07-20 확정).
     recipe 의 분석 파이프라인(extract)과 달리 서버가 영상 바이트를 만지지 않는 게 목적이라
@@ -267,15 +300,18 @@ def resolve_x_formats(url):
     if os.path.isfile(X_COOKIES_FILE):
         cmd += ["--cookies", X_COOKIES_FILE]
     cmd.append(url)
-    try:
-        out = run(cmd, timeout=30)
-    except RuntimeError as e:
-        # 영상이 아예 없는 게시물(사진·글만 있는 트윗)은 일시적 오류가 아니라 확정된 사실이라
-        # 빈 목록(200)으로 응답 — Spring 이 이미 "items 비면 404" 로 처리해 재시도 유도 문구
-        # (503) 대신 "못 찾았다"는 정확한 문구가 뜬다 (2026-07-20 실사용 제보로 구분).
-        if "No video could be found" in str(e):
-            return {"items": []}
-        raise
+    with _x_lock:
+        _x_throttle()
+        try:
+            out = run(cmd, timeout=30)
+        except RuntimeError as e:
+            # 영상이 아예 없는 게시물(사진·글만 있는 트윗)은 일시적 오류가 아니라 확정된 사실이라
+            # 빈 목록(200)으로 응답 — Spring 이 이미 "items 비면 404" 로 처리해 재시도 유도 문구
+            # (503) 대신 "못 찾았다"는 정확한 문구가 뜬다 (2026-07-20 실사용 제보로 구분).
+            if "No video could be found" in str(e):
+                return {"items": []}
+            _x_note_possible_rate_limit(str(e))
+            raise
     info = json.loads(out)
     raw_entries = info.get("entries") if info.get("_type") == "playlist" else [info]
     items = []

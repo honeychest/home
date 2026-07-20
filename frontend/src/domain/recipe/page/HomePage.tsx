@@ -163,7 +163,10 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                     aria-label={`계정: ${email}`}
                     onClick={() => setAccountSheetOpen(true)}
                 >
-                    <span>{accountLabel(email)}</span>
+                    {/* 오너 본인 계정명은 화면에 안 보이게 (2026-07-20 확정 — 오너가 버그 스크린샷을
+                        찍어 공유할 때 자기 계정명이 그대로 찍히는 문제. 아이콘만 남기고, 접근성용
+                        aria-label 에는 그대로 실어둔다 — 화면엔 안 보여도 스크린리더는 알 수 있게) */}
+                    {!canViewMonitor && <span>{accountLabel(email)}</span>}
                     <Settings size={18} aria-hidden="true" />
                 </button>
             </header>
@@ -238,7 +241,8 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
             </section>
 
             <RcpBottomSheet open={accountSheetOpen} title="계정" onClose={() => setAccountSheetOpen(false)}>
-                <span className="rcp-account-email">{email}</span>
+                {/* 오너 본인 이메일도 시트 안에서 가림 — 헤더 트리거와 같은 이유(스크린샷 노출) */}
+                {!canViewMonitor && <span className="rcp-account-email">{email}</span>}
                 {isDevSession && (
                     <span className="rcp-account-dev" id="rcp-home-account-dev">
                         개발 모드 — 구글 로그인 없이 자동 접속 중이에요
