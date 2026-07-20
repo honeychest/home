@@ -31,11 +31,9 @@ const X_NOT_X_LINK_TEXT = 'X(트위터) 링크만 지원해요';
 const X_NOT_FOUND_TEXT = '다운로드 가능한 영상을 찾지 못했어요 — 비공개이거나 삭제된 게시물일 수 있어요';
 const X_SERVICE_DOWN_TEXT = '지금은 영상 정보를 가져올 수 없어요 — 잠시 후 다시 시도해 주세요';
 const X_RESOLVE_FAIL_TEXT = '영상 정보를 가져오지 못했어요';
-const X_DOWNLOAD_FAIL_TEXT = '다운로드에 실패했어요 — 다시 시도해 주세요';
+const X_FALLBACK_TEXT = '바로 저장은 안 돼서 새 창으로 열었어요 — 길게 눌러 저장해 주세요';
 const X_UNTITLED_TEXT = '제목 없는 게시물';
-class XDownloadFetchError extends Error {}
 const xDownloadMessage = (e: unknown) => {
-    if (e instanceof XDownloadFetchError) return X_DOWNLOAD_FAIL_TEXT;
     if (e instanceof HttpError && e.status === 400) return X_NOT_X_LINK_TEXT;
     if (e instanceof HttpError && e.status === 404) return X_NOT_FOUND_TEXT;
     if (e instanceof HttpError && e.status === 503) return X_SERVICE_DOWN_TEXT;
@@ -76,13 +74,36 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
     // (2026-07-20 실사용 제보로 확인). 그래서 폰이 fetch 로 직접 받은 뒤 blob: 주소로 바꿔
     // 다운로드시킨다 — twimg.com CDN 이 access-control-allow-origin: * 를 내려줘서 가능
     // (서버는 여전히 관여하지 않음, 폰이 X CDN 에서 직접 받는 것 그대로).
+    // 그런데 실사용에서 이 fetch 가 즉시 실패하는 사례가 나왔다(원인 미확정 — 광고 차단기의
+    // "amplify" 오탐 또는 진짜 CORS 누락 둘 다 가능, 콘솔 로그 없이는 구분 불가). 원인이 뭐든
+    // 대응은 같아서(서버 프록시는 안 씀 — 이전 결정 유지) 실패하면 새 창으로 그냥 열어
+    // 수동 저장(길게 눌러 저장)이라도 가능하게 폴백한다. 콘솔 로그는 "[x-download]" 로 시작 —
+    // 다음에 또 실패하면 브라우저 개발자도구 콘솔에서 이 태그로 필터링해 로그를 확인할 것
+    // (2026-07-20 재현 제보로 추가).
     const [downloadingHeight, setDownloadingHeight] = useState<number | null>(null);
     const handleXDownload = (o: XVideoOption) => void xDownload.run(async () => {
         setDownloadingHeight(o.height);
+        console.log('[x-download] fetch 시작', { height: o.height, url: o.url });
         try {
-            const res = await fetch(o.url).catch(() => { throw new XDownloadFetchError(); });
-            if (!res.ok) throw new XDownloadFetchError();
+            let res: Response;
+            try {
+                res = await fetch(o.url);
+            } catch (e) {
+                console.error('[x-download] fetch 자체가 실패(네트워크/CORS/차단기 등)', e);
+                window.open(o.url, '_blank', 'noopener,noreferrer');
+                xDownload.setError(X_FALLBACK_TEXT);
+                return;
+            }
+            console.log('[x-download] fetch 응답', { status: res.status, ok: res.ok,
+                contentType: res.headers.get('content-type'), contentLength: res.headers.get('content-length') });
+            if (!res.ok) {
+                console.error('[x-download] 응답 상태 실패', res.status);
+                window.open(o.url, '_blank', 'noopener,noreferrer');
+                xDownload.setError(X_FALLBACK_TEXT);
+                return;
+            }
             const blob = await res.blob();
+            console.log('[x-download] blob 확보', { size: blob.size, type: blob.type });
             const blobUrl = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = blobUrl;
@@ -91,6 +112,7 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
             link.click();
             link.remove();
             setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+            console.log('[x-download] 다운로드 트리거 완료');
         } finally {
             setDownloadingHeight(null);
         }
