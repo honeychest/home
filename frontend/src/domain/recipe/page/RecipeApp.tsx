@@ -9,6 +9,7 @@ import { Activity, BookMarked, LogOut } from 'lucide-react';
 import type { RcpTab } from '../ui/RcpTabBar';
 import RcpTabBar from '../ui/RcpTabBar';
 import RcpButton from '../ui/RcpButton';
+import RcpBottomSheet from '../ui/RcpBottomSheet';
 import { authRepository } from '../data/authRepository';
 import { setSessionExpiredHandler } from '../data/http';
 import DictionaryPage from './DictionaryPage';
@@ -60,6 +61,66 @@ function useGikkaDocumentMeta() {
     }, []);
 }
 
+// ── 앱으로 설치 팝업 (2026-07-20 확정) — 크롬(안드로이드)은 beforeinstallprompt 를 가로채
+// [설치하기]로 바로 설치, iOS Safari 는 그 이벤트 자체가 없어 "공유 → 홈 화면에 추가" 안내만
+// 보여준다. 한 번 닫거나 설치하면 다시 안 뜨게 localStorage 에 남긴다(설치 유도 반복은 성가심).
+const INSTALL_DISMISSED_KEY = 'gikka-install-dismissed';
+
+interface BeforeInstallPromptEvent extends Event {
+    prompt(): Promise<void>;
+    userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+const isStandalone = () =>
+    window.matchMedia('(display-mode: standalone)').matches
+    // iOS Safari 는 display-mode 미디어쿼리 대신 이 비표준 플래그로만 확인 가능
+    || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+
+function useInstallPrompt() {
+    const [deferredEvent, setDeferredEvent] = useState<BeforeInstallPromptEvent | null>(null);
+    const [open, setOpen] = useState(false);
+
+    useEffect(() => {
+        if (isStandalone() || localStorage.getItem(INSTALL_DISMISSED_KEY)) return undefined;
+
+        const onBeforeInstall = (e: Event) => {
+            e.preventDefault(); // 브라우저 기본 미니 인포바 대신 우리 시트로
+            setDeferredEvent(e as BeforeInstallPromptEvent);
+            setOpen(true);
+        };
+        const onInstalled = () => {
+            localStorage.setItem(INSTALL_DISMISSED_KEY, '1');
+            setOpen(false);
+        };
+        window.addEventListener('beforeinstallprompt', onBeforeInstall);
+        window.addEventListener('appinstalled', onInstalled);
+
+        // iOS 는 beforeinstallprompt 가 아예 없어 안내문만 — 이벤트 대신 바로 연다
+        if (isIOS()) setOpen(true);
+
+        return () => {
+            window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+            window.removeEventListener('appinstalled', onInstalled);
+        };
+    }, []);
+
+    const install = async () => {
+        if (!deferredEvent) return;
+        await deferredEvent.prompt();
+        await deferredEvent.userChoice; // 수락·거절 무관 — 어느 쪽이든 다시 안 물어봄
+        setDeferredEvent(null);
+        setOpen(false);
+        localStorage.setItem(INSTALL_DISMISSED_KEY, '1');
+    };
+    const dismiss = () => {
+        setOpen(false);
+        localStorage.setItem(INSTALL_DISMISSED_KEY, '1');
+    };
+
+    return { open, canPrompt: deferredEvent !== null, install, dismiss };
+}
+
 type AuthState =
     | { phase: 'loading' }
     | { phase: 'in'; email: string; canViewMonitor: boolean }
@@ -68,6 +129,7 @@ type AuthState =
 
 export default function RecipeApp() {
     useGikkaDocumentMeta();
+    const install = useInstallPrompt();
     const [auth, setAuth] = useState<AuthState>({ phase: 'loading' });
     const inMonitor = useLocation().pathname.startsWith(MONITOR_PATH);
 
@@ -149,6 +211,24 @@ export default function RecipeApp() {
                 <Route path="*" element={<Navigate to="fridge" replace />} />
             </Routes>
             <RcpTabBar tabs={inMonitor ? MONITOR_TABS : undefined} />
+
+            <RcpBottomSheet open={install.open} title="앱으로 설치" onClose={install.dismiss}>
+                {install.canPrompt ? (
+                    <>
+                        <p className="rcp-sheet-detail">
+                            홈 화면에 추가하면 브라우저 없이 앱처럼 바로 열 수 있어요.
+                        </p>
+                        <RcpButton className="rcp-btn-full" onClick={() => void install.install()}>
+                            설치하기
+                        </RcpButton>
+                    </>
+                ) : (
+                    <p className="rcp-sheet-detail">
+                        브라우저의 공유 버튼을 누르고 "홈 화면에 추가"를 선택하면 앱처럼 쓸 수
+                        있어요. (iOS 17부터는 사파리뿐 아니라 크롬·엣지에서도 같은 방법으로 돼요)
+                    </p>
+                )}
+            </RcpBottomSheet>
         </div>
     );
 }
