@@ -223,10 +223,26 @@ export default function RecipeApp() {
                         </RcpButton>
                     </>
                 ) : (
-                    <p className="rcp-sheet-detail">
-                        브라우저의 공유 버튼을 누르고 "홈 화면에 추가"를 선택하면 앱처럼 쓸 수
-                        있어요. (iOS 17부터는 사파리뿐 아니라 크롬·엣지에서도 같은 방법으로 돼요)
-                    </p>
+                    <>
+                        {/* 영상이 위(남는 영역을 채움), 요약 텍스트는 하단 고정 — 영상을 못 보거나
+                            소리·움직임으로는 못 따라 하는 사람도 텍스트만 읽고 가능해야 한다
+                            (2026-07-20 확정). GIF 처럼 자동재생·무한반복 — muted+playsInline 없으면
+                            iOS Safari 가 자동재생을 막는다. controls 는 일부러 안 씀(GIF 느낌 유지). */}
+                        <video
+                            className="rcp-install-demo"
+                            src="/recipe/gikka_ios.mp4"
+                            autoPlay
+                            muted
+                            loop
+                            playsInline
+                        />
+                        <div className="rcp-install-summary">
+                            <p className="rcp-install-summary-title">앱으로 설치</p>
+                            <p className="rcp-install-summary-steps">
+                                브라우저 공유 → 더보기 → 홈 화면에 추가 → 앱 추가
+                            </p>
+                        </div>
+                    </>
                 )}
             </RcpBottomSheet>
         </div>

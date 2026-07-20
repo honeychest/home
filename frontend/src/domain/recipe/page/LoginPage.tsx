@@ -65,8 +65,10 @@ export default function LoginPage({ onLogin }: { onLogin: (session: AuthSession)
 
     return (
         <div className="rcp-login" id="rcp-login-page">
+            {/* 태그라인 삭제 (2026-07-20 확정) — 로그인 후엔 다시 볼 일 없는 화면이라 이름만으로
+                충분하다는 판단. 브랜드 유래("기억해놨다가 까먹어야지")는 필요하면 소개·설정
+                화면에 남기고 여기선 안 쓴다. */}
             <div className="rcp-login-brand">기까</div>
-            <p className="rcp-login-tagline">"기억해놨다가 필요할때 까먹어야지"는 그만,{'\n'}기까가 꺼내드려요</p>
             <div ref={buttonHost} className="rcp-login-button" id="rcp-login-google-button" />
             {error && <p className="rcp-login-error" role="alert">{error}</p>}
         </div>

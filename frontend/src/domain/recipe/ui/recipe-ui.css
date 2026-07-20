@@ -670,13 +670,6 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   font-size: 2.2rem; font-weight: var(--rcp-fw-heavy);
   color: var(--rcp-accent-strong);
 }
-.rcp-login-tagline {
-  color: var(--rcp-text-sub);
-  font-size: var(--rcp-fs-md);
-  text-align: center;
-  white-space: pre-line;
-  margin-bottom: var(--rcp-space-4);
-}
 /* 구글 iframe 내용물은 항상 라이트 — 이 자리만 light 로 선언해야 다크 모드에서도
    크롬이 iframe 투명을 유지 (선언 불일치 시 흰 판을 깖, 2026-07-13) */
 .rcp-login-button { min-height: var(--rcp-touch); color-scheme: light; }
@@ -701,6 +694,31 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 .rcp-sheet-meta { font-size: var(--rcp-fs-sm); color: var(--rcp-text-sub); }
 /* 결과 시트(3차) — 상태 설명 문단 / 조리 순서 요약 목록 */
 .rcp-sheet-detail { font-size: var(--rcp-fs-md); color: var(--rcp-text); overflow-wrap: anywhere; }
+/* ── iOS 설치 안내 실연 영상(GIF 대체) — 앱으로 설치 시트 전용 (2026-07-20) ──
+   폰 화면 전체(주소창~하단 "홈 화면에 추가" 메시지)를 찍은 캡처라 작으면 뭘 보라는 건지
+   안 보인다 — 시트(최대 70dvh) 대부분을 이 영상이 차지하게 크게 둔다. object-fit: contain 은
+   실제 캡처 화면 비율이 뭐든 잘리지 않고 전부 보이게 하기 위함(폭 기준 크롭 방지). */
+.rcp-install-demo {
+  width: 100%;
+  height: 50dvh; /* 아래 요약 텍스트가 들어갈 자리를 남겨둠(58 → 50, 요약 추가로 조정) */
+  max-height: 50dvh;
+  object-fit: contain;
+  border-radius: var(--rcp-radius-md);
+  background: var(--rcp-surface-dim); /* 로드 전·여백 프레임이 카드 배경과 안 뜨게 */
+  display: block;
+}
+/* 영상 아래 하단 고정 요약 — 영상을 못 보거나 소리 없이도 텍스트만으로 따라 할 수 있게
+   (2026-07-20 확정). 화살표 요약 한 줄 + 작은 제목. */
+.rcp-install-summary { text-align: center; }
+.rcp-install-summary-title {
+  font-size: var(--rcp-fs-sm); font-weight: var(--rcp-fw-heavy);
+  color: var(--rcp-text-sub);
+  margin-bottom: var(--rcp-space-1);
+}
+.rcp-install-summary-steps {
+  font-size: var(--rcp-fs-sm); color: var(--rcp-text);
+  overflow-wrap: anywhere;
+}
 /* 분석 품질 경고 — data/analysisQuality.ts 가 도출한 문구를 담는 콜아웃 (2026-07-14 확정) */
 .rcp-quality-warning {
   font-size: var(--rcp-fs-sm); color: var(--rcp-status-warning-text);
