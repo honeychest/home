@@ -63,8 +63,16 @@ function useGikkaDocumentMeta() {
 
 // ── 앱으로 설치 팝업 (2026-07-20 확정) — 크롬(안드로이드)은 beforeinstallprompt 를 가로채
 // [설치하기]로 바로 설치, iOS Safari 는 그 이벤트 자체가 없어 "공유 → 홈 화면에 추가" 안내만
-// 보여준다. 한 번 닫거나 설치하면 다시 안 뜨게 localStorage 에 남긴다(설치 유도 반복은 성가심).
-const INSTALL_DISMISSED_KEY = 'gikka-install-dismissed';
+// 보여준다.
+// 재노출 기준(2026-07-20 갱신): 실제 설치가 확인되면(appinstalled, 또는 안드로이드 설치
+// 대화상자에서 수락) 영구히 다시 안 띄운다. 그 전까지는 24시간마다 다시 뜬다 — 단, 기준 시각은
+// "닫은 시각"이 아니라 "띄운 시각"이다. 닫기(dismiss)는 사용자가 명시적으로 시트를 조작해야만
+// 발생하는데, 그냥 앱을 꺼버리거나 백그라운드로 보내면 그 이벤트 자체가 안 잡혀 시각이 영영
+// 안 남을 수 있다(2026-07-20 재지적) — 반면 "띄운 시각"은 실제로 화면에 뜨는 순간 무조건
+// 기록되므로 어떻게 닫히든(명시적 닫기·그냥 나가기·앱 종료) 안정적으로 24시간 간격이 지켜진다.
+const INSTALL_DONE_KEY = 'gikka-install-done';
+const INSTALL_SHOWN_AT_KEY = 'gikka-install-shown-at';
+const INSTALL_REPROMPT_MS = 24 * 60 * 60 * 1000;
 
 interface BeforeInstallPromptEvent extends Event {
     prompt(): Promise<void>;
@@ -77,27 +85,37 @@ const isStandalone = () =>
     || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 const isIOS = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
 
+/** 마지막으로 띄운 지 재노출 간격이 지났으면(또는 띄운 적 없으면) 다시 보여줄 차례 */
+function isRepromptDue(): boolean {
+    const shownAt = Number(localStorage.getItem(INSTALL_SHOWN_AT_KEY) ?? 0);
+    return Date.now() - shownAt >= INSTALL_REPROMPT_MS;
+}
+
 function useInstallPrompt() {
     const [deferredEvent, setDeferredEvent] = useState<BeforeInstallPromptEvent | null>(null);
     const [open, setOpen] = useState(false);
 
     useEffect(() => {
-        if (isStandalone() || localStorage.getItem(INSTALL_DISMISSED_KEY)) return undefined;
+        if (isStandalone() || localStorage.getItem(INSTALL_DONE_KEY) || !isRepromptDue()) return undefined;
 
         const onBeforeInstall = (e: Event) => {
             e.preventDefault(); // 브라우저 기본 미니 인포바 대신 우리 시트로
             setDeferredEvent(e as BeforeInstallPromptEvent);
             setOpen(true);
+            localStorage.setItem(INSTALL_SHOWN_AT_KEY, String(Date.now()));
         };
         const onInstalled = () => {
-            localStorage.setItem(INSTALL_DISMISSED_KEY, '1');
+            localStorage.setItem(INSTALL_DONE_KEY, '1'); // 실제 설치 확인 — 영구 종료
             setOpen(false);
         };
         window.addEventListener('beforeinstallprompt', onBeforeInstall);
         window.addEventListener('appinstalled', onInstalled);
 
         // iOS 는 beforeinstallprompt 가 아예 없어 안내문만 — 이벤트 대신 바로 연다
-        if (isIOS()) setOpen(true);
+        if (isIOS()) {
+            setOpen(true);
+            localStorage.setItem(INSTALL_SHOWN_AT_KEY, String(Date.now()));
+        }
 
         return () => {
             window.removeEventListener('beforeinstallprompt', onBeforeInstall);
@@ -108,15 +126,11 @@ function useInstallPrompt() {
     const install = async () => {
         if (!deferredEvent) return;
         await deferredEvent.prompt();
-        await deferredEvent.userChoice; // 수락·거절 무관 — 어느 쪽이든 다시 안 물어봄
+        await deferredEvent.userChoice; // 수락이면 appinstalled 가 곧 뒤따라와 영구 종료 처리
         setDeferredEvent(null);
         setOpen(false);
-        localStorage.setItem(INSTALL_DISMISSED_KEY, '1');
     };
-    const dismiss = () => {
-        setOpen(false);
-        localStorage.setItem(INSTALL_DISMISSED_KEY, '1');
-    };
+    const dismiss = () => setOpen(false);
 
     return { open, canPrompt: deferredEvent !== null, install, dismiss };
 }
