@@ -74,7 +74,13 @@ export default function RecipeApp() {
     const checkSession = useCallback(() => {
         setAuth({ phase: 'loading' });
         authRepository.me()
-            .then((session) => setAuth(session ? { phase: 'in', ...session } : { phase: 'out' }))
+            .then((session) => {
+                // 홈 탭 오너 전용 기능(X다운로드 등)이 종종 안 보인다는 제보 진단용 임시 로그
+                // (2026-07-20) — canViewMonitor 가 서버 응답 시점부터 false 인지, 이후 어딘가에서
+                // 바뀌는지 구분하는 첫 지점. 원인 확정되면 제거.
+                console.log('[recipe-auth] session resolved', session);
+                setAuth(session ? { phase: 'in', ...session } : { phase: 'out' });
+            })
             .catch((e: Error) => setAuth({ phase: 'error', message: e.message }));
     }, []);
 

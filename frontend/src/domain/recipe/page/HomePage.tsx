@@ -28,7 +28,8 @@ const mutationMessage = () => REGISTER_FAIL_TEXT;
 // 기록·이력 없음). 에러 계약: 상태 코드만 서버 계약이고 문구는 여기(화면)가 소유.
 const X_URL_MISSING_TEXT = '링크를 먼저 붙여넣어 주세요';
 const X_NOT_X_LINK_TEXT = 'X(트위터) 링크만 지원해요';
-const X_NOT_FOUND_TEXT = '다운로드 가능한 영상을 찾지 못했어요 — 비공개이거나 삭제된 게시물일 수 있어요';
+const X_NOT_FOUND_TEXT = '다운로드 가능한 영상을 찾지 못했어요 — 사진 전용 게시물은 아직 지원하지 않고, '
+    + '비공개·삭제된 게시물일 수도 있어요';
 const X_SERVICE_DOWN_TEXT = '지금은 영상 정보를 가져올 수 없어요 — 잠시 후 다시 시도해 주세요';
 const X_RESOLVE_FAIL_TEXT = '영상 정보를 가져오지 못했어요';
 const X_FALLBACK_TEXT = '해상도 클릭 후 재생되는 화면을 길게 눌러 다운로드 하세요.';
@@ -48,6 +49,10 @@ interface HomePageProps {
 }
 
 export default function HomePage({ email, canViewMonitor, onLogout }: HomePageProps) {
+    // 홈 탭 오너 전용 기능이 종종 안 보인다는 제보 진단용 임시 로그 (2026-07-20) — 렌더될 때마다
+    // 찍어서 RecipeApp 의 "[recipe-auth] session resolved" 로그와 값을 대조한다. 값이 다르면
+    // prop 전달 버그, 같은데도 화면에 안 보이면 렌더링 쪽 버그. 원인 확정되면 제거.
+    console.log('[recipe-auth] HomePage render, canViewMonitor=', canViewMonitor);
     // dev 폴백은 http(로컬 개발)에서만, 진짜 구글 로그인은 배포(https)에서만 — CONTEXT.md 인증 절
     const isDevSession = window.location.protocol !== 'https:';
     const navigate = useNavigate();
