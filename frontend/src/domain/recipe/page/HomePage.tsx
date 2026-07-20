@@ -31,7 +31,7 @@ const X_NOT_X_LINK_TEXT = 'X(트위터) 링크만 지원해요';
 const X_NOT_FOUND_TEXT = '다운로드 가능한 영상을 찾지 못했어요 — 비공개이거나 삭제된 게시물일 수 있어요';
 const X_SERVICE_DOWN_TEXT = '지금은 영상 정보를 가져올 수 없어요 — 잠시 후 다시 시도해 주세요';
 const X_RESOLVE_FAIL_TEXT = '영상 정보를 가져오지 못했어요';
-const X_FALLBACK_TEXT = '바로 저장은 안 돼서 새 창으로 열었어요 — 길게 눌러 저장해 주세요';
+const X_FALLBACK_TEXT = '해상도 클릭 후 재생되는 화면을 길게 눌러 다운로드 하세요.';
 const X_UNTITLED_TEXT = '제목 없는 게시물';
 const xDownloadMessage = (e: unknown) => {
     if (e instanceof HttpError && e.status === 400) return X_NOT_X_LINK_TEXT;
