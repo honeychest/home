@@ -1,10 +1,9 @@
 // [AGENT] gikka 인증 API — GIS 로그인·세션 확인·로그아웃 (CONTEXT.md 인증 절)
+// 세션 전달은 쿠키가 아니라 Authorization 헤더(Bearer 토큰) — 네이티브 전환 대비
+// (네이티브 웹뷰는 API 서버와 다른 오리진이라 쿠키가 자동 전송되지 않음). 토큰 보관은 프론트 소관.
 package com.chs.springboot.domain.recipe.auth;
 
 import com.chs.springboot.domain.recipe.user.GikkaUserRepository;
-
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletResponse;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,8 +16,6 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/recipe/auth")
 public class GikkaAuthController {
-
-    static final String COOKIE_NAME = "gikka_token";
 
     private final GikkaAuthProperties properties;
     private final GoogleTokenVerifier verifier;
@@ -41,8 +38,12 @@ public class GikkaAuthController {
     public record MeResponse(String email, boolean canViewMonitor) {
     }
 
+    /** token: 이후 요청은 이 값을 Authorization: Bearer 로 실어 보낸다 (저장은 프론트 소관) */
+    public record LoginResponse(String token, String email, boolean canViewMonitor) {
+    }
+
     @PostMapping("/google")
-    public MeResponse login(@RequestBody LoginRequest request, HttpServletResponse response) {
+    public LoginResponse login(@RequestBody LoginRequest request) {
         GoogleTokenVerifier.GoogleIdentity identity = verifier.verify(request.credential());
 
         // 1단계 허용 목록 스위치: 목록이 비어 있으면 누구나(공개 상태), 있으면 목록만
@@ -52,8 +53,8 @@ public class GikkaAuthController {
         }
 
         long userId = users.findOrCreate(identity.sub(), identity.email());
-        response.addCookie(sessionCookie(jwt.issue(userId), (int) GikkaJwt.VALIDITY.toSeconds()));
-        return new MeResponse(identity.email(), properties.isOwner(identity.email()));
+        String token = jwt.issue(userId);
+        return new LoginResponse(token, identity.email(), properties.isOwner(identity.email()));
     }
 
     /** 프론트 진입 시 세션 확인용. 미로그인 401 (dev 폴백 환경에서는 dev 사용자로 통과) */
@@ -63,20 +64,9 @@ public class GikkaAuthController {
         return new MeResponse(email, properties.isOwner(email));
     }
 
+    /** 무상태 토큰이라 서버가 지울 것이 없음 — 클라이언트가 저장된 토큰을 지우면 로그아웃 완료.
+        엔드포인트는 API 대칭성 유지 + 훗날 토큰 무효화 목록을 붙일 자리로 남겨둔다. */
     @PostMapping("/logout")
-    public void logout(HttpServletResponse response) {
-        response.addCookie(sessionCookie("", 0)); // Max-Age 0 = 즉시 삭제
-    }
-
-    /** HttpOnly(JS 접근 차단) + Secure(https 전송 한정) + SameSite=Lax(타 사이트발 요청에 미전송) + /api/recipe 한정 */
-    private Cookie sessionCookie(String value, int maxAgeSeconds) {
-        Cookie cookie = new Cookie(COOKIE_NAME, value);
-        cookie.setHttpOnly(true);
-        // 로그인(발급)은 https 배포에서만 일어남 — local 은 dev 폴백이라 쿠키 자체를 안 씀 (부작용 없음)
-        cookie.setSecure(true);
-        cookie.setPath("/api/recipe");
-        cookie.setMaxAge(maxAgeSeconds);
-        cookie.setAttribute("SameSite", "Lax");
-        return cookie;
+    public void logout() {
     }
 }

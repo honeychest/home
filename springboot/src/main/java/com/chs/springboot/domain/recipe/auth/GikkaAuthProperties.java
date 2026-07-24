@@ -17,6 +17,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   로그인 허용(allowedEmails)과 오너 판정(ownerEmail)이 서로 무관하게 따로 움직인다.
  * - devUserEmail: 개발 편의용. 설정되어 있으면 Google 로그인 없이 이 이메일의
  *   가짜 사용자(sub = "dev:이메일")로 동작한다. prod 에서는 절대 설정하지 말 것.
+ * - allowedOrigins: CORS 허용 오리진 (네이티브 앱 등 API 서버와 다른 오리진에서 호출할 때만
+ *   필요 — 지금의 같은 오리진 PWA 는 비어 있어도 영향 없음). 네이티브 착수 시 그 오리진을 채운다.
  */
 @ConfigurationProperties(prefix = "gikka.auth")
 public class GikkaAuthProperties {
@@ -26,6 +28,7 @@ public class GikkaAuthProperties {
     private String devUserEmail;
     /** GIS(Google Identity Services) OAuth 클라이언트 ID — 공개 값 (비밀 아님) */
     private String googleClientId;
+    private List<String> allowedOrigins = List.of();
 
     public List<String> getAllowedEmails() {
         return allowedEmails;
@@ -57,6 +60,14 @@ public class GikkaAuthProperties {
 
     public void setGoogleClientId(String googleClientId) {
         this.googleClientId = googleClientId;
+    }
+
+    public List<String> getAllowedOrigins() {
+        return allowedOrigins;
+    }
+
+    public void setAllowedOrigins(List<String> allowedOrigins) {
+        this.allowedOrigins = allowedOrigins;
     }
 
     /**

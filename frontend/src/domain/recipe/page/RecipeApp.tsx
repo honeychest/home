@@ -164,12 +164,12 @@ export default function RecipeApp() {
         checkSession();
     }, [checkSession]);
 
-    // 로그아웃 = 쿠키 삭제 후 세션 재확인 (배포에서는 401 → 로그인 화면으로)
+    // 로그아웃 = 저장된 토큰 삭제 후 세션 재확인 (배포에서는 401 → 로그인 화면으로)
     const logout = useCallback(() => {
         authRepository.logout().finally(checkSession);
     }, [checkSession]);
 
-    // 세션 만료(쿠키 30일) 시 어떤 화면에서 조작하다가도 로그인 화면으로 전환 —
+    // 세션 만료(토큰 30일) 시 어떤 화면에서 조작하다가도 로그인 화면으로 전환 —
     // 401 처리를 이 한 곳에 집중 (화면·저장소는 인증을 모름)
     useEffect(() => {
         setSessionExpiredHandler(() => setAuth({ phase: 'out' }));

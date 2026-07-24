@@ -31,6 +31,9 @@
   저장소가 `http.ts`의 `request()`를 못 쓰는 특수한 이유(예: 401을 정상 응답으로 다뤄야 하는
   `authRepository.me()`)로 fetch를 직접 부를 때도 경로는 반드시 `http.ts`의 `apiUrl()`을 거친다
   (네이티브 전환 대비 — API 오리진 접두사를 한 곳에서만 바꾸면 되게).
+- 인증 토큰 저장: `src/domain/recipe/data/tokenStorage.ts` (`getToken`/`setToken`/`clearToken`).
+  세션은 쿠키가 아니라 Authorization: Bearer 헤더(2026-07-2x 전환, 네이티브 대비) — 헤더 조립은
+  `http.ts`의 `authHeader()`가 이 포트를 감싸 담당하므로 화면·저장소는 토큰을 직접 만지지 않는다.
 - 목록 조회 실행기: `src/domain/recipe/page/useQuery.ts` — "3상태"(data=null 첫 로딩 /
   error / 다시 시도)를 화면마다 손으로 만들지 말 것. `{ data, error, failure, setData,
   reload, refresh }` 제공. reload=실패 시 문구, refresh=조용한 재조회(폴링용),
