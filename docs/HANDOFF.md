@@ -4,43 +4,61 @@
 > 새 세션(Claude·Codex 무관)은 이 파일이 비어 있지 않으면 먼저 읽고 이어서 작업한다.
 > 완료 후에는 이 안내 블록만 남기고 내용을 지운다 (비대화 방지).
 
-## recipe 네이티브 앱 전환 대비 점검 — 마지막 항목 남음
+## recipe(기까) 앱 분리 — 백엔드 완전 분리 착수
 
-배경: `docs/recipe/CONTEXT.md`의 "2단계: Android 앱 전환" 대비, improve-codebase-architecture
-스킬로 recipe 도메인(frontend+springboot) 전체를 훑어 마찰 후보 5개를 찾음. 2·4(프론트 부분)는
-완료, 3·5는 조사 결과 "지금은 손대지 않는 게 맞음"으로 판정(아래 참고). 1번(세션 쿠키
-SameSite)만 사용자가 새 세션에서 최종 작업하기로 결정 — 아직 미착수.
+배경: `docs/recipe/CONTEXT.md` "2단계 착수 준비 — 앱 분리(2026-07-24 확정)" 절이 단일 원본.
+Play 스토어에 TWA로 배포하려면(비공개 테스트 12명·14일 요건), recipe 배포가 home(트레이딩
+대시보드 등)의 배포와 서로 영향을 주면 안 된다는 요구가 있어 백엔드를 완전히 별도 서비스로
+분리하기로 확정함. `domain/recipe`는 이미 ArchUnit·전용 DataSource·전용 보안 체인으로 격리돼
+있어 추출이 기계적일 것으로 판단.
 
-### 남은 작업 — 1) 세션 쿠키 SameSite=Lax
-- Files: `springboot/.../domain/recipe/auth/GikkaAuthController.java`(`sessionCookie()`),
-  `config/GikkaSecurityConfig.java`
-- 문제: 쿠키가 SameSite=Lax로 발급되는데, 이건 "같은 오리진"이라는 전제 위의 설계(같은 이유로
-  CSRF 토큰도 생략됨). 네이티브 웹뷰는 API 서버와 다른 오리진에서 호출하게 되므로, 로그인
-  응답은 받아도 이후 요청에 쿠키가 안 실려 401 반복이 날 위험이 있음.
-- 결정할 것: SameSite=None 전환(오리진이 다르면 Secure+SameSite=None 필요) 또는 쿠키 대신
-  Authorization 헤더 토큰 방식으로 전환. 어느 쪽이든 CORS 허용 오리진(현재 미설정 — 아래
-  참고)도 이 시점에 함께 정해야 함.
-- 이미 준비된 것(후보 4에서 완료): 프론트 `data/http.ts`에 `apiUrl()` 오리진 접두사 seam이
-  이미 있어 base URL만 채우면 프론트 쪽은 대부분 준비됨(`authRepository.ts` 포함 전 저장소가
-  이 seam을 거침, `credentials:'include'`도 이미 적용됨). 백엔드 CORS Bean은 아직 없음 —
-  네이티브 오리진이 정해지면 그때 추가.
+### 사용자 확인 필요 (최우선, 급함)
+- **mac-mini plist 경로 갱신 여부 확인**: 이번 세션에서 `gikka/` → `gikka-extractor/` 폴더명을
+  바꿨고 이미 커밋·푸시됨. mac-mini의 `~/Library/LaunchAgents/com.gikka.local-extractor.plist`가
+  아직 옛 경로(`.../gikka/server.py`)를 가리키면, Jenkins의 "Deploy Gikka Local" stage가
+  `launchctl kickstart -k`를 실행할 때 존재하지 않는 경로라 로컬 추출기가 죽는다(전량 Gemini
+  폴백 → 한도 소모 가속). **사용자가 이미 고쳤는지 확인하고, 안 했으면 최우선으로 처리할 것.**
 
-### 이번 점검에서 "지금은 안 건드리는 게 맞다"고 판정한 항목 (재검토 불필요, 참고만)
-- 3) GIS 로그인 스크립트 로딩(`LoginPage.tsx`): 어댑터가 1개뿐이라 지금 인터페이스를 만들면
-  가상의 seam(LANGUAGE.md "one adapter = hypothetical seam" 원칙 위반). 네이티브 착수 시 실제
-  네이티브 로그인 라이브러리(Capacitor 등)의 실제 모양을 보고 그때 설계할 것 — 지금 앞당겨서
-  만들면 잘못된 모양으로 굳었다가 버려질 위험이 큼.
-- 5) 설치 프롬프트/manifest(`RecipeApp.tsx`의 `useInstallPrompt`/`useGikkaDocumentMeta`): 핵심
-  로직(인증·등록·냉장고)과 완전히 분리된 pass-through. 네이티브 빌드에선 조건부로 이 훅들만
-  끄면 되고, 별도 추상화 불필요.
+### 다음 세션 최우선 작업 — `gikka/` 신설 (Spring Boot 프로젝트)
+1. 저장소 루트에 새 Gradle 프로젝트 `gikka/` 생성(기존 `springboot/`는 건드리지 않고 완전히
+   새로 만듦 — 멀티모듈 아님, 독립 프로젝트).
+2. `springboot/src/main/java/com/chs/springboot/domain/recipe/**`(및 test) 전체를 새 프로젝트로
+   이관. 관련 설정도 함께: `GikkaSecurityConfig`, `GikkaAuthProperties`, `GikkaDataSourceConfig`,
+   `CurrentUserConfig`, `application-*.properties`의 `gikka.*` 값 전부.
+3. 기존 `springboot/`에서 recipe 관련 코드·`RecipeIsolationArchTest` 제거(더 이상 다른 도메인과
+   같은 프로세스에 없으므로 ArchUnit 격리 테스트 자체가 무의미해짐 — 새 프로젝트로 이동하거나
+   삭제 검토).
+4. `gikka/`용 Dockerfile + `docker-compose.yml`에 `gikka1`/`gikka2` 서비스 신설(기존 `app1`/`app2`
+   정의를 참고해 포트만 바꾸는 수준).
+5. `Jenkinsfile`에 "Build & Push Gikka Backend"(`gikka/` 변경 감지, `chs-gikka` 이미지) +
+   "Deploy Gikka Backend"(`deploy-back-only.sh`와 같은 롤링+헬스체크 패턴, 새 스크립트 또는
+   파라미터화) stage 신설 — `nexus` stage들을 그대로 본뜨면 됨.
+6. 프론트 격리(별개 작업, 병행 가능): 호스트네임이 `gikka.devcontext.net`이면 `RecipeApp`만
+   루트(`/`)에 마운트하고 다른 라우트(트레이드·챗봇·관리자 등)는 등록 자체를 안 하도록
+   `frontend/src/app/router/MainRouter.jsx` 진입부에 분기 추가. 완전 별도 빌드 파이프라인은
+   만들지 않기로 함(코드 분할이 이미 있어 gikka 방문자는 recipe 청크만 받음).
 
-### 완료된 것 (참고)
-- 2) 클립보드 포트: `frontend/src/domain/recipe/data/clipboard.ts` 신설
-  (`clipboardReadSupported`/`readClipboardText`), `HomePage.tsx`·`RecipesPage.tsx`가 이 포트를
-  쓰도록 교체. `frontend/AGENTS.md`에 등록 완료.
-- 4) CORS·베이스 URL(프론트 부분): `data/http.ts`에 `apiUrl()` 추가(현재는 빈 문자열 —
-  `VITE_RECIPE_API_BASE_URL`로 나중에 채움) + `request()`가 이를 쓰도록 변경,
-  `authRepository.ts`의 직접 fetch 3곳도 `apiUrl()`을 거치도록 통일 + `credentials:'include'`
-  추가(이 파일은 401이 정상 응답이라 `http.ts`의 `request()`는 여전히 안 씀 — 의도된 설계이며
-  버그 아님). 백엔드 CORS는 일부러 미착수(위 1번과 함께 정할 것). `frontend/AGENTS.md`에
-  등록 완료. 테스트(vitest 57개)·빌드 통과 확인.
+### 이번 세션에서 이미 끝난 것 (재검토 불필요, 참고만)
+- 인증을 쿠키(SameSite=Lax)에서 `Authorization: Bearer` 헤더로 전환 완료 — 오리진 무관하게
+  동작(네이티브/TWA 대비). 프론트 `data/tokenStorage.ts`(신규)·`data/http.ts`의 `authHeader()`,
+  백엔드 `JwtCurrentUser`·`GikkaAuthController`·`GikkaSecurityConfig`(CORS 자리만 마련,
+  `gikka.auth.allowed-origins` 기본 비어있어 지금 동작엔 영향 없음). 테스트·빌드 통과 확인.
+- `data/clipboard.ts` 신설(클립보드 포트), `data/http.ts`의 `apiUrl()`(API 오리진 접두사) —
+  둘 다 네이티브 전환 대비 후보 2·4 작업.
+- GIS 로그인 스크립트(후보 3), 설치 프롬프트/manifest(후보 5)는 "지금은 안 건드리는 게 맞다"로
+  판정 — 재검토 불필요(이유는 CONTEXT.md에 남기지 않았으므로 필요하면 이 대화 기록 참고,
+  요지는 어댑터가 1개뿐이라 지금 인터페이스를 만들면 가상의 seam이라는 것).
+- `gikka/` → `gikka-extractor/` 폴더명 변경(mac-mini 로컬 추출기 호스트 서비스) — `gikka/`를
+  새 백엔드 서비스 자리로 비우기 위함. Jenkinsfile·관련 문서 경로 전부 갱신 완료.
+- TWA(Trusted Web Activity) 방식 채택, 도메인은 `gikka.devcontext.net`(전용 도메인 구입 보류),
+  위치알림(geofencing)은 우선순위 낮아 나중에 Capacitor로 셸 교체 예정(웹 코드 재사용,
+  applicationId만 유지하면 스토어 실적 안 끊김) — 전부 CONTEXT.md 새 절에 기록됨.
+
+### 사용자가 직접 해야 하는 것 (서버·콘솔, 코드 아님 — gikka 신설 이후 순서대로)
+- DNS: `gikka.devcontext.net` 레코드 추가
+- mac-mini nginx: 서브도메인 서버 블록(정적 파일 + `/api/recipe` 프록시, 백엔드 분리 후엔
+  `chs-gikka` 업스트림으로)
+- Google Cloud Console: OAuth 승인된 오리진에 `https://gikka.devcontext.net` 추가
+- Play Console: 비공개 테스트 트랙 생성, 안드로이드 패키지명(applicationId) 결정 + 키스토어 백업
+- `gikka.auth.allowed-emails`: 이미 2026-07-20 커밋(`b744f05`)으로 비워둬서 전체 공개 상태 —
+  로그인이 막히면 배포 반영 여부부터 확인(코드 문제 아님)

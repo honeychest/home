@@ -61,9 +61,22 @@ function GlobalChatbot() {
     return <FloatingChatbot />;
 }
 
+// gikka.devcontext.net 은 recipe 전용 도메인 — 트레이딩/관리자 등 다른 라우트가
+// 뜨면 안 됨(예: BinancePage 의 실시간 WS). /recipe 이외 경로는 전부 /recipe 로 되돌린다.
+const GIKKA_HOSTNAME = 'gikka.devcontext.net';
+
+function GikkaHostGuard({ children }) {
+    const { pathname } = useLocation();
+    if (window.location.hostname === GIKKA_HOSTNAME && !pathname.startsWith('/recipe')) {
+        return <Navigate to="/recipe" replace />;
+    }
+    return children;
+}
+
 function MainRouter() {
     return (
         <Router>
+            <GikkaHostGuard>
             <Routes>
                 {/* 초기 접속: /binance로 리다이렉트 */}
                 <Route path="/" element={<Navigate to="/binance" replace />} />
@@ -141,6 +154,7 @@ function MainRouter() {
 
                 <Route path="*" element={<ErrorPage code="404" />} />
             </Routes>
+            </GikkaHostGuard>
             <GlobalChatbot />
         </Router>
     );

@@ -149,9 +149,53 @@
   모든 데이터는 사용자 소속(userId 필수), 냉장고·레시피·통계 전부 계정별 분리.
   단 1단계 동안은 허용 목록 스위치(설정의 이메일 목록)를 켜서 오너 계정만 통과 —
   공개 전까지 타인의 Gemini 무료 한도 소모·서버 자원 사용을 차단. 공개 시 스위치만 끔.
-- 세션: 서명 토큰(JWT) HttpOnly 쿠키(30일, SameSite=Lax, Path=/api/recipe) —
-  앱 2인스턴스 환경에서 서버 상태 없이 검증 가능. 서명 키는 gikka DB에 첫 기동 시
-  자동 생성·보관 (서버 .env 추가 불필요, 인스턴스 간 공유).
+- 세션: 서명 토큰(JWT, 30일) — 앱 2인스턴스 환경에서 서버 상태 없이 검증 가능. 서명 키는
+  gikka DB에 첫 기동 시 자동 생성·보관 (서버 .env 추가 불필요, 인스턴스 간 공유).
+  (2026-07-24 갱신 — HttpOnly 쿠키·SameSite=Lax에서 `Authorization: Bearer` 헤더로 전환.
+  계기: 네이티브/TWA 앱은 API 서버와 다른 오리진에서 호출하게 되는데, SameSite=Lax는 그런
+  요청에 쿠키를 자동 전송하지 않아 로그인 후에도 401이 반복될 위험이 있었음. Bearer 헤더는
+  오리진과 무관하게 클라이언트가 직접 실어 보내 이 문제 자체가 없고, 브라우저가 자동 첨부하지
+  않아 CSRF도 구조적으로 차단됨(그래서 CSRF 토큰은 여전히 비활성 — 근거만 바뀜). 프론트는
+  `data/tokenStorage.ts` 포트로 토큰을 보관(지금은 localStorage, 네이티브 전환 시 보안 저장소
+  어댑터로 교체), `data/http.ts`의 `authHeader()`가 모든 요청에 헤더를 붙임. 백엔드는
+  `JwtCurrentUser`가 쿠키 대신 헤더를 읽도록 변경, CORS는 `gikka.auth.allowed-origins`
+  설정(기본 비어있음 — 지금의 같은 오리진 PWA에는 영향 없음, 네이티브 오리진이 정해지면 채움)
+  으로 대비해둠. `GikkaAuthController.login()` 응답 본문에 `token` 필드 추가, `logout()`은
+  서버가 지울 상태가 없어 사실상 no-op(클라이언트가 저장된 토큰만 지우면 끝).)
+
+### 2단계 착수 준비 — 앱 분리 (2026-07-24 확정)
+- 계기: 혼자 테스트로는 분석 품질 개선에 한계 → 실사용자를 늘려 피드백 받기로 함. 조사 결과
+  PWA를 홈화면에 추가하는 것만으로도 실사용자 확대는 가능하지만, Google Play가 신규 개인
+  개발자 계정에 "비공개 테스트: 테스터 12명 14일 설치 유지" 요건을 요구하고(스토어를 거친
+  실제 설치만 인정, PWA 설치는 미해당) 정식 스토어 등록이 필요해 이 절이 신설됨.
+- 셸 기술: TWA(Trusted Web Activity) 채택. 지금 PWA 코드를 그대로 감싸 플레이스토어 설치
+  가능한 앱(.aab)으로 만드는 Google 공식 방식(Bubblewrap 도구). Capacitor 같은 완전 네이티브
+  래핑과 달리 실제 도메인을 그대로 열어(Chrome Custom Tabs + Digital Asset Links) 오리진이
+  동일해 쿠키/CORS 문제가 없음. 단, 위치 기반 알림(냉장고 근처 마트 geofencing, 확정 기능·
+  우선순위 낮음)은 TWA로 불가 — 착수 시점에 TWA 셸을 Capacitor로 교체 예정(웹 코드는 그대로
+  재사용, **안드로이드 패키지명(applicationId)을 최초 설정 그대로 유지해야** 스토어 리뷰·
+  테스터 실적·설치 이력이 안 끊김 — 셸 교체가 "업데이트"로 처리되는 핵심 조건).
+- 도메인: 전용 도메인 구입은 보류. 기존 `devcontext.net` 아래 서브도메인
+  `gikka.devcontext.net` 사용(경로`/recipe`가 아니라 서브도메인 — home의 다른 기능과 완전히
+  분리된 주소를 원함).
+- 프론트 격리 (미구현): 지금 recipe는 home(개인 트레이딩 대시보드+관리자 도구 포함)과 같은
+  SPA 번들에 `/recipe/*` 경로로 얹혀 있음. 서브도메인에 단순 프록시만 걸면 그 도구들도
+  기술적으로 같이 노출되므로, 호스트네임이 `gikka.devcontext.net`이면 RecipeApp만 루트(`/`)에
+  마운트하고 다른 라우트는 등록 자체를 안 하는 방식으로 격리하기로 함(완전 별도 빌드 파이프라인
+  은 안 만듦 — 이미 코드 분할이 돼 있어 gikka 방문자는 recipe 청크만 받음).
+- 백엔드 분리 (미구현): "배포가 서로 영향 없어야 한다"는 요구(홈에 실시간 기능이 있어 recipe
+  배포로 인한 재기동이 그걸 건드리면 안 됨) — 완전히 별도 Spring Boot 서비스로 분리 확정
+  (nexus와 같은 패턴: 별도 이미지·별도 docker-compose 서비스(`chs-gikka-1,2`)·별도 Jenkins
+  빌드/배포 stage. `domain/recipe` 격리 규율(ArchUnit·전용 DataSource·전용 보안 체인)을 이미
+  지켜온 덕에 추출이 기계적일 것으로 판단). 새 프로젝트는 저장소 루트 `gikka/`에 위치 —
+  기존 `gikka/`(mac-mini 로컬 추출기 호스트 서비스)는 `gikka-extractor/`로 이름을 옮겨 자리를
+  비워둠(2026-07-24, Jenkinsfile·관련 문서 경로 갱신 완료). **`gikka/`는 현재 빈 폴더 —
+  다음 세션 최우선 작업(`docs/HANDOFF.md` 참고).**
+- 남은 수동 작업(서버·콘솔, 코드 아님): mac-mini plist 경로 갱신(`gikka/`→`gikka-extractor/`,
+  이번 rename 배포 직후 긴급), DNS `gikka.devcontext.net` 레코드, nginx 서브도메인 서버 블록,
+  Google Cloud Console OAuth 승인된 오리진에 `https://gikka.devcontext.net` 추가, Play Console
+  비공개 테스트 트랙 설정, 안드로이드 패키지명(applicationId) 결정(도메인 역순 관례) + 키스토어
+  백업.
 
 ### 시간 기준 (2026-07-10 확정)
 - 날짜 판정(선반 14일·스테퍼 미래 금지)의 기준은 사용자 기기의 오늘 — 이미 프론트(fridgeShelves)가 담당.
