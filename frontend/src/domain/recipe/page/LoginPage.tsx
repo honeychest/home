@@ -6,6 +6,9 @@ import type { AuthSession } from '../data/authRepository';
 import { GOOGLE_CLIENT_ID, authRepository } from '../data/authRepository';
 
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
+// 태그라인 카드 콜라주 (2026-07-24 확정, 카드 스택 시안) — 줄바꿈 위치가 레이아웃 결정이라 상수로 고정
+const TAGLINE_LINE_1 = '"기억해놨다가';
+const TAGLINE_LINE_2 = '필요할때 까먹어야지"';
 
 /** GIS 전역 객체 (스크립트 로드 후 window.google 에 생김) */
 interface GisGlobal {
@@ -65,11 +68,24 @@ export default function LoginPage({ onLogin }: { onLogin: (session: AuthSession)
 
     return (
         <div className="rcp-login" id="rcp-login-page">
-            {/* 태그라인 삭제 (2026-07-20 확정) — 로그인 후엔 다시 볼 일 없는 화면이라 이름만으로
-                충분하다는 판단. 브랜드 유래("기억해놨다가 까먹어야지")는 필요하면 소개·설정
-                화면에 남기고 여기선 안 쓴다. */}
-            <div className="rcp-login-brand">기까</div>
-            <div ref={buttonHost} className="rcp-login-button" id="rcp-login-google-button" />
+            {/* 태그라인 카드 콜라주 복원 (2026-07-24 확정, 2026-07-20 삭제 결정을 뒤집음) —
+                문구 카드 3장 겹침 + "기까" 파일 탭으로 브랜드를 표현. 라이트 톤 고정
+                (다크모드 분기 없음 — tokens.css --rcp-login-bg-gradient 참고) */}
+            <div className="rcp-login-stack">
+                <div className="rcp-login-card rcp-login-card-back2" aria-hidden="true" />
+                <div className="rcp-login-card rcp-login-card-back1" aria-hidden="true" />
+                <div className="rcp-login-card rcp-login-card-front">
+                    <p className="rcp-login-memo">
+                        {TAGLINE_LINE_1}
+                        <br />
+                        {TAGLINE_LINE_2}
+                    </p>
+                </div>
+                <div className="rcp-login-tab">기까</div>
+            </div>
+            <div className="rcp-login-pedestal">
+                <div ref={buttonHost} className="rcp-login-button" id="rcp-login-google-button" />
+            </div>
             {error && <p className="rcp-login-error" role="alert">{error}</p>}
         </div>
     );
