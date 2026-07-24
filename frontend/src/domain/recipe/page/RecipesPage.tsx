@@ -17,6 +17,7 @@ import { reportRepository } from '../data/reportRepository';
 import { registerLink } from '../data/registerLink';
 import { analysisQualityWarning, needsReview } from '../data/analysisQuality';
 import { parseYoutubePlaylistId, parseYoutubeVideoId } from '../data/videoUrl';
+import { clipboardReadSupported, readClipboardText } from '../data/clipboard';
 import { useMutation } from './useMutation';
 import { useQuery } from './useQuery';
 import type { RcpBadgeVariant } from '../ui/RcpBadge';
@@ -310,10 +311,10 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
     };
 
     // 클립보드 읽기는 https 에서만 존재 — 없으면 버튼 자체를 숨김 (품질 기본선 6: 비보안 컨텍스트 폴백)
-    const canPaste = typeof navigator !== 'undefined' && !!navigator.clipboard?.readText;
+    const canPaste = clipboardReadSupported();
     const handlePaste = async () => {
         try {
-            pasteAndRegister(await navigator.clipboard.readText());
+            pasteAndRegister(await readClipboardText());
         } catch {
             mutation.setError(PASTE_FAIL_TEXT);
         }

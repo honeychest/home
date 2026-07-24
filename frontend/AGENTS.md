@@ -22,9 +22,15 @@
   경계: 냉장고처럼 내용이 세로로 안 늘어나는 화면(선반=가로 스크롤)은 지금의 목록 아래
   전체폭 버튼이 맞다 — 바꾸지 말 것 (2026-07-09 확정).
 - 영상/재생목록 등록 분기: `src/domain/recipe/data/registerLink.ts` (영상 우선 규칙의 단일 원본).
+- 클립보드 읽기: `src/domain/recipe/data/clipboard.ts` (`clipboardReadSupported`/`readClipboardText`).
+  `navigator.clipboard` 직접 호출·기능감지를 화면에 새로 쓰지 말 것 — 실패 시 조용히 무시할지
+  문구를 보여줄지는 이 모듈이 아니라 호출하는 화면이 정한다(에러 계약과 동일 사상).
 - 도메인 판정(순수 로직)은 화면이 아니라 data/ 순수 모듈 + vitest 로.
   모범: `data/fridgeShelves.ts`, `data/videoUrl.ts`, `data/registerLink.ts`.
 - API 호출은 도메인 저장소 인터페이스(`data/*Repository.ts`)를 거친다. 화면에서 fetch 직접 호출 금지.
+  저장소가 `http.ts`의 `request()`를 못 쓰는 특수한 이유(예: 401을 정상 응답으로 다뤄야 하는
+  `authRepository.me()`)로 fetch를 직접 부를 때도 경로는 반드시 `http.ts`의 `apiUrl()`을 거친다
+  (네이티브 전환 대비 — API 오리진 접두사를 한 곳에서만 바꾸면 되게).
 - 목록 조회 실행기: `src/domain/recipe/page/useQuery.ts` — "3상태"(data=null 첫 로딩 /
   error / 다시 시도)를 화면마다 손으로 만들지 말 것. `{ data, error, failure, setData,
   reload, refresh }` 제공. reload=실패 시 문구, refresh=조용한 재조회(폴링용),

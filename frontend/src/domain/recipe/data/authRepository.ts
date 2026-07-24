@@ -1,5 +1,9 @@
 // [AGENT] recipe(기까) 인증 저장소 — 백엔드 /api/recipe/auth 와 통신 (CONTEXT.md 인증 절)
 // 세션은 HttpOnly 쿠키(gikka_token)라 JS 에서 토큰을 만지지 않는다. 로그인 여부는 me() 로만 판단.
+// http.ts 의 request() 는 401 을 "세션 만료"로 취급해 로그인 화면으로 튕기는데, 여기선 401 이
+// 정상 응답(미로그인)이라 request() 를 쓰지 않고 fetch 를 직접 부른다. 다만 오리진 접두사(apiUrl)는
+// 다른 저장소와 함께 써야 네이티브 전환 시 한 곳(http.ts)만 바꿔도 전부 새 오리진을 보게 된다.
+import { apiUrl } from './http';
 
 /** GIS OAuth 클라이언트 ID — 공개 값 (백엔드 gikka.auth.google-client-id 와 쌍) */
 export const GOOGLE_CLIENT_ID =
@@ -21,15 +25,16 @@ export interface AuthRepository {
 
 export const authRepository: AuthRepository = {
     async me() {
-        const res = await fetch('/api/recipe/auth/me');
+        const res = await fetch(apiUrl('/api/recipe/auth/me'), { credentials: 'include' });
         if (res.status === 401) return null;
         if (!res.ok) throw new Error(`세션 확인 실패 (${res.status})`);
         return (await res.json()) as AuthSession;
     },
 
     async loginWithGoogle(credential) {
-        const res = await fetch('/api/recipe/auth/google', {
+        const res = await fetch(apiUrl('/api/recipe/auth/google'), {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ credential }),
         });
@@ -39,6 +44,6 @@ export const authRepository: AuthRepository = {
     },
 
     async logout() {
-        await fetch('/api/recipe/auth/logout', { method: 'POST' });
+        await fetch(apiUrl('/api/recipe/auth/logout'), { method: 'POST', credentials: 'include' });
     },
 };

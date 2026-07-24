@@ -12,6 +12,7 @@ import type { RegistrationItem } from '../data/registrationTypes';
 import { HttpError } from '../data/http';
 import { xDownloadRepository } from '../data/xDownloadRepository';
 import type { XResolveResult, XVideoOption } from '../data/xDownloadRepository';
+import { clipboardReadSupported, readClipboardText } from '../data/clipboard';
 import { useMutation } from './useMutation';
 import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
@@ -68,9 +69,9 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
     // 사용자 동작(제스처) 없이 하는 최선 시도라, 브라우저가 권한 없이 거부하면 조용히 실패하고
     // 입력칸은 그냥 비어 있는다(아래 [영상 찾기] 버튼이 재시도 겸 실제 조회를 담당).
     useEffect(() => {
-        if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) return;
-        navigator.clipboard.readText()
-            .then((text) => { if (text.trim()) setXUrl(text.trim()); })
+        if (!clipboardReadSupported()) return;
+        readClipboardText()
+            .then((text) => { if (text) setXUrl(text); })
             .catch(() => undefined);
     }, []);
 
@@ -79,8 +80,8 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
     // "해상도 불러오기"에서 명칭·흐름 정리 — 붙여넣기와 조회를 분리해 두 번 탭하게 하던 것을 통합).
     const handleXFind = () => void xDownload.run(async () => {
         let url = xUrl.trim();
-        if (!url && navigator.clipboard?.readText) {
-            url = (await navigator.clipboard.readText().catch(() => '')).trim();
+        if (!url && clipboardReadSupported()) {
+            url = await readClipboardText().catch(() => '');
             if (url) setXUrl(url);
         }
         if (!url) {
