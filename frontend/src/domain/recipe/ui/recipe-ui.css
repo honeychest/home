@@ -662,13 +662,17 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 
 /* ── 로그인 화면 (2차, 2026-07-24 댓글 발췌 콜라주로 개편) ──
    구성(위→아래): 흐린 댓글 2줄 → 카드 콜라주(문구) → 흐린 댓글 1줄 → 로그인 버튼.
-   좌표는 실기기 뷰포트 기준 %(dvh)로 고정 — 이전에 스튜디오 목업의 고정 px 여백을 그대로
+   좌표는 실기기 뷰포트 기준 %로 고정 — 이전에 스튜디오 목업의 고정 px 여백을 그대로
    옮겼더니 실제 폰(뷰포트 높이가 목업 프레임보다 훨씬 큼)에서 비율이 안 맞아 버튼이 화면
    50% 부근에 와버렸다(2026-07-24 실기기 확인). "카드 중앙 35% / 버튼 중앙 80%"를 뷰포트
-   퍼센트로 직접 못박아 기기 화면 크기와 무관하게 항상 같은 비율이 되도록 고쳤다. */
+   퍼센트로 직접 못박아 기기 화면 크기와 무관하게 항상 같은 비율이 되도록 고쳤다.
+   단위는 dvh 대신 --rcp-vh-unit(LoginPage 의 useStableViewportUnit 이 JS로 고정) 사용 —
+   새로고침 직후 모바일 브라우저 주소창이 접히며 dvh 값이 한 번 더 바뀌어 레이아웃이
+   뒤틀리고 스크롤이 생기던 문제 대응(2026-07-24). 변수가 없을 때(JS 실행 전)는
+   1dvh 로 폴백해 정상 렌더된다. */
 .rcp-login {
   position: relative;
-  height: 100dvh;
+  height: calc(var(--rcp-vh-unit, 1dvh) * 100);
   /* 프레임이 커지면서 실기기 화면 높이에 따라 살짝 넘칠 수 있어, 페이지 자체는 절대
      스크롤되지 않도록 여기서 잘라낸다 (2026-07-24 확정 — 로그인 화면은 스크롤 없는 화면) */
   overflow: hidden;
@@ -685,7 +689,7 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
    (아래쪽 패딩은 스택 중심보다 아래라 이 계산에 영향 없음) */
 .rcp-login-comments {
   position: absolute;
-  top: calc(35dvh - 196px);
+  top: calc(var(--rcp-vh-unit, 1dvh) * 35 - 196px);
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - var(--rcp-space-6) * 2);
@@ -774,7 +778,7 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
    버튼 중앙이 80dvh 에 오도록 절대 좌표로 고정 (2026-07-24 확정, 위 설명 참고) */
 .rcp-login-button {
   position: absolute;
-  top: 80dvh;
+  top: calc(var(--rcp-vh-unit, 1dvh) * 80);
   left: 50%;
   transform: translate(-50%, -50%);
   width: calc(100% - var(--rcp-space-6) * 2);
@@ -784,7 +788,7 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 }
 .rcp-login-error {
   position: absolute;
-  top: calc(80dvh + 34px);
+  top: calc(var(--rcp-vh-unit, 1dvh) * 80 + 34px);
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - var(--rcp-space-6) * 2);

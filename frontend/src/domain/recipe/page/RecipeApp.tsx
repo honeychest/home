@@ -65,6 +65,17 @@ function useGikkaDocumentMeta(isLoginScreen: boolean) {
     }, [isLoginScreen]);
 }
 
+/** 서비스 워커 등록 (2026-07-24 확정) — 크롬 안드로이드가 "홈 화면에 추가"를 완전한
+    standalone WebAPK로 만들어주는 요건 중 하나. 이게 없으면 약식 바로가기로 설치돼
+    상태바 아래 얇은 구분선이 안 사라지는 문제가 실사용에서 확인됨. 캐싱 없는 순수
+    통과(pass-through) 워커라 recipe/sw.js scope(/recipe/)만 관여 — 다른 도메인 무관. */
+function useGikkaServiceWorker() {
+    useEffect(() => {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.register('/recipe/sw.js', { scope: '/recipe/' }).catch(() => undefined);
+    }, []);
+}
+
 // ── 앱으로 설치 팝업 (2026-07-20 확정) — 크롬(안드로이드)은 beforeinstallprompt 를 가로채
 // [설치하기]로 바로 설치, iOS Safari 는 그 이벤트 자체가 없어 "공유 → 홈 화면에 추가" 안내만
 // 보여준다.
@@ -150,13 +161,20 @@ export default function RecipeApp() {
     const [auth, setAuth] = useState<AuthState>({ phase: 'loading' });
     // 저장된 토큰이 아예 없으면 서버 응답 전에도 "거의 확실히 로그아웃 상태"라고 미리 판단
     // 가능 — loading 단계를 무조건 앱 본체(그린)로 그리다가 확인 후 로그인(크래프트)으로
-    // 바뀌는 배경·노치색 깜빡임을 없앤다 (2026-07-24 실사용 확인·수정)
-    const [probablyLoggedOut] = useState(() => !getToken());
+    // 바뀌는 배경·노치색 깜빡임을 없앤다 (2026-07-24 실사용 확인·수정).
+    // 앱 켤 때 한 번만 계산하면 안 된다 — 로그아웃 직후에도 checkSession 이 다시 도는데,
+    // 그 순간 이 값이 로그인 상태였던 옛 값(false)에 멈춰 있으면 로그아웃 후 로딩 찰나에
+    // 그린으로 잘못 그려졌다가 로그인 화면(크래프트)으로 바뀌는 깜빡임이 다시 생긴다 —
+    // 이 깜빡임이 안드로이드 상태바에 자국(선)을 남기는 것으로 실사용에서 확인됨
+    // (2026-07-24) — checkSession 이 돌 때마다 토큰을 다시 읽도록 수정.
+    const [probablyLoggedOut, setProbablyLoggedOut] = useState(() => !getToken());
     const showLoginVisuals = auth.phase === 'out' || (probablyLoggedOut && auth.phase !== 'in');
     useGikkaDocumentMeta(showLoginVisuals);
+    useGikkaServiceWorker();
     const inMonitor = useLocation().pathname.startsWith(MONITOR_PATH);
 
     const checkSession = useCallback(() => {
+        setProbablyLoggedOut(!getToken());
         setAuth({ phase: 'loading' });
         authRepository.me()
             .then((session) => {
