@@ -669,29 +669,32 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 .rcp-login {
   position: relative;
   height: 100dvh;
+  /* 프레임이 커지면서 실기기 화면 높이에 따라 살짝 넘칠 수 있어, 페이지 자체는 절대
+     스크롤되지 않도록 여기서 잘라낸다 (2026-07-24 확정 — 로그인 화면은 스크롤 없는 화면) */
+  overflow: hidden;
   /* 게이트 화면 전용 배경(2026-07-24) — 앱 본체(그린)와 분리된 크래프트 톤, tokens.css 참고 */
   background: var(--rcp-login-bg-gradient);
 }
 
 /* 댓글 발췌 프레임 — 위아래가 흐려지는 목록 안에 카드가 끼어 있다 (2026-07-24 확정,
-   아래쪽 패딩을 다시 키워 이전 대비 약 25% 더 길게 — "세로가 허전하다"는 추가 요청 반영,
-   이번엔 카드(스택) 자체도 128→160px 로 함께 키움).
+   늘어난 길이를 아래쪽 여백 하나에 몰아넣지 않고 위쪽 여백 + 항목 사이 간격으로 고르게
+   분산 — "하단만 길어져서 이상하다"는 지적 반영. 결과적으로 스크롤 유발 위험도 줄었다).
    top 값은 "카드(스택)의 세로 중앙이 35dvh에 오도록" 프레임 내부 구조를 역산한 상수 —
-   패딩 상단(24) + 위 댓글 2줄(22+12+22+12=68) + 스택 높이 절반(80) = 172px.
+   패딩 상단(32) + 위 댓글 2줄(22+20+22+20=84) + 스택 높이 절반(80) = 196px.
    댓글 줄 수·패딩·간격·스택 높이가 바뀌면 이 상수도 함께 다시 계산해야 한다.
    (아래쪽 패딩은 스택 중심보다 아래라 이 계산에 영향 없음) */
 .rcp-login-comments {
   position: absolute;
-  top: calc(35dvh - 172px);
+  top: calc(35dvh - 196px);
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - var(--rcp-space-6) * 2);
   max-width: 320px;
-  display: flex; flex-direction: column; gap: var(--rcp-space-3);
+  display: flex; flex-direction: column; gap: var(--rcp-space-5);
   border-radius: var(--rcp-radius-lg);
   background: var(--rcp-login-frame-bg);
   border: 1px solid var(--rcp-login-frame-border);
-  padding: var(--rcp-space-6) var(--rcp-space-4) calc(var(--rcp-space-8) * 3.5);
+  padding: var(--rcp-space-8) var(--rcp-space-4) var(--rcp-space-6);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
           mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
 }
@@ -1042,4 +1045,10 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   font-size: var(--rcp-fs-md);
   text-align: center;
   background: var(--rcp-bg-gradient);
+}
+/* 저장된 토큰이 없어 "로그인 화면으로 갈 가능성이 높은" 로딩/에러 상태 전용 (2026-07-24 확정)
+   — 앱 본체 그린 대신 로그인과 같은 크래프트 배경을 먼저 보여줘 전환 시 깜빡임을 없앤다 */
+.rcp-shell-status-login {
+  background: var(--rcp-login-bg-gradient);
+  color: var(--rcp-login-comment-ink);
 }

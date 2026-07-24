@@ -12,6 +12,7 @@ import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import { authRepository } from '../data/authRepository';
 import { setSessionExpiredHandler } from '../data/http';
+import { getToken } from '../data/tokenStorage';
 import DictionaryPage from './DictionaryPage';
 import FridgePage from './FridgePage';
 import HomePage from './HomePage';
@@ -147,7 +148,12 @@ type AuthState =
 export default function RecipeApp() {
     const install = useInstallPrompt();
     const [auth, setAuth] = useState<AuthState>({ phase: 'loading' });
-    useGikkaDocumentMeta(auth.phase === 'out');
+    // 저장된 토큰이 아예 없으면 서버 응답 전에도 "거의 확실히 로그아웃 상태"라고 미리 판단
+    // 가능 — loading 단계를 무조건 앱 본체(그린)로 그리다가 확인 후 로그인(크래프트)으로
+    // 바뀌는 배경·노치색 깜빡임을 없앤다 (2026-07-24 실사용 확인·수정)
+    const [probablyLoggedOut] = useState(() => !getToken());
+    const showLoginVisuals = auth.phase === 'out' || (probablyLoggedOut && auth.phase !== 'in');
+    useGikkaDocumentMeta(showLoginVisuals);
     const inMonitor = useLocation().pathname.startsWith(MONITOR_PATH);
 
     const checkSession = useCallback(() => {
@@ -179,17 +185,18 @@ export default function RecipeApp() {
         return () => setSessionExpiredHandler(null);
     }, []);
 
+    const shellStatusClass = `rcp-shell-status${showLoginVisuals ? ' rcp-shell-status-login' : ''}`;
     if (auth.phase === 'loading') {
         return (
             <div className="rcp-app" id="rcp-app">
-                <div className="rcp-shell-status" id="rcp-shell-loading">확인 중…</div>
+                <div className={shellStatusClass} id="rcp-shell-loading">확인 중…</div>
             </div>
         );
     }
     if (auth.phase === 'error') {
         return (
             <div className="rcp-app" id="rcp-app">
-                <div className="rcp-shell-status" id="rcp-shell-error" role="alert">
+                <div className={shellStatusClass} id="rcp-shell-error" role="alert">
                     <span>서버에 연결하지 못했어요</span>
                     <span>{auth.message}</span>
                     <RcpButton onClick={checkSession}>다시 시도</RcpButton>
