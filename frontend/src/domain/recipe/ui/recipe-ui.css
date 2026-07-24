@@ -17,7 +17,10 @@
 .rcp-screen {
   flex: 1;
   overflow-y: auto;
-  padding: var(--rcp-space-4) var(--rcp-space-4)
+  /* 상단 안전영역(2026-07-24) — index.html 의 status-bar-style: black-translucent 로
+     iOS PWA 상태바가 오버레이로 바뀌어(로그인 화면 경계선 수정) 콘텐츠가 상태바 영역까지
+     확장됨 — 화면 제목이 시계·배터리 아이콘에 안 가리도록 모든 화면 공통으로 여백 추가 */
+  padding: calc(var(--rcp-space-4) + env(safe-area-inset-top)) var(--rcp-space-4)
            calc(var(--rcp-tab-height) + var(--rcp-space-6));
 }
 /* FAB 를 띄우는 화면에만 — 떠 있는 버튼이 마지막 항목을 덮지 않도록 그 높이만큼 바닥을 더 비운다.
@@ -671,15 +674,15 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 }
 
 /* 댓글 발췌 프레임 — 위아래가 흐려지는 목록 안에 카드가 끼어 있다 (2026-07-24 확정,
-   아래쪽 패딩을 키워 프레임을 약 25% 더 길게 — "카드 아래로 여유가 있어도 될 것 같다"는
-   요청 반영, 카드(스택) 자체 크기는 그대로).
+   아래쪽 패딩을 다시 키워 이전 대비 약 25% 더 길게 — "세로가 허전하다"는 추가 요청 반영,
+   이번엔 카드(스택) 자체도 128→160px 로 함께 키움).
    top 값은 "카드(스택)의 세로 중앙이 35dvh에 오도록" 프레임 내부 구조를 역산한 상수 —
-   패딩 상단(24) + 위 댓글 2줄(22+12+22+12=68) + 스택 높이 절반(64) = 156px.
+   패딩 상단(24) + 위 댓글 2줄(22+12+22+12=68) + 스택 높이 절반(80) = 172px.
    댓글 줄 수·패딩·간격·스택 높이가 바뀌면 이 상수도 함께 다시 계산해야 한다.
    (아래쪽 패딩은 스택 중심보다 아래라 이 계산에 영향 없음) */
 .rcp-login-comments {
   position: absolute;
-  top: calc(35dvh - 156px);
+  top: calc(35dvh - 172px);
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - var(--rcp-space-6) * 2);
@@ -688,7 +691,7 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   border-radius: var(--rcp-radius-lg);
   background: var(--rcp-login-frame-bg);
   border: 1px solid var(--rcp-login-frame-border);
-  padding: var(--rcp-space-6) var(--rcp-space-4) calc(var(--rcp-space-8) * 2);
+  padding: var(--rcp-space-6) var(--rcp-space-4) calc(var(--rcp-space-8) * 3.5);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
           mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
 }
@@ -710,10 +713,11 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 }
 .rcp-login-comment-thumb { font-size: 0.6rem; margin-left: 3px; opacity: 0.8; }
 
-/* 카드 콜라주 — 문구 카드 3장 겹침 + "기까" 파일 탭 (2026-07-24 확정, 댓글 목록 안에 삽입되며 높이 압축) */
+/* 카드 콜라주 — 문구 카드 3장 겹침 + "기까" 파일 탭 (2026-07-24 확정, 댓글 목록 안에 삽입되며
+   높이 압축했다가 "세로가 허전하다"는 요청으로 128→160px 재확대) */
 .rcp-login-stack {
   position: relative;
-  height: 128px;
+  height: 160px;
   margin: 2px 0;
 }
 .rcp-login-card {
@@ -726,7 +730,7 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 .rcp-login-card-back1 { transform: rotate(-4deg) translateY(1px); }
 .rcp-login-card-front {
   display: flex; flex-direction: column; justify-content: center;
-  padding: var(--rcp-space-3) var(--rcp-space-4);
+  padding: var(--rcp-space-4);
   box-shadow: 0 5px 12px -4px rgba(51, 41, 28, 0.28);
 }
 .rcp-login-card-front::before {
@@ -738,9 +742,9 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 }
 .rcp-login-memo {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: 1.05rem;
   font-weight: var(--rcp-fw-bold);
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--rcp-login-ink);
   overflow-wrap: anywhere; /* 다국어 대비: 긴 문구도 카드 밖으로 안 나감 */
 }
