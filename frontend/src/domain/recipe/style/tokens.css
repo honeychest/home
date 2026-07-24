@@ -95,6 +95,10 @@
   /* ── 크기 ── */
   --rcp-tab-height: 58px;            /* 하단 탭 바 */
   --rcp-touch: 44px;                 /* 최소 터치 영역 */
+
+  /* 로그인 화면 전용 배경 (2026-07-24 확정) — 게이트 화면 한정, 앱 본체(그린)와 분리된 톤.
+     크래프트/종이 계열 — 로그인 화면만 이 변수를 쓴다, 다른 화면은 --rcp-bg-gradient 그대로 */
+  --rcp-login-bg-gradient: linear-gradient(180deg, #f4ecd8 0%, #efe4c9 100%);
 }
 
 /* 다크 = "밤의 냉장고": 시스템 설정 자동 전환 (2026-07-09 인터뷰 확정) */
@@ -142,5 +146,8 @@
     --rcp-shadow-postit: 0 1px 2px rgba(0, 0, 0, 0.4);
     --rcp-shadow-row: 0 1px 0 #10130f;
     --rcp-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.55);
+
+    /* 로그인 배경(다크) — 그린이 아니라 어두운 나무 도마 톤으로, 라이트와 같은 크래프트 계열 유지 */
+    --rcp-login-bg-gradient: linear-gradient(180deg, #1d1712 0%, #14100b 100%);
   }
 }

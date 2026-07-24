@@ -664,7 +664,8 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   align-items: center; justify-content: center;
   gap: var(--rcp-space-4);
   padding: var(--rcp-space-6);
-  background: var(--rcp-bg-gradient);
+  /* 게이트 화면 전용 배경(2026-07-24) — 앱 본체(그린)와 분리된 크래프트 톤, tokens.css 참고 */
+  background: var(--rcp-login-bg-gradient);
 }
 .rcp-login-brand {
   font-size: 2.2rem; font-weight: var(--rcp-fw-heavy);
