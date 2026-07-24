@@ -110,6 +110,12 @@
   --rcp-login-tab-bg: #1f7a3d;
   --rcp-login-tab-ink: #ffffff;
   --rcp-login-error-ink: #b3402e;
+  /* 댓글 발췌 연출용 (2026-07-24 확정) — 흐린 다른 댓글 목록 프레임·행 색 */
+  --rcp-login-frame-bg: rgba(255, 253, 246, 0.4);
+  --rcp-login-frame-border: rgba(51, 41, 28, 0.08);
+  --rcp-login-comment-ink: #6b5c40;
+  --rcp-login-comment-avatar-bg: #d8cbb0;
+  --rcp-login-comment-avatar-ink: #8a7a5c;
 }
 
 /* 다크 = "밤의 냉장고": 시스템 설정 자동 전환 (2026-07-09 인터뷰 확정) */

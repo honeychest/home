@@ -657,23 +657,56 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-/* ── 로그인 화면 (2차) ── */
+/* ── 로그인 화면 (2차, 2026-07-24 댓글 발췌 콜라주로 개편) ──
+   구성(위→아래): 흐린 댓글 2줄 → 카드 콜라주(문구) → 흐린 댓글 1줄 → 로그인 버튼.
+   padding-top 은 카드가 화면 세로 35% 부근에 오도록 실측 확정된 값 (2026-07-24) */
 .rcp-login {
   min-height: 100dvh;
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: var(--rcp-space-6);
-  padding: var(--rcp-space-6);
+  align-items: center; justify-content: flex-start;
+  padding: 68px var(--rcp-space-6) var(--rcp-space-6);
   /* 게이트 화면 전용 배경(2026-07-24) — 앱 본체(그린)와 분리된 크래프트 톤, tokens.css 참고 */
   background: var(--rcp-login-bg-gradient);
 }
 
-/* 카드 콜라주 — 문구 카드 3장 겹침 + "기까" 파일 탭 (2026-07-24 확정) */
-.rcp-login-stack {
-  position: relative;
+/* 댓글 발췌 프레임 — 위아래가 흐려지는 목록 안에 카드가 끼어 있다 (2026-07-24 확정).
+   margin-top 음수는 "카드만 위로 올려달라"는 실측 요청 반영 — 버튼 위치는 그대로 두기 위해
+   .rcp-login-button 의 margin-top 을 그만큼 더했다 (아래) */
+.rcp-login-comments {
   width: 100%;
   max-width: 320px;
-  height: 220px;
+  margin-top: -35px;
+  display: flex; flex-direction: column; gap: var(--rcp-space-2);
+  border-radius: var(--rcp-radius-lg);
+  background: var(--rcp-login-frame-bg);
+  border: 1px solid var(--rcp-login-frame-border);
+  padding: var(--rcp-space-4);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
+}
+.rcp-login-comment-row {
+  display: flex; gap: var(--rcp-space-2); align-items: flex-start;
+  opacity: 0.3; /* 실제 강조 카드와 확실히 구분되도록 옅게 (2026-07-24 확정) */
+}
+.rcp-login-comment-avatar {
+  display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 22px; height: 22px; border-radius: 50%;
+  font-size: 0.58rem; font-weight: var(--rcp-fw-heavy);
+  background: var(--rcp-login-comment-avatar-bg); color: var(--rcp-login-comment-avatar-ink);
+}
+.rcp-login-comment-text {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--rcp-login-comment-ink);
+  overflow-wrap: anywhere;
+}
+.rcp-login-comment-thumb { font-size: 0.6rem; margin-left: 3px; opacity: 0.8; }
+
+/* 카드 콜라주 — 문구 카드 3장 겹침 + "기까" 파일 탭 (2026-07-24 확정, 댓글 목록 안에 삽입되며 높이 압축) */
+.rcp-login-stack {
+  position: relative;
+  height: 128px;
+  margin: 2px 0;
 }
 .rcp-login-card {
   position: absolute; inset: 0;
@@ -681,54 +714,55 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   background: var(--rcp-login-card-bg);
   border: 1px solid var(--rcp-login-card-border);
 }
-.rcp-login-card-back2 { transform: rotate(6deg) translateY(4px); box-shadow: var(--rcp-shadow-row); }
-.rcp-login-card-back1 { transform: rotate(-4deg) translateY(2px); box-shadow: var(--rcp-shadow-row); }
+.rcp-login-card-back2 { transform: rotate(6deg) translateY(3px); }
+.rcp-login-card-back1 { transform: rotate(-4deg) translateY(1px); }
 .rcp-login-card-front {
-  display: flex; align-items: center;
-  padding: var(--rcp-space-5);
-  box-shadow: 0 6px 14px -4px rgba(51, 41, 28, 0.28);
+  display: flex; flex-direction: column; justify-content: center;
+  padding: var(--rcp-space-3) var(--rcp-space-4);
+  box-shadow: 0 5px 12px -4px rgba(51, 41, 28, 0.28);
 }
 .rcp-login-card-front::before {
   content: "";
-  position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
-  width: 13px; height: 13px; border-radius: 50%;
+  position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+  width: 11px; height: 11px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ff8f8f, var(--rcp-login-pin) 70%);
   box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3);
 }
 .rcp-login-memo {
   margin: 0;
-  font-size: var(--rcp-fs-lg);
+  font-size: 0.98rem;
   font-weight: var(--rcp-fw-bold);
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--rcp-login-ink);
   overflow-wrap: anywhere; /* 다국어 대비: 긴 문구도 카드 밖으로 안 나감 */
 }
+.rcp-login-thumb-line {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  font-weight: var(--rcp-fw-bold);
+  color: var(--rcp-login-comment-avatar-ink);
+}
 .rcp-login-tab {
-  position: absolute; top: 24px; right: -14px;
+  position: absolute; top: 16px; right: -12px;
   background: var(--rcp-login-tab-bg); color: var(--rcp-login-tab-ink);
-  font-weight: var(--rcp-fw-heavy); font-size: 1.3rem;
-  padding: 10px 8px 10px 12px;
+  font-weight: var(--rcp-fw-heavy); font-size: 1.05rem;
+  padding: 7px 6px 7px 9px;
   border-radius: 4px 8px 8px 4px;
   writing-mode: vertical-rl; text-orientation: upright; letter-spacing: -0.05em;
   box-shadow: 2px 3px 6px rgba(0, 0, 0, 0.2);
 }
 
-/* 로그인 버튼 받침 — 버튼이 배경 위에 혼자 뜨지 않도록 카드 안에 담는다 (2026-07-24 확정) */
-.rcp-login-pedestal {
-  width: 100%;
-  max-width: 320px;
-  padding: var(--rcp-space-4);
-  border-radius: var(--rcp-radius-xl);
-  background: rgba(255, 253, 246, 0.6);
-  border: 1px solid var(--rcp-login-card-border);
-}
 /* 구글 iframe 내용물은 항상 라이트 — 이 자리만 light 로 선언해야 다크 모드에서도
    크롬이 iframe 투명을 유지 (선언 불일치 시 흰 판을 깖, 2026-07-13).
-   구글이 그리는 버튼은 고정 폭(199px)이라 flex 가운데 정렬을 걸어야 받침 카드 안에서
-   중앙에 온다 — 기본값(block)은 왼쪽에 붙는다 (2026-07-24 실사용 확인·수정) */
+   구글이 그리는 버튼은 고정 폭(199px)이라 flex 가운데 정렬을 걸어야 화면 안에서 중앙에 온다
+   — 기본값(block)은 왼쪽에 붙는다 (2026-07-24 실사용 확인·수정).
+   margin-top 61px = 원래 26px + 댓글 프레임을 위로 올린 35px 만큼 보정
+   (댓글만 위로 옮기고 버튼 위치는 그대로 두기 위함, 2026-07-24 확정) */
 .rcp-login-button {
   min-height: var(--rcp-touch); color-scheme: light;
   display: flex; justify-content: center;
+  width: 100%; max-width: 320px;
+  margin-top: 61px;
 }
 .rcp-login-error {
   color: var(--rcp-login-error-ink);
