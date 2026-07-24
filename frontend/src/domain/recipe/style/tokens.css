@@ -103,6 +103,13 @@
   --rcp-login-card-bg: #fffdf6;
   --rcp-login-card-border: rgba(51, 41, 28, 0.14);
   --rcp-login-pin: #b6483a;
+  /* 글자·탭 색도 고정 — 앱 전역 --rcp-text/--rcp-accent-strong 은 다크모드에서 값이 바뀌는데,
+     이 화면 배경은 항상 라이트로 고정돼 있어 그대로 쓰면 다크모드에서 흰 배경에 흰 글자가 된다
+     (2026-07-24 실사용 확인·수정) */
+  --rcp-login-ink: #33291c;
+  --rcp-login-tab-bg: #1f7a3d;
+  --rcp-login-tab-ink: #ffffff;
+  --rcp-login-error-ink: #b3402e;
 }
 
 /* 다크 = "밤의 냉장고": 시스템 설정 자동 전환 (2026-07-09 인터뷰 확정) */

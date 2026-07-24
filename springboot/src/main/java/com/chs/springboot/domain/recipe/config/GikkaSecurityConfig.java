@@ -33,16 +33,21 @@ public class GikkaSecurityConfig {
         return http.build();
     }
 
-    /** allowedOrigins 가 비어 있으면(지금의 같은 오리진 PWA) 크로스 오리진 요청은 그냥 막히고,
-        같은 오리진 요청은 CORS 검사 대상이 아니라 영향 없음. 네이티브 오리진이 정해지면
-        gikka.auth.allowed-origins 설정만 채우면 된다. */
+    /** allowedOrigins 가 비어 있으면(지금의 같은 오리진 PWA) CORS 등록 자체를 하지 않는다 —
+        등록해두면 Origin 헤더가 붙은 같은 오리진 요청도 매칭되는 오리진이 없어 403 이 났다
+        (전역 SecurityConfig.corsConfigurationSource() 의 !allowedOriginsRaw.isBlank() 가드와
+        같은 패턴, recipe 격리 규율상 공용 유틸로 뽑지 않고 각자 소유). 네이티브 오리진이
+        정해지면 gikka.auth.allowed-origins 설정만 채우면 된다. */
     private CorsConfigurationSource corsConfigurationSource(GikkaAuthProperties properties) {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(properties.getAllowedOrigins());
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/recipe/**", configuration);
+        List<String> allowedOrigins = properties.getAllowedOrigins();
+        if (!allowedOrigins.isEmpty()) {
+            CorsConfiguration configuration = new CorsConfiguration();
+            configuration.setAllowedOrigins(allowedOrigins);
+            configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+            configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+            source.registerCorsConfiguration("/api/recipe/**", configuration);
+        }
         return source;
     }
 }

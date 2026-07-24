@@ -700,12 +700,12 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   font-size: var(--rcp-fs-lg);
   font-weight: var(--rcp-fw-bold);
   line-height: 1.6;
-  color: var(--rcp-text);
+  color: var(--rcp-login-ink);
   overflow-wrap: anywhere; /* 다국어 대비: 긴 문구도 카드 밖으로 안 나감 */
 }
 .rcp-login-tab {
   position: absolute; top: 24px; right: -14px;
-  background: var(--rcp-accent-strong); color: var(--rcp-on-accent);
+  background: var(--rcp-login-tab-bg); color: var(--rcp-login-tab-ink);
   font-weight: var(--rcp-fw-heavy); font-size: 1.3rem;
   padding: 10px 8px 10px 12px;
   border-radius: 4px 8px 8px 4px;
@@ -723,10 +723,15 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   border: 1px solid var(--rcp-login-card-border);
 }
 /* 구글 iframe 내용물은 항상 라이트 — 이 자리만 light 로 선언해야 다크 모드에서도
-   크롬이 iframe 투명을 유지 (선언 불일치 시 흰 판을 깖, 2026-07-13) */
-.rcp-login-button { min-height: var(--rcp-touch); color-scheme: light; }
+   크롬이 iframe 투명을 유지 (선언 불일치 시 흰 판을 깖, 2026-07-13).
+   구글이 그리는 버튼은 고정 폭(199px)이라 flex 가운데 정렬을 걸어야 받침 카드 안에서
+   중앙에 온다 — 기본값(block)은 왼쪽에 붙는다 (2026-07-24 실사용 확인·수정) */
+.rcp-login-button {
+  min-height: var(--rcp-touch); color-scheme: light;
+  display: flex; justify-content: center;
+}
 .rcp-login-error {
-  color: var(--rcp-danger);
+  color: var(--rcp-login-error-ink);
   font-size: var(--rcp-fs-sm);
   text-align: center;
 }
