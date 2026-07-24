@@ -97,7 +97,8 @@
   --rcp-touch: 44px;                 /* 최소 터치 영역 */
 
   /* 로그인 화면 전용 배경 (2026-07-24 확정) — 게이트 화면 한정, 앱 본체(그린)와 분리된 톤.
-     크래프트/종이 계열 — 로그인 화면만 이 변수를 쓴다, 다른 화면은 --rcp-bg-gradient 그대로 */
+     크래프트/종이 계열 — 로그인 화면만 이 변수를 쓴다, 다른 화면은 --rcp-bg-gradient 그대로.
+     다크모드 재정의 없음 — 시스템 설정과 무관하게 항상 이 톤 하나만 사용 (2026-07-24 확정) */
   --rcp-login-bg-gradient: linear-gradient(180deg, #f4ecd8 0%, #efe4c9 100%);
 }
 
@@ -146,8 +147,5 @@
     --rcp-shadow-postit: 0 1px 2px rgba(0, 0, 0, 0.4);
     --rcp-shadow-row: 0 1px 0 #10130f;
     --rcp-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.55);
-
-    /* 로그인 배경(다크) — 그린이 아니라 어두운 나무 도마 톤으로, 라이트와 같은 크래프트 계열 유지 */
-    --rcp-login-bg-gradient: linear-gradient(180deg, #1d1712 0%, #14100b 100%);
   }
 }
