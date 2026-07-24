@@ -100,6 +100,10 @@
      분리된 크래프트/종이 톤. 로그인 화면만 이 변수들을 쓴다, 다른 화면은 --rcp-bg-gradient 등
      기존 토큰 그대로. 다크모드 재정의 없음 — 시스템 설정과 무관하게 항상 이 톤 하나만 사용 */
   --rcp-login-bg-gradient: linear-gradient(180deg, #f4ecd8 0%, #efe4c9 100%);
+  /* 브라우저/PWA 상단 노티(theme-color) 전용 — 로그인 화면일 때만 RecipeApp 이 이 값을 읽어
+     적용한다(2026-07-24 확정, 그린 노티가 크래프트 배경과 안 어울린다는 실사용 지적).
+     --rcp-login-bg-gradient 상단색과 맞춘 단색 (theme-color 는 그라데이션 불가) */
+  --rcp-login-theme-color: #f4ecd8;
   --rcp-login-card-bg: #fffdf6;
   --rcp-login-card-border: rgba(51, 41, 28, 0.14);
   --rcp-login-pin: #b6483a;

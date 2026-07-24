@@ -33,8 +33,10 @@ const MONITOR_TABS: RcpTab[] = [
     { to: '/recipe/home', label: '나가기', Icon: LogOut },
 ];
 
-/** 기까 전용 문서 메타(제목·manifest·테마색)를 recipe 안에서만 적용하고 나가면 원복 */
-function useGikkaDocumentMeta() {
+/** 기까 전용 문서 메타(제목·manifest·테마색)를 recipe 안에서만 적용하고 나가면 원복.
+    isLoginScreen 이 바뀌면(로그인↔앱 본체 전환) 테마색을 다시 계산한다 — 로그인 화면은
+    크래프트 배경과 맞춰야 해서 앱 본체(그린)와 다른 색을 쓴다 (2026-07-24 확정) */
+function useGikkaDocumentMeta(isLoginScreen: boolean) {
     useEffect(() => {
         const previousTitle = document.title;
         document.title = '기까';
@@ -48,8 +50,9 @@ function useGikkaDocumentMeta() {
         themeColor.name = 'theme-color';
         // 색의 원본은 tokens.css — 여기 하드코딩하면 테마 색 변경 시 이 줄만 옛 색으로 남는다 (2026-07-13)
         const appRoot = document.getElementById('rcp-app');
+        const colorVar = isLoginScreen ? '--rcp-login-theme-color' : '--rcp-accent-strong';
         themeColor.content = appRoot
-            ? getComputedStyle(appRoot).getPropertyValue('--rcp-accent-strong').trim()
+            ? getComputedStyle(appRoot).getPropertyValue(colorVar).trim()
             : '';
         document.head.appendChild(themeColor);
 
@@ -58,7 +61,7 @@ function useGikkaDocumentMeta() {
             manifestLink.remove();
             themeColor.remove();
         };
-    }, []);
+    }, [isLoginScreen]);
 }
 
 // ── 앱으로 설치 팝업 (2026-07-20 확정) — 크롬(안드로이드)은 beforeinstallprompt 를 가로채
@@ -142,9 +145,9 @@ type AuthState =
     | { phase: 'error'; message: string };
 
 export default function RecipeApp() {
-    useGikkaDocumentMeta();
     const install = useInstallPrompt();
     const [auth, setAuth] = useState<AuthState>({ phase: 'loading' });
+    useGikkaDocumentMeta(auth.phase === 'out');
     const inMonitor = useLocation().pathname.startsWith(MONITOR_PATH);
 
     const checkSession = useCallback(() => {

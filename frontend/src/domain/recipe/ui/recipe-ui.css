@@ -659,28 +659,36 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 
 /* ── 로그인 화면 (2차, 2026-07-24 댓글 발췌 콜라주로 개편) ──
    구성(위→아래): 흐린 댓글 2줄 → 카드 콜라주(문구) → 흐린 댓글 1줄 → 로그인 버튼.
-   padding-top 은 카드가 화면 세로 35% 부근에 오도록 실측 확정된 값 (2026-07-24) */
+   좌표는 실기기 뷰포트 기준 %(dvh)로 고정 — 이전에 스튜디오 목업의 고정 px 여백을 그대로
+   옮겼더니 실제 폰(뷰포트 높이가 목업 프레임보다 훨씬 큼)에서 비율이 안 맞아 버튼이 화면
+   50% 부근에 와버렸다(2026-07-24 실기기 확인). "카드 중앙 35% / 버튼 중앙 80%"를 뷰포트
+   퍼센트로 직접 못박아 기기 화면 크기와 무관하게 항상 같은 비율이 되도록 고쳤다. */
 .rcp-login {
-  min-height: 100dvh;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: flex-start;
-  padding: 68px var(--rcp-space-6) var(--rcp-space-6);
+  position: relative;
+  height: 100dvh;
   /* 게이트 화면 전용 배경(2026-07-24) — 앱 본체(그린)와 분리된 크래프트 톤, tokens.css 참고 */
   background: var(--rcp-login-bg-gradient);
 }
 
-/* 댓글 발췌 프레임 — 위아래가 흐려지는 목록 안에 카드가 끼어 있다 (2026-07-24 확정).
-   margin-top 음수는 "카드만 위로 올려달라"는 실측 요청 반영 — 버튼 위치는 그대로 두기 위해
-   .rcp-login-button 의 margin-top 을 그만큼 더했다 (아래) */
+/* 댓글 발췌 프레임 — 위아래가 흐려지는 목록 안에 카드가 끼어 있다 (2026-07-24 확정,
+   아래쪽 패딩을 키워 프레임을 약 25% 더 길게 — "카드 아래로 여유가 있어도 될 것 같다"는
+   요청 반영, 카드(스택) 자체 크기는 그대로).
+   top 값은 "카드(스택)의 세로 중앙이 35dvh에 오도록" 프레임 내부 구조를 역산한 상수 —
+   패딩 상단(24) + 위 댓글 2줄(22+12+22+12=68) + 스택 높이 절반(64) = 156px.
+   댓글 줄 수·패딩·간격·스택 높이가 바뀌면 이 상수도 함께 다시 계산해야 한다.
+   (아래쪽 패딩은 스택 중심보다 아래라 이 계산에 영향 없음) */
 .rcp-login-comments {
-  width: 100%;
+  position: absolute;
+  top: calc(35dvh - 156px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - var(--rcp-space-6) * 2);
   max-width: 320px;
-  margin-top: -35px;
-  display: flex; flex-direction: column; gap: var(--rcp-space-2);
+  display: flex; flex-direction: column; gap: var(--rcp-space-3);
   border-radius: var(--rcp-radius-lg);
   background: var(--rcp-login-frame-bg);
   border: 1px solid var(--rcp-login-frame-border);
-  padding: var(--rcp-space-4);
+  padding: var(--rcp-space-6) var(--rcp-space-4) calc(var(--rcp-space-8) * 2);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
           mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
 }
@@ -756,15 +764,24 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
    크롬이 iframe 투명을 유지 (선언 불일치 시 흰 판을 깖, 2026-07-13).
    구글이 그리는 버튼은 고정 폭(199px)이라 flex 가운데 정렬을 걸어야 화면 안에서 중앙에 온다
    — 기본값(block)은 왼쪽에 붙는다 (2026-07-24 실사용 확인·수정).
-   margin-top 61px = 원래 26px + 댓글 프레임을 위로 올린 35px 만큼 보정
-   (댓글만 위로 옮기고 버튼 위치는 그대로 두기 위함, 2026-07-24 확정) */
+   버튼 중앙이 80dvh 에 오도록 절대 좌표로 고정 (2026-07-24 확정, 위 설명 참고) */
 .rcp-login-button {
+  position: absolute;
+  top: 80dvh;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - var(--rcp-space-6) * 2);
+  max-width: 320px;
   min-height: var(--rcp-touch); color-scheme: light;
   display: flex; justify-content: center;
-  width: 100%; max-width: 320px;
-  margin-top: 61px;
 }
 .rcp-login-error {
+  position: absolute;
+  top: calc(80dvh + 34px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - var(--rcp-space-6) * 2);
+  max-width: 320px;
   color: var(--rcp-login-error-ink);
   font-size: var(--rcp-fs-sm);
   text-align: center;
