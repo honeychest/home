@@ -9,7 +9,7 @@
 import type { LocalExtractorHealth } from './monitorTypes';
 
 /** 서비스가 여기서 돌아야 정상 — 사본이 아니라 Jenkins 가 git pull 하는 체크아웃 (recipe - 24) */
-export const EXPECTED_SERVER_PATH = '/Users/honey/devcontext/project/lab/gikka/server.py';
+export const EXPECTED_SERVER_PATH = '/Users/honey/devcontext/project/lab/gikka-extractor/server.py';
 
 export type LocalExtractorLevel = 'ok' | 'warning' | 'down';
 

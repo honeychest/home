@@ -1,4 +1,4 @@
-# gikka-local — 로컬 모델 페일오버 호스트 서비스
+# gikka-extractor — 로컬 모델 페일오버 호스트 서비스
 
 Spring 앱(chs-app-1/2)은 도커 컨테이너(Alpine Linux)라 yt-dlp·ffmpeg·whisper-cli 를 직접
 실행할 수 없다. 이 서비스는 mac-mini 호스트(macOS)에서 상시 도는 작은 HTTP 서버로,
@@ -6,10 +6,12 @@ Spring 의 `LocalRecipeExtractor` 가 `host.docker.internal:8765` 로 호출한�
 (LM Studio 와 동일한 host.docker.internal 패턴 — 자세한 배경은
 `docs/recipe/CONTEXT.md` "로컬 모델 페일오버" 절 참고).
 
-이 폴더(`gikka/`)는 recipe(기까) 도메인 전용 최상위 폴더다 — Spring(`springboot/`)·
-프론트(`frontend/`)와 마찬가지로 recipe 코드베이스의 일부이며, 2단계에서 별도 앱으로
-분리될 때 이 폴더도 함께 옮겨간다. (배포 스크립트 백업 폴더인 `chs/`와는 무관 — 그 폴더에
-잘못 두었다가 `.gitignore`(`/chs/`)에 걸려 커밋 자체가 안 되는 걸 확인하고 이리로 옮김.)
+이 폴더(`gikka-extractor/`)는 recipe(기까) 도메인 전용 폴더다 — Spring(`springboot/`)·
+프론트(`frontend/`)와 마찬가지로 recipe 코드베이스의 일부다. (배포 스크립트 백업 폴더인
+`chs/`와는 무관 — 그 폴더에 잘못 두었다가 `.gitignore`(`/chs/`)에 걸려 커밋 자체가 안 되는 걸
+확인하고 이리로 옮김.) 2026-07-24 — recipe 백엔드를 별도 Spring Boot 서비스(`gikka/`)로
+분리하며, 이 호스트 서비스는 이름이 겹치지 않도록 `gikka/` → `gikka-extractor/` 로 옮겼다
+(원래 이름은 `gikka/`였음 — 새 백엔드 서비스가 그 자리를 대신함).
 
 ## 사전 준비 (mac-mini, Homebrew — 2026-07-14 설치 완료)
 ```
@@ -18,8 +20,10 @@ brew install yt-dlp ffmpeg whisper-cpp
 
 ## 배포 — 이제 자동 (2026-07-16 변경)
 `server.py` 는 **복사하지 않는다.** launchd 가 저장소 체크아웃
-(`/Users/honey/devcontext/project/lab/gikka/server.py`)을 직접 돌리고, Jenkins 의
-`Deploy Gikka Local` stage 가 `gikka/` 변경을 감지해 재기동한다 → **푸시하면 반영된다.**
+(`/Users/honey/devcontext/project/lab/gikka-extractor/server.py`)을 직접 돌리고, Jenkins 의
+`Deploy Gikka Local` stage 가 `gikka-extractor/` 변경을 감지해 재기동한다 → **푸시하면 반영된다.**
+⚠ 폴더명이 `gikka/` → `gikka-extractor/` 로 바뀌었으므로, mac-mini 의
+`com.gikka.local-extractor.plist` 실행 경로도 함께 갱신해야 한다(아래 설치 절차 참고).
 
 > 왜 바꿨나: 예전엔 `cp server.py ~/gikka-local/server.py` 로 뜬 **사본**을 돌렸다. 저장소만
 > 갱신되고 사본은 그대로 남아, `transcriptChars`(품질 경고의 근거)를 안 보내는 옛 코드가 계속

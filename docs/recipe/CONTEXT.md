@@ -306,7 +306,7 @@
   입력에 아예 안 들어가고 있었다. 설명란이 빈 영상에서 STT 가 "오징어짬뽕"을 "오뎅탕(진라면)"
   으로 오인식해도 교차 검증 소스가 없었음 — 상품명·요리명은 제목에 정확히 적힌 경우가 많다.
   `RecipeExtractor.extract(videoUrl, title, description)` 으로 시그니처 확장, Gemini·로컬
-  (gikka/server.py) 프롬프트 양쪽에 제목 원문 파트 + "상품명·요리명은 음성보다 제목·설명란
+  (gikka-extractor/server.py) 프롬프트 양쪽에 제목 원문 파트 + "상품명·요리명은 음성보다 제목·설명란
   표기 우선"(음성은 비슷한 발음으로 오인식 가능) 지시 추가. 배포 후 해당 영상 강제 재분석으로
   검증. 그래도 틀리는 사례가 쌓이면 이월 설계 ②(최대 분석 티어) 착수 검토.
 
@@ -349,21 +349,22 @@
   호스트(macOS)에 Homebrew로 설치한 것이라 컨테이너 안에서 직접 실행 불가(OS/아키텍처 자체가
   다름 — 실제로 컨테이너 안에 세 도구 전부 없음을 확인). LM Studio 가 되는 이유(네트워크 호출)
   와 달리 이건 프로세스 실행이 필요해 같은 방식이 안 통함.
-  해결: mac-mini 호스트에 작은 상시 HTTP 서비스(`gikka/server.py`, 외부
+  해결: mac-mini 호스트에 작은 상시 HTTP 서비스(`gikka-extractor/server.py`, 외부
   의존 없이 파이썬 표준 라이브러리만 사용)를 두고, Spring 은 `host.docker.internal:8765` 로
   호출만 한다(LM Studio 와 동일한 host.docker.internal 패턴 — 네트워크 호출은 컨테이너 경계를
   넘어가도 문제없음). launchd(`com.gikka.local-extractor.plist`)로 상시 기동·재기동 관리.
-  배포·설정·환경변수는 `gikka/README.md` 참고. (2026-07-14 폴더 정정 — `chs/`는 서버
+  배포·설정·환경변수는 `gikka-extractor/README.md` 참고. (2026-07-14 폴더 정정 — `chs/`는 서버
   설정값 백업 전용 폴더이자 `.gitignore`(`/chs/`) 대상이라 실제 코드가 여기 있으면 안 됨.
   recipe 전용 최상위 `gikka/` 로 이동해 다른 도메인 폴더[springboot·frontend]와 같은
-  격리 원칙을 따름.)
+  격리 원칙을 따름. 2026-07-24 재정정 — recipe 백엔드가 별도 서비스로 분리되며 `gikka/`는
+  그 Spring Boot 프로젝트 자리가 되어, 이 호스트 서비스는 `gikka-extractor/`로 다시 이동함.)
   LM Studio 로드 가능 모델: gemma-4-31b-it-mlx, qwen3.5-27b, qwen3.6-35b-a3b 등.
   "Mac-mini-LLM" 별칭으로 호출하면 로드된 모델이 뭐든 자동으로 잡혀서, 나중에 모델을 바꿔도
   앱/서비스 재배포가 필요 없음 — 항상 이 별칭으로 호출할 것.
   주의: `~/.hermes/`(mac-mini)는 사용자의 완전히 별개인 개인 에이전트 시스템(Hermes) —
   recipe/home 프로젝트와 무관, 건드리지 않는다.
 - 구현 파일: `LocalRecipeExtractor`(호스트 서비스 호출, RestClient.Builder 시임) ·
-  `HybridRecipeExtractor`(라우팅, `@Primary`) · `gikka/server.py`(호스트
+  `HybridRecipeExtractor`(라우팅, `@Primary`) · `gikka-extractor/server.py`(호스트
   서비스 본체) · `GikkaMediaProperties`(local-extractor-base-url·enabled 추가) ·
   테스트 `LocalRecipeExtractorTest`·`HybridRecipeExtractorTest` (MockRestServiceServer,
   실 네트워크 없이 라우팅·폴백 검증). 백엔드 테스트 45개 전부 통과, ArchUnit 격리 유지 확인.
@@ -476,12 +477,13 @@
   커밋 `b8eaea9`)를 안 보내는 옛 코드가 계속 돌아 **DONE 125건 전부 품질 경고가 한 번도 작동하지
   않았다**. 사용자는 "푸시하면 자동 반영"이라고 알고 있었고 그게 springboot·frontend·nexus 에는
   맞았기 때문에 아무도 눈치채지 못했다 — 조용히 어긋나는 전형적 사본 사고.
-- **결정**: 사본을 없앤다. plist 가 체크아웃의 `gikka/server.py` 를 직접 실행하고, Jenkinsfile 에
-  `Deploy Gikka Local` stage(= `launchctl kickstart -k`)를 둬 `gikka/` 변경 시 재기동한다.
-  → 이제 gikka 도 푸시=반영. `~/gikka-local` 에는 모델·로그만 남는다(코드 아님).
-  **`cp server.py ~/gikka-local/` 를 다시 만들지 말 것** — 이 사고의 원인이 그 한 줄이었다.
+- **결정**: 사본을 없앤다. plist 가 체크아웃의 `gikka-extractor/server.py` 를 직접 실행하고,
+  Jenkinsfile 에 `Deploy Gikka Local` stage(= `launchctl kickstart -k`)를 둬 `gikka-extractor/`
+  변경 시 재기동한다. → 이제 gikka-extractor 도 푸시=반영. `~/gikka-local` 에는 모델·로그만
+  남는다(코드 아님). **`cp server.py ~/gikka-local/` 를 다시 만들지 말 것** — 이 사고의 원인이
+  그 한 줄이었다.
 - 최초 1회 plist 설치만 손이 필요하다(`~/Library/LaunchAgents` 는 홈이라 Jenkins 밖) —
-  절차는 `gikka/README.md`.
+  절차는 `gikka-extractor/README.md`.
 
 ### 분석 품질 검출 (2026-07-16 확정·구현 완료 — 사용자 제보에서)
 - 계기: "떡볶이에 떡이 없다"를 추천 화면에서 우연히 발견 + "레시피가 많아져서 하나하나 눌러서
@@ -522,7 +524,7 @@
   파고든 결과. 12장이면 53초 영상에서 약 4초 간격이라 **떡 넣는 순간이 프레임 사이로 빠져
   모델이 아예 못 본다**. 실제로 한 건은 steps 에조차 떡이 없었다(= 못 봄), 다른 한 건은
   steps 엔 떡이 있는데 재료 목록에만 없었다(= 보고도 안 씀).
-- 검증 방법(재현 가능): 돌고 있는 서비스는 그대로 두고 `gikka/server.py` 를 모듈로 import 해
+- 검증 방법(재현 가능): 돌고 있는 서비스는 그대로 두고 `gikka-extractor/server.py` 를 모듈로 import 해
   `TARGET_FRAMES` 만 바꿔가며 같은 파이프라인을 직접 호출. **전사 글자 수가 양쪽 동일**해서
   (음성 고정, 프레임만 변수) 통제된 비교가 된다. 앞으로 로컬 품질 실험은 이 방식을 쓸 것.
 - 실측 5건 결과: 실패 2건(37·53초)이 **24장에서 둘 다 떡 잡힘**. 56초 영상은 6개→10개.

@@ -12,7 +12,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>/Users/honey/devcontext/project/lab/gikka/server.py</string>
+        <string>/Users/honey/devcontext/project/lab/gikka-extractor/server.py</string>
     </array>
     <!-- launchd 는 기본 PATH 가 /usr/bin:/bin:/usr/sbin:/sbin 이라 homebrew 경로가 없다.
          server.py 는 yt-dlp·ffmpeg·whisper 를 절대경로로 부르니 그건 괜찮았는데, deno 는
