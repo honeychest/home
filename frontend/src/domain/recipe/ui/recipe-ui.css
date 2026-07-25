@@ -595,6 +595,9 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   overflow: hidden;
 }
 .rcp-skeleton-card {
+  /* height:100% 는 .rcp-coverflow-card 와 같은 이유로 필수 — 없으면 WebKit(iOS)에서 폭이
+     0 이 되어 로딩 중 회색 카드가 통째로 안 보인다 (2026-07-25, 실제 카드와 함께 교정) */
+  height: 100%;
   flex: 0 0 auto; aspect-ratio: 0.86; /* .rcp-coverflow-card 와 동일 비율 */
   border-radius: var(--rcp-radius-lg);
   background: var(--rcp-surface-dim);
