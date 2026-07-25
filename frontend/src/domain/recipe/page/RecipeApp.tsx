@@ -35,10 +35,11 @@ const MONITOR_TABS: RcpTab[] = [
 ];
 
 /** 기까 전용 문서 메타(제목·manifest·테마색)를 recipe 안에서만 적용하고 나가면 원복.
-    isLoginScreen 이 바뀌면(로그인↔앱 본체 전환) 테마색을 다시 계산한다 — 로그인 화면은
-    크래프트 배경, 앱 본체는 아이스화이트 배경으로 서로 다른 배경색을 쓰므로 노치도 각자
-    배경에 맞춘다 (2026-07-25 확정 — 이전엔 앱 본체 노치가 그린 포인트색이라 배경과 따로
-    튀어 화면이 좁아 보인다는 지적으로, 포인트색 대신 배경색을 쓰도록 변경) */
+    두 effect 로 분리 (2026-07-25 확정) — theme-color 메타 태그를 화면 전환(로그인↔앱 본체)마다
+    지웠다 새로 만들면, 설치된 PWA(홈 화면 아이콘 실행)에서 안드로이드 상태바가 새 노드로의
+    변경을 못 따라가 노치와 배경 사이에 회색 줄이 남고 새로고침해야만 없어지는 문제가 실사용에서
+    확인됨. 태그 자체는 recipe 진입 시 1회만 만들고 이탈 시에만 지우며, 화면 전환 때는 같은
+    태그의 content 값만 바꾼다 — 태그가 없는 순간이 생기지 않아야 상태바가 안정적으로 따라온다. */
 function useGikkaDocumentMeta(isLoginScreen: boolean) {
     useEffect(() => {
         const previousTitle = document.title;
@@ -51,12 +52,6 @@ function useGikkaDocumentMeta(isLoginScreen: boolean) {
 
         const themeColor = document.createElement('meta');
         themeColor.name = 'theme-color';
-        // 색의 원본은 tokens.css — 여기 하드코딩하면 테마 색 변경 시 이 줄만 옛 색으로 남는다 (2026-07-13)
-        const appRoot = document.getElementById('rcp-app');
-        const colorVar = isLoginScreen ? '--rcp-login-theme-color' : '--rcp-bg';
-        themeColor.content = appRoot
-            ? getComputedStyle(appRoot).getPropertyValue(colorVar).trim()
-            : '';
         document.head.appendChild(themeColor);
 
         return () => {
@@ -64,6 +59,18 @@ function useGikkaDocumentMeta(isLoginScreen: boolean) {
             manifestLink.remove();
             themeColor.remove();
         };
+    }, []);
+
+    // 로그인 화면은 크래프트 배경, 앱 본체는 아이스화이트 배경 — 노치도 각자 배경에 맞춘다.
+    // 색의 원본은 tokens.css — 여기 하드코딩하면 테마 색 변경 시 이 줄만 옛 색으로 남는다 (2026-07-13)
+    useEffect(() => {
+        const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+        if (!themeColor) return;
+        const appRoot = document.getElementById('rcp-app');
+        const colorVar = isLoginScreen ? '--rcp-login-theme-color' : '--rcp-bg';
+        themeColor.content = appRoot
+            ? getComputedStyle(appRoot).getPropertyValue(colorVar).trim()
+            : '';
     }, [isLoginScreen]);
 }
 
