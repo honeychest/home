@@ -55,6 +55,21 @@ export function observeViewportHeightUnit(): () => void {
     };
 }
 
+/** recipe 가 화면을 차지하는 동안 문서(html·body) 스크롤을 잠근다. 반환값은 해제 함수.
+
+    왜 셸의 overflow:hidden 으로 부족한가: iOS 는 문서 자체가 스크롤할 내용이 없어도 손가락을
+    따라 탄성 스크롤(rubber band)해서 화면이 달랑거린다 (2026-07-25 iOS PWA 실사용 확인).
+    그건 앱 안쪽(.rcp-app)이 아니라 문서라서 셸 규칙이 닿지 않는다.
+    왜 전역 CSS 가 아니라 클래스인가: 같은 SPA 의 다른 화면(트레이딩·관리자)은 문서 스크롤로
+    동작하므로, recipe 를 떠나면 반드시 원래대로 돌아와야 한다.
+    실제 잠금 규칙은 recipe-ui.css 의 `html.rcp-locked` — 치수·동작의 원본은 CSS 에 둔다. */
+const DOCUMENT_LOCK_CLASS = 'rcp-locked';
+
+export function lockDocumentScroll(): () => void {
+    document.documentElement.classList.add(DOCUMENT_LOCK_CLASS);
+    return () => document.documentElement.classList.remove(DOCUMENT_LOCK_CLASS);
+}
+
 /** 서비스 워커 등록 — 크롬 안드로이드가 "홈 화면에 추가"를 완전한 standalone WebAPK 로
     만들어주는 요건. 네이티브 셸에서는 필요 없을 뿐 아니라 웹 자산이 앱에 담기면 캐시가
     꼬이므로 아예 등록하지 않는다. 실패는 조용히 무시 — 설치 품질 문제라 앱 동작을 막지 않는다. */

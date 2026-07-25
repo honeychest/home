@@ -18,6 +18,7 @@ import {
     isIOS,
     isNativeShell,
     isStandaloneDisplay,
+    lockDocumentScroll,
     markInstallPromptShown,
     observeViewportHeightUnit,
     registerServiceWorker,
@@ -103,6 +104,13 @@ function useGikkaViewportUnit() {
     useEffect(() => observeViewportHeightUnit(), []);
 }
 
+/** recipe 가 떠 있는 동안 문서 스크롤 잠금 — iOS 는 셸의 overflow:hidden 만으로는 문서가
+    손가락을 따라 달랑거린다(탄성 스크롤). recipe 를 떠나면 자동 해제되어 다른 화면(트레이딩·
+    관리자)의 문서 스크롤은 그대로다. 잠금 규칙의 원본은 recipe-ui.css 의 html.rcp-locked. */
+function useGikkaDocumentLock() {
+    useEffect(() => lockDocumentScroll(), []);
+}
+
 // ── 앱으로 설치 팝업 (2026-07-20 확정, 2026-07-24 재노출 규칙 수정) — 크롬(안드로이드)은
 // beforeinstallprompt 를 가로채 [설치하기]로 바로 설치, iOS Safari 는 그 이벤트 자체가
 // 없어 "공유 → 홈 화면에 추가" 안내만 보여준다.
@@ -182,6 +190,7 @@ type AuthState =
 
 export default function RecipeApp() {
     useGikkaViewportUnit(); // 셸 높이 기준 — 로그인·로딩 화면까지 포함해 항상 먼저 잡아둔다
+    useGikkaDocumentLock(); // 문서 스크롤 잠금 — 같은 이유로 모든 단계에 걸어둔다
     const install = useInstallPrompt();
     // 설치 안내 영상 다시재생 (2026-07-25 확정) — 무한반복(loop)이 "또 해야 하나" 헷갈린다는
     // 지적으로 폐지. 끝나면 멈추고 원형 화살표 오버레이로 재생 여부를 사용자가 직접 선택.
@@ -336,7 +345,12 @@ export default function RecipeApp() {
                                     aria-label="설치 안내 영상 다시 재생"
                                     onClick={replayInstallVideo}
                                 >
-                                    <RotateCcw size={28} aria-hidden="true" />
+                                    {/* 원(배지)은 span 이 그린다 — 예전엔 svg 자체에 padding 을 줘
+                                        원을 만들었는데, iOS 에서 그 padding 이 안 먹어 회색 점처럼
+                                        작게 보였다 (2026-07-25 실사용 제보). 치수는 recipe-ui.css 소유 */}
+                                    <span className="rcp-install-replay-badge">
+                                        <RotateCcw size={48} aria-hidden="true" />
+                                    </span>
                                 </button>
                             )}
                         </div>
