@@ -19,6 +19,7 @@ import {
     isNativeShell,
     isStandaloneDisplay,
     markInstallPromptShown,
+    observeViewportHeightUnit,
     registerServiceWorker,
 } from '../data/platform';
 import DictionaryPage from './DictionaryPage';
@@ -91,6 +92,15 @@ function useGikkaServiceWorker() {
     useEffect(() => {
         registerServiceWorker('/recipe/sw.js', '/recipe/');
     }, []);
+}
+
+/** 앱 셸 높이의 기준 단위(--rcp-vh-unit) 주입 — recipe-ui.css 의 `.rcp-app` 이 이 값으로
+    높이를 못박아 문서(페이지) 스크롤 자체를 없앤다 (2026-07-25 확정). 원래 로그인 화면에만
+    있던 처방인데(2026-07-24), 앱 본체도 같은 이유로 "내용이 짧은 홈·냉장고·추천에서 하단으로
+    조금 스크롤되는" 증상이 있어 셸로 올렸다. 로그인 화면은 셸 안에서 렌더되므로 그대로 혜택을
+    받는다 — LoginPage 에 있던 같은 훅은 제거됨(중복 감시 방지). 측정은 data/platform.ts 소유. */
+function useGikkaViewportUnit() {
+    useEffect(() => observeViewportHeightUnit(), []);
 }
 
 // ── 앱으로 설치 팝업 (2026-07-20 확정, 2026-07-24 재노출 규칙 수정) — 크롬(안드로이드)은
@@ -171,6 +181,7 @@ type AuthState =
     | { phase: 'error'; message: string };
 
 export default function RecipeApp() {
+    useGikkaViewportUnit(); // 셸 높이 기준 — 로그인·로딩 화면까지 포함해 항상 먼저 잡아둔다
     const install = useInstallPrompt();
     // 설치 안내 영상 다시재생 (2026-07-25 확정) — 무한반복(loop)이 "또 해야 하나" 헷갈린다는
     // 지적으로 폐지. 끝나면 멈추고 원형 화살표 오버레이로 재생 여부를 사용자가 직접 선택.

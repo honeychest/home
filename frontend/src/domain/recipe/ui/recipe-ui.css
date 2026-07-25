@@ -5,18 +5,31 @@
          rcp-inline-error(조작 실패) / rcp-load-error(화면 안 조회 실패) / rcp-shell-status(셸 전용) */
 
 /* ── 앱 루트·화면 골격 ── */
+/* 셸 높이는 실측값(--rcp-vh-unit = 실제 화면 높이의 1%, RecipeApp 이 주입)으로 못박고
+   넘치는 건 잘라낸다 — 문서(페이지) 스크롤을 아예 없애는 것이 목적이다. 세로 스크롤은
+   각 화면(.rcp-screen)이 "내용이 넘칠 때만" 담당한다 (2026-07-25 확정).
+   계기: 내용이 화면보다 짧은 홈·냉장고·추천에서도 하단으로 조금씩 스크롤됐다. 원인은 두 겹 —
+   (1) 셸이 min-height 라 내용이 넘치면 문서 전체가 늘어나, 아래 .rcp-screen 의 overflow-y
+   가 한 번도 발동하지 않는 죽은 코드였다. (2) CSS 의 100dvh 가 실기기의 실제 사용 가능
+   높이보다 조금 커서, 그 차이만큼 셸이 화면 밖으로 삐져나왔다(로그인 화면이 2026-07-24 에
+   같은 증상을 겪고 실측 단위로 해결한 것과 동일한 원인 — 그 처방을 셸로 승격한 것).
+   변수가 아직 없을 때(JS 실행 전)는 1dvh 로 폴백해 정상 렌더된다. */
 .rcp-app {
-  min-height: 100dvh;
+  height: calc(var(--rcp-vh-unit, 1dvh) * 100);
   display: flex;
   flex-direction: column;
   background: var(--rcp-bg-gradient);
   color: var(--rcp-text);
   font-family: var(--rcp-font);
-  overflow-x: clip; /* 모바일 앱은 가로 스크롤이 존재하면 안 됨 — 최후 방어선 */
+  overflow: hidden; /* 모바일 앱에 문서 스크롤은 존재하면 안 됨 — 가로·세로 최후 방어선 */
 }
 .rcp-screen {
   flex: 1;
+  /* flex 자식의 기본 min-height:auto 를 풀어야 내용이 셸을 밀어내지 않고 여기서 스크롤된다 */
+  min-height: 0;
   overflow-y: auto;
+  /* 맨 위·맨 아래에서 더 당겨도 브라우저 새로고침(당겨서 새로고침)·튕김으로 새지 않게 */
+  overscroll-behavior-y: contain;
   /* 상단 안전영역(2026-07-24) — index.html 의 status-bar-style: black-translucent 로
      iOS PWA 상태바가 오버레이로 바뀌어(로그인 화면 경계선 수정) 콘텐츠가 상태바 영역까지
      확장됨 — 화면 제목이 시계·배터리 아이콘에 안 가리도록 모든 화면 공통으로 여백 추가 */
@@ -492,14 +505,16 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 }
 
 /* ── 추천 화면 골격: 세로 스크롤 없이 3단계가 폰 높이에 맞춰 나뉜다 (2026-07-14 확정,
-   사용자 요청 — "폰 크기에 상관없이 세로스크롤 안 생기게"). .rcp-screen(flex:1, 100dvh 기준)
-   자체는 이미 실제 높이를 갖고 있으므로, 그 안을 중첩 flex 로 다시 나누고 각 단계에
+   사용자 요청 — "폰 크기에 상관없이 세로스크롤 안 생기게"). .rcp-screen 은 셸이 준 실제
+   높이를 이미 갖고 있으므로, 그 안을 중첩 flex 로 다시 나누고 각 단계에
    min-height:0 을 줘 내용이 넘쳐도 강제로 줄어들게 한다(표준 "flex 안에서 스크롤 없이
    맞추기" 패턴) */
-/* .rcp-app 은 min-height(최소값)만 가져서 넘치면 페이지 전체가 커지는 게 다른 화면(냉장고 등)
-   에선 정상 동작(스크롤 원함)이지만, 이 화면만은 "항상 한 화면"이 요구 사항이라 여기서만
-   실제 뷰포트 높이로 못박는다 — 상위 요소를 안 건드리고 이 화면에만 국소적으로 적용 */
-.rcp-recommend-page { display: flex; flex-direction: column; overflow: hidden; height: 100dvh; max-height: 100dvh; }
+/* 높이는 셸(.rcp-app)이 실측값으로 못박으므로 여기서 다시 정하지 않는다 (2026-07-25 정리 —
+   예전엔 셸이 min-height 라 이 화면만 국소적으로 100dvh 를 못박았는데, 그 100dvh 자체가
+   실기기 높이와 어긋나 결국 이 화면도 조금 스크롤됐다. 셸 수정으로 원인이 사라져 중복 제거).
+   남기는 것은 "내용이 넘쳐도 스크롤 대신 각 단계가 줄어든다"는 이 화면만의 규칙 — overflow:hidden
+   은 .rcp-screen 의 overflow-y:auto 를 덮어쓰는 역할이라 반드시 필요하다(뒤에 와서 이김) */
+.rcp-recommend-page { display: flex; flex-direction: column; overflow: hidden; }
 .rcp-recommend-sections {
   flex: 1; min-height: 0;
   display: flex; flex-direction: column;
@@ -688,7 +703,7 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
    옮겼더니 실제 폰(뷰포트 높이가 목업 프레임보다 훨씬 큼)에서 비율이 안 맞아 버튼이 화면
    50% 부근에 와버렸다(2026-07-24 실기기 확인). "카드 중앙 35% / 버튼 중앙 80%"를 뷰포트
    퍼센트로 직접 못박아 기기 화면 크기와 무관하게 항상 같은 비율이 되도록 고쳤다.
-   단위는 dvh 대신 --rcp-vh-unit(LoginPage 의 useStableViewportUnit 이 JS로 고정) 사용 —
+   단위는 dvh 대신 --rcp-vh-unit(셸 RecipeApp 이 data/platform.ts 로 실측해 주입) 사용 —
    새로고침 직후 모바일 브라우저 주소창이 접히며 dvh 값이 한 번 더 바뀌어 레이아웃이
    뒤틀리고 스크롤이 생기던 문제 대응(2026-07-24). 변수가 없을 때(JS 실행 전)는
    1dvh 로 폴백해 정상 렌더된다. */
@@ -926,7 +941,7 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 
 /* ── 조회 실패 안내 (화면 안): rcp-load-error (RcpLoadError) ──
    useQuery.error + reload 자리. 아래 .rcp-shell-status 와 혼동 금지 —
-   그건 셸(RecipeApp)이 화면 전체를 차지할 때만 쓰는 100dvh 짜리다. 화면 안에 그걸 쓰면
+   그건 셸(RecipeApp)이 화면 전체를 차지할 때만 쓰는 것이다(셸 높이를 통째로 채운다). 화면 안에 그걸 쓰면
    화면 하나만큼 부풀고(냉장고·보관함·모니터), overflow:hidden 인 추천 화면에선 잘렸다
    (2026-07-16 점검에서 4곳 전부 이 클래스로 교정) */
 .rcp-load-error {
@@ -1089,10 +1104,13 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
 }
 
 /* ── 앱 셸 로딩/에러 (2차 — API 전환으로 지연·실패가 실제로 생김) ──
-   RecipeApp(셸) 전용 — 화면이 아직 없을 때 뷰포트 전체를 채우는 용도라 100dvh 다.
+   RecipeApp(셸) 전용 — 화면이 아직 없을 때 셸 전체를 채우는 용도.
+   (2026-07-25 — 자기 높이를 100dvh 로 정하던 것을 셸의 flex 자식으로 바꿨다. 셸이 이제 실측
+   높이로 고정돼 있어, 여기서 100dvh 를 또 쓰면 그 차이만큼 잘려 문구가 아래로 밀린다)
    화면 안(.rcp-screen 아래)의 조회 실패에는 절대 쓰지 말 것 → 위 .rcp-load-error */
 .rcp-shell-status {
-  min-height: 100dvh;
+  flex: 1;
+  min-height: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: var(--rcp-space-3);

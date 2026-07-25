@@ -20,26 +20,12 @@ const OTHER_COMMENTS_AFTER = [
     { avatar: '이', text: '이건 저장해둬야지 ㄹㅇ' },
 ] as const;
 
-/** 새로고침 직후 모바일 브라우저 주소창이 접히며 실제 사용 가능 높이가 한 번 더 바뀌는
-    경우가 있어(2026-07-24 실사용 확인 — 새로고침 후에만 레이아웃이 한 번 뒤틀리고 스크롤이
-    생김), CSS dvh 대신 JS로 측정한 실제 높이를 --rcp-vh-unit(1% 값)로 고정해 쓴다.
-    변수가 아직 없을 때는 recipe-ui.css 의 fallback(1dvh)이 대신 쓰인다. */
-function useStableViewportUnit() {
-    useEffect(() => {
-        const update = () => {
-            document.documentElement.style.setProperty('--rcp-vh-unit', `${window.innerHeight / 100}px`);
-        };
-        update();
-        window.addEventListener('resize', update);
-        return () => {
-            window.removeEventListener('resize', update);
-            document.documentElement.style.removeProperty('--rcp-vh-unit');
-        };
-    }, []);
-}
+// 이 화면의 좌표 기준인 --rcp-vh-unit(실제 화면 높이의 1%)은 셸(RecipeApp)이 주입한다.
+// 원래 여기서 직접 쟀는데(2026-07-24), 같은 처방이 앱 본체에도 필요해져 셸로 올렸다
+// (2026-07-25 — data/platform.ts 의 observeViewportHeightUnit). 여기서 또 감시하면
+// 같은 변수를 두 곳이 쓰고 지우게 되어 화면 전환 순간 값이 사라질 수 있어 중복을 두지 않는다.
 
 export default function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
-    useStableViewportUnit();
     const buttonHost = useRef<HTMLDivElement>(null);
     const [error, setError] = useState<string | null>(null);
 

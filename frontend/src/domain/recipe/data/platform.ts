@@ -34,6 +34,27 @@ export function isDevSession(): boolean {
     return !isNativeShell() && window.location.protocol !== 'https:';
 }
 
+/** 실제 사용 가능한 화면 높이를 재서 CSS 변수 `--rcp-vh-unit`(그 1% 값)로 고정한다.
+    반환값은 정리 함수(effect cleanup 용) — 감시를 멈추고 변수도 지운다.
+
+    왜 CSS 의 dvh 를 안 쓰나: 실기기에서 `100dvh` 가 실제 높이와 어긋나는 순간이 있다
+    (2026-07-24 로그인 화면 확인 — 새로고침 직후 주소창이 접히며 값이 한 번 더 바뀜).
+    앱 셸이 그 차이만큼 화면 밖으로 삐져나오면 "내용도 없는데 하단으로 조금 스크롤되는"
+    증상이 된다. 그래서 셸 높이의 기준을 실측값으로 못박는다 (2026-07-25 — 로그인 화면에만
+    있던 처방을 셸로 승격. recipe-ui.css 의 .rcp-app 이 이 변수를 쓴다).
+    네이티브 셸에서도 innerHeight 는 그대로 유효해 분기가 필요 없다. */
+export function observeViewportHeightUnit(): () => void {
+    const update = () => {
+        document.documentElement.style.setProperty('--rcp-vh-unit', `${window.innerHeight / 100}px`);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => {
+        window.removeEventListener('resize', update);
+        document.documentElement.style.removeProperty('--rcp-vh-unit');
+    };
+}
+
 /** 서비스 워커 등록 — 크롬 안드로이드가 "홈 화면에 추가"를 완전한 standalone WebAPK 로
     만들어주는 요건. 네이티브 셸에서는 필요 없을 뿐 아니라 웹 자산이 앱에 담기면 캐시가
     꼬이므로 아예 등록하지 않는다. 실패는 조용히 무시 — 설치 품질 문제라 앱 동작을 막지 않는다. */
