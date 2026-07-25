@@ -148,6 +148,16 @@
   **2)가 3)보다 먼저여야 한다** — 순서가 바뀌면 "간장 2큰술"이 CONFIRMED 가 돼 병합 가드에 걸려 영영 홀로 남는다.
   어떤 실패도 영상 분석을 실패시키지 않는다(조용히 건너뜀). 반영 내역은 `ingredient_change_log`(V14, append 전용)
   → 사전 화면 [자동 반영] 시트. 오너의 역할은 사전 승인이 아니라 **사후 감사**다. 알림은 두지 않는다.
+- **사전 판정 규칙의 단일 원본 = `DictionaryJudge`**(2026-07-25). 셋을 소유한다: 판정 대상 선정
+  (PENDING 대표만 / 전체 대표는 mergeInto 참고용) · 채널 라우팅 · 제안 검증(지어낸 이름·없는 대표·
+  체인·이미 판정된 것 거르기). 채널은 `IngredientJudge` 시임 뒤 어댑터 2개(Gemini `IngredientAuditor` /
+  로컬 `LocalIngredientAuditor`)이고, 제안 어휘·응답 파싱도 시임이 소유한다.
+  **추출(`RecipeExtractor`+@Primary `Hybrid`)과 달리 @Primary 라우터 빈이 없다** — 순서가 호출부마다
+  반대라서다: 상시(워커)=`LOCAL_FIRST`(무료 한도 절약) / 온디맨드(오너 [AI 점검])=`GEMINI_FIRST`(품질 우선).
+  두 채널이 다 막히면 **1차 채널의 예외를 그대로** 던진다 — 컨트롤러의 503 매핑이 그 타입에 걸려 있다.
+  모듈 밖에 남긴 둘은 청중이 달라서다: **적용**(워커만 한다) 과 **실패 정책**(워커=조용히 삼킴 /
+  컨트롤러=503). 이전엔 이 규칙이 워커·컨트롤러에 한 벌씩 두 벌이었고 이미 미세하게 갈라져 있었다
+  (묶기 제안의 주체 PENDING 검사를 컨트롤러만 건너뜀 — 통일 방향은 "주체는 반드시 PENDING").
 - **CONFIRMED_BASIC**(물·소금·설탕·간장·식용유·후추·참기름·통깨·다진마늘·고춧가루·식초) = 매칭에서 아예 건너뜀.
   이게 없으면 "완전 가능" 섹션이 구조적으로 항상 0이다. "마늘"은 기본양념이 아니다(떨어질 수 있는 주재료).
   범위는 오너가 사전 화면 `[기본]` 버튼으로 조정(시드는 출발점).
@@ -328,6 +338,19 @@
 6. 격리 자동 감시: ArchUnit 테스트가 빌드에서 차단 — 규율을 사람 기억이 아니라 테스트가 지킨다.
 7. **공용 코드 허용 목록: 없음.** 기존 home 유틸이 필요하면 recipe 안으로 복사해 소유한다(앱 분리 대비).
 8. recipe 쪽 TransactionManager 스프링 빈 등록 금지 — `gikkaTxTemplate` 로만.
+9. **recipe 안쪽 방향 규칙(2026-07-25)**: `dictionary` 는 `registration` 을 import 하지 않는다
+   (ArchUnit 이 강제). 사전은 registration 의 산출물이자 recommend 의 입력이라 어느 한쪽 소유가
+   아니어서 별도 패키지로 뒀는데, 양방향이 되면 패키지 순환이라 분리한 이득이 사라진다.
+   이 규칙 때문에 **LLM 판정 6개(`IngredientJudge`·`DictionaryJudge`·어댑터 등)는 registration 에
+   남겼다** — `GeminiJsonClient`·`GikkaMediaProperties`·`TransientFailureException`·
+   `LocalUnavailableException` 을 쓰기 때문. 그 넷을 중립 지대로 옮기기 전에는 판정도 못 옮긴다.
+10. **컨트롤러는 청중 단위로 나눈다(2026-07-25)**: 보관함 `RegistrationController` / 운영자 대기열
+   `MonitorController` / 사전 `dictionary.DictionaryController` / 동기 LLM `IngredientAuditController`.
+   경로는 넷 다 **분할 전 그대로**이고 `RecipeRoutingTest` 가 18개 경로를 잠근다(프론트 무수정의 근거).
+   사전 경로 `/registrations/dictionary/**` 는 유산 — `gikka/` 분리 때 `/api/recipe/dictionary/**` 로 옮긴다.
+11. **오너 판정은 `GikkaOwnerGuard` 하나** — `require`(403으로 막기) / `isOwner`(상한 면제 같은 분기).
+   예외: `IngredientReportController.requireOwnerWhileGated` 는 같은 판정을 쓰되 이름을 따로 둔다 —
+   그건 오너 전용 기능이 아니라 **일반 기능의 공개 전 게이트**라, 공개 시 지울 호출을 구분해야 한다(10절).
 
 ## 20. 구현 순서
 1차 디자인·골격·냉장고(완료) → 2차 백엔드 기반(완료) → 3차 Gemini 추출·등록·Share Target(완료) →

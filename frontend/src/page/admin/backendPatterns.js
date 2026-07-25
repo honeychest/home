@@ -77,8 +77,11 @@ server.expect(requestTo(...)).andRespond(withSuccess(json, APPLICATION_JSON));`,
             '실제 일은 구현체(배)가 한다 — GeminiRecipeExtractor 등',
             '모델을 바꾸면 구현체 클래스 하나만 새로 만들어 갈아끼움 — 호출하는 쪽은 무변경',
             '테스트에서는 가짜 구현체를 꽂아 외부 없이 흐름 검증',
+            '배가 둘 이상이면 "어느 배를 먼저 띄울까"(라우팅)를 어디 둘지가 갈린다 — 아래 참고',
         ],
-        skeleton: `// 약속(항구): 호출하는 쪽은 이것만 안다
+        skeleton: `// 약속(항구): 호출하는 쪽은 이것만 안다.
+// 어휘(결과 타입·상수)와 두 배가 공유하는 응답 파싱도 항구가 소유한다 —
+// 구현체 하나가 쥐고 있으면 다른 구현체가 그 구현체를 들여다보게 되고, 결국 못 빼낸다.
 interface RecipeExtractor {
     ExtractionResult extract(String videoUrl);
 }
@@ -88,9 +91,42 @@ interface RecipeExtractor {
 class GeminiRecipeExtractor implements RecipeExtractor {
     @Override
     public ExtractionResult extract(String videoUrl) { ... }
+}
+
+// ── 배가 둘 이상일 때: 라우팅을 어디 두나 ──
+
+// (가) 순서가 하나뿐이면 @Primary 라우터 빈 하나로 끝난다.
+//      "항상 로컬 먼저, 안 되면 Gemini" — 호출부는 라우팅을 아예 모른다.
+@Primary @Component
+class HybridRecipeExtractor implements RecipeExtractor { ... }
+
+// (나) 호출부마다 순서가 반대면 @Primary 로는 못 묶는다 (빈은 하나뿐이니까).
+//      순서를 인자로 받는 라우터를 둔다.
+//      실물: 재료 사전 판정 — 워커(상시)는 무료 한도를 아끼려 로컬 우선,
+//            오너의 [AI 점검] 버튼은 지금 최고 품질을 원해 누른 것이라 Gemini 우선.
+@Component
+class DictionaryJudge {
+    enum Order { LOCAL_FIRST, GEMINI_FIRST }
+
+    List<Proposal> propose(Order order) {
+        IngredientJudge primary = order == Order.LOCAL_FIRST ? local : gemini;
+        IngredientJudge secondary = order == Order.LOCAL_FIRST ? gemini : local;
+        try {
+            return primary.audit(...);
+        } catch (채널불가 e) {
+            try {
+                return secondary.audit(...);
+            } catch (채널불가 ignored) {
+                throw e; // 1차 예외를 그대로 — 호출부의 에러 계약(503)이 그 타입에 걸려 있다
+            }
+        }
+    }
 }`,
         examples: [
             'springboot/.../domain/recipe/registration/RecipeExtractor.java',
+            'springboot/.../domain/recipe/registration/HybridRecipeExtractor.java',
+            'springboot/.../domain/recipe/registration/IngredientJudge.java',
+            'springboot/.../domain/recipe/registration/DictionaryJudge.java',
             'springboot/.../domain/recipe/registration/VideoMetadataClient.java',
         ],
     },

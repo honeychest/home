@@ -2,7 +2,7 @@
 // 내역의 단일 원본. 오너는 monitor "자동 반영 내역"에서 이 로그를 사후 감사하고, 이상하면 기존
 // 그룹 해제·재분류로 복구한다(append 전용 — 수정·삭제 없음). gikka 전용 JdbcClient 만 사용
 // (분리 규율 2·8). 오너 수동 조작은 기록하지 않는다(자기가 한 일이라 감사 대상이 아님).
-package com.chs.springboot.domain.recipe.registration;
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.time.OffsetDateTime;
 import java.util.List;

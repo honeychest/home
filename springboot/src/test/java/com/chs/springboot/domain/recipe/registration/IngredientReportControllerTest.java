@@ -5,6 +5,7 @@ package com.chs.springboot.domain.recipe.registration;
 import java.util.List;
 
 import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
+import com.chs.springboot.domain.recipe.auth.GikkaOwnerGuard;
 import com.chs.springboot.domain.recipe.user.GikkaUserRepository;
 
 import org.junit.jupiter.api.DisplayName;
@@ -33,7 +34,7 @@ class IngredientReportControllerTest {
         properties.setOwnerEmail("owner@example.com"); // isOwner() 는 2026-07-20 부터 이 값만 봄
         when(users.findEmail(OWNER_ID)).thenReturn("owner@example.com");
         when(users.findEmail(STRANGER_ID)).thenReturn("stranger@example.com");
-        return new IngredientReportController(reports, videos, properties, users);
+        return new IngredientReportController(reports, videos, new GikkaOwnerGuard(properties, users));
     }
 
     private static IngredientReportController.ReportRequest request(String name) {

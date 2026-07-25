@@ -1,5 +1,6 @@
-// [AGENT] 재료 사전 AI 점검의 제안 파싱 고정 — Gemini 봉투가 GeminiJsonClient seam 으로 빠지면서
-// parse 가 순수 함수(알맹이 배열 → 제안)로 남아 HTTP 없이 검증 가능해졌다 (2026-07-17 점검의 이득).
+// [AGENT] 재료 사전 판정 시임의 응답 파싱 고정 — 순수 함수라 HTTP 없이 검증된다.
+// (2026-07-17 GeminiJsonClient seam 분리로 봉투가 빠지면서 parse 가 순수해진 이득 /
+//  2026-07-25 두 채널이 같은 배열 모양을 쓰므로 파싱을 시임으로 올림 — 구 IngredientAuditorTest)
 package com.chs.springboot.domain.recipe.registration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -9,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class IngredientAuditorTest {
+class IngredientJudgeTest {
 
     @Test
     @DisplayName("제안 파싱: BASIC/SEASONING/MAIN 을 그대로 담고, 이름이 빈 항목은 버린다")
@@ -19,7 +20,7 @@ class IngredientAuditorTest {
                  {"name":"두부","tier":"MAIN"},{"name":"  ","tier":"SEASONING"}]
                 """);
 
-        var proposals = IngredientAuditor.parse(array);
+        var proposals = IngredientJudge.parse(array);
 
         assertEquals(3, proposals.size());
         assertEquals("고추장", proposals.get(0).name());
@@ -38,7 +39,7 @@ class IngredientAuditorTest {
                 [{"name":"고구마","tier":"???"}]
                 """);
 
-        var proposals = IngredientAuditor.parse(array);
+        var proposals = IngredientJudge.parse(array);
 
         assertEquals("MAIN", proposals.get(0).suggestedTier());
     }
@@ -51,7 +52,7 @@ class IngredientAuditorTest {
                 [{"name":"계란 2개","tier":"MAIN","mergeInto":"계란"}]
                 """);
 
-        var proposals = IngredientAuditor.parse(array);
+        var proposals = IngredientJudge.parse(array);
 
         assertEquals("계란 2개", proposals.get(0).name());
         assertEquals("계란", proposals.get(0).mergeInto());
@@ -66,7 +67,7 @@ class IngredientAuditorTest {
                  {"name":"두부","tier":"MAIN","mergeInto":"두부"}]
                 """);
 
-        var proposals = IngredientAuditor.parse(array);
+        var proposals = IngredientJudge.parse(array);
 
         assertEquals(null, proposals.get(0).mergeInto());
         assertEquals("SEASONING", proposals.get(0).suggestedTier());

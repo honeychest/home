@@ -20,7 +20,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.chs.springboot.domain.recipe.registration.IngredientDictionaryRepository;
+import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
 import com.chs.springboot.domain.recipe.registration.VideoRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

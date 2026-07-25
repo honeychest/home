@@ -5,6 +5,8 @@
 // 현재 절차 순서를 그대로 나열해 보여줄 때 쓸 표시용 이름이다(아직 화면은 없음).
 package com.chs.springboot.domain.recipe.registration;
 
+import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
+
 public interface IngredientPipelineStep {
 
     /** 오너 화면에 나열할 표시용 이름 */

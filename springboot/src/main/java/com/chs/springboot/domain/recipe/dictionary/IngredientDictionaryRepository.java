@@ -6,7 +6,12 @@
 // 양념 여부의 단일 원본은 status 하나다 — CONFIRMED_SEASONING 만 양념, 그 외는 주재료(안전 기본값).
 // 별도 tier 컬럼을 두지 않는다(status 의 순수 파생이라 컬럼이면 세 write 경로가 동기화를 짊어짐 —
 // 2026-07-17 아키텍처 점검에서 제거). gikka 전용 JdbcClient 만 사용 (분리 규율 2·8).
-package com.chs.springboot.domain.recipe.registration;
+//
+// 2026-07-25 `dictionary` 패키지로 이관 — 사전은 registration(분석 파이프라인)의 산출물이자
+// recommend(매칭)의 입력이라 어느 한쪽 소유가 아니다. 예전엔 registration 안에 있어서
+// recommend 가 registration 을 import 하는 모양이 됐다("추천이 등록에 의존"처럼 보임).
+// 이 패키지는 registration 을 import 하지 않는다 — 의존은 한 방향뿐이어야 순환이 안 생긴다.
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.util.Collection;
 import java.util.List;

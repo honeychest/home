@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
+import com.chs.springboot.domain.recipe.auth.GikkaOwnerGuard;
 import com.chs.springboot.domain.recipe.user.GikkaUserRepository;
 
 import org.junit.jupiter.api.DisplayName;
@@ -33,18 +34,16 @@ class RegistrationControllerRegisterTest {
     private static final String URL = "https://youtu.be/aaaaaaaaaaa";
     private static final String VIDEO_ID = "aaaaaaaaaaa";
 
+    // 2026-07-25 분할 후 보관함 컨트롤러의 협력자는 넷뿐이다 (예전엔 아홉 — 모니터·사전이 섞여 있었다)
     private final RegistrationRepository repository = mock(RegistrationRepository.class);
     private final VideoRepository videos = mock(VideoRepository.class);
-    private final GeminiRateLimiter rateLimiter = mock(GeminiRateLimiter.class);
     private final VideoMetadataClient metadata = mock(VideoMetadataClient.class);
     private final GikkaUserRepository users = mock(GikkaUserRepository.class);
-    private final LocalRecipeExtractor localExtractor = mock(LocalRecipeExtractor.class);
-    private final IngredientDictionaryRepository dictionary = mock(IngredientDictionaryRepository.class);
-    private final IngredientChangeLogRepository changeLog = mock(IngredientChangeLogRepository.class);
 
     private RegistrationController controller() {
-        return new RegistrationController(repository, videos, rateLimiter, metadata,
-                new GikkaAuthProperties(), users, localExtractor, dictionary, changeLog);
+        // 빈 허용 목록 = 아무도 오너가 아님 — 재생목록 상한이 적용되는 일반 사용자 경로
+        return new RegistrationController(repository, videos, metadata,
+                new GikkaOwnerGuard(new GikkaAuthProperties(), users));
     }
 
     private RegistrationController.RegisterRequest request() {
@@ -154,8 +153,8 @@ class RegistrationControllerRegisterTest {
         when(users.findEmail(USER_ID)).thenReturn("owner@example.com");
         GikkaAuthProperties ownerProps = new GikkaAuthProperties();
         ownerProps.setOwnerEmail("owner@example.com");
-        RegistrationController ownerController = new RegistrationController(repository, videos, rateLimiter,
-                metadata, ownerProps, users, localExtractor, dictionary, changeLog);
+        RegistrationController ownerController = new RegistrationController(repository, videos, metadata,
+                new GikkaOwnerGuard(ownerProps, users));
 
         RegistrationController.RegisterRequest req = new RegistrationController.RegisterRequest(
                 "https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");

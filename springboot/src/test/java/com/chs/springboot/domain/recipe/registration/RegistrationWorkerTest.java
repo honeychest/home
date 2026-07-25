@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.chs.springboot.domain.recipe.dictionary.IngredientChangeLogRepository;
+import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

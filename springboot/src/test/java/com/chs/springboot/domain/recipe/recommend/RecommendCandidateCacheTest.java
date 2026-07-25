@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.chs.springboot.domain.recipe.registration.IngredientDictionaryRepository;
+import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
 import com.chs.springboot.domain.recipe.registration.VideoRepository;
 
 import org.junit.jupiter.api.BeforeEach;

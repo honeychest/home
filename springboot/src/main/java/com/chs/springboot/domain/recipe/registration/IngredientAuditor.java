@@ -1,27 +1,21 @@
-// [AGENT] 재료 사전 AI 일괄 점검 (2026-07-17 5차-4 슬라이스1) — 온디맨드. 재료 이름 목록만 보고
-// 각각이 양념(SEASONING)인지 주재료(MAIN)인지 판정을 "제안"한다(자동 적용 아님 — 오너가 monitor
-// 에서 확인 후 반영). 재료 이름 목록만 보는 폐쇄적 어휘 판단이라 LLM 이 안정적으로 잘하는 일
-// (영상 세계지식 추론과 성격이 다름). 그래도 안전 비대칭 원칙상 제안까지만.
-// Gemini 호출 봉투·일시적 실패 매핑은 GeminiJsonClient seam 이 소유 — 여기는 프롬프트·스키마·
-// 알맹이 파싱만 (2026-07-17 아키텍처 점검에서 GeminiRecipeExtractor 와 공유 seam 으로 통합).
+// [AGENT] 재료 사전 판정의 Gemini 어댑터 (2026-07-17 5차-4 슬라이스1). 재료 이름 목록만 보고
+// 각각이 양념(SEASONING)인지 주재료(MAIN)인지 판정을 "제안"한다(자동 적용 아님 — 안전 비대칭 원칙).
+// 재료 이름 목록만 보는 폐쇄적 어휘 판단이라 LLM 이 안정적으로 잘하는 일(영상 세계지식 추론과 성격이 다름).
+// Gemini 호출 봉투·일시적 실패 매핑은 GeminiJsonClient seam 이 소유 — 여기는 프롬프트·스키마뿐이다
+// (2026-07-17 아키텍처 점검에서 GeminiRecipeExtractor 와 공유 seam 으로 통합).
 //
-// 판정 대상 = PENDING 이름만, 전체 대표 목록 = mergeInto 후보를 찾기 위한 참고 자료(2026-07-18
-// 확정). 예전엔 대표 전체(사전 커질수록 커짐, 실측 243개)를 판정 대상으로 보내 응답 크기가
-// 사전 크기에 비례해 자라다가 gikka-local max_tokens 를 넘겨 503 이 재발했다. 이제 응답 크기는
-// 신규(PENDING) 개수에만 비례한다. 트레이드오프: 이미 CONFIRMED 인 대표끼리 뒤늦게 묶자는 제안은
-// 더 이상 안 나온다(그 경우 어차피 "매칭이 덜 될 뿐"인 안전한 실패 모드 — CONTEXT.md 참고).
+// 이 클래스는 채널 하나일 뿐이다 (2026-07-25 점검) — 판정 대상 선정·라우팅·제안 검증은
+// DictionaryJudge, 제안 어휘와 응답 파싱은 IngredientJudge 시임이 소유한다. 예전엔 이 셋이 전부
+// 여기와 두 호출부에 흩어져 있었고, 로컬 어댑터가 이 클래스의 parse 를 들여다보고 있었다.
 package com.chs.springboot.domain.recipe.registration;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import com.fasterxml.jackson.databind.JsonNode;
 
 import org.springframework.stereotype.Component;
 
 @Component
-public class IngredientAuditor {
+public class IngredientAuditor implements IngredientJudge {
 
     private static final String PROMPT = """
             아래 "판정 대상" 목록의 각 이름에 대해서만 두 가지를 판정하세요.
@@ -62,31 +56,9 @@ public class IngredientAuditor {
         this.properties = properties;
     }
 
-    /** LLM 이 제시한 분류 — 안전 기본값이자 "제안할 게 없음"을 뜻하는 MAIN 포함 */
-    public static final String TIER_MAIN = "MAIN";
-    public static final String TIER_SEASONING = "SEASONING";
-    public static final String TIER_BASIC = "BASIC";
-
-    /**
-     * 오너가 확인할 제안 한 건 — 자동 반영 아님(안전 비대칭 원칙).
-     *
-     * @param suggestedTier 분류 제안. 묶기 제안이면 null — 묶이는 순간 양념 여부는 대표가 정하므로
-     *                      멤버의 tier 를 따로 제안할 이유가 없다.
-     * @param mergeInto     묶기 제안(이 이름을 흡수할 대표). 없으면 null.
-     */
-    public record Proposal(String name, String suggestedTier, String mergeInto) {
-
-        boolean isMerge() {
-            return mergeInto != null;
-        }
-    }
-
-    /**
-     * pendingNames 만 판정해 제안 목록을 돌려준다 — allRepresentatives 는 mergeInto 후보를
-     * 찾기 위한 참고 자료일 뿐 판정 대상이 아니다(응답 크기가 사전 전체가 아니라 신규 개수에
-     * 비례하게 만드는 핵심, 2026-07-18). pendingNames 가 비면 신규가 없다는 뜻이라 LLM 호출
-     * 자체를 생략한다(한도 절약).
-     */
+    /** 계약(판정 대상 · 참고 목록의 뜻)은 IngredientJudge 가 소유한다. 여기선 키가 없으면 조용히
+        빈 목록 — 키 없는 환경(로컬 개발 기본)에서 [AI 점검]이 500 으로 죽지 않게. */
+    @Override
     public List<Proposal> audit(List<String> pendingNames, List<String> allRepresentatives) {
         if (pendingNames.isEmpty() || properties.getGeminiApiKey().isBlank()) {
             return List.of();
@@ -104,7 +76,7 @@ public class IngredientAuditor {
                 "responseMimeType", "application/json",
                 "responseSchema", responseSchema(pendingNames),
                 "thinkingConfig", Map.of("thinkingBudget", 0));
-        return parse(gemini.generate(properties.getGeminiModel(), parts, generationConfig));
+        return IngredientJudge.parse(gemini.generate(properties.getGeminiModel(), parts, generationConfig));
     }
 
     /** name 필드를 pendingNames 로 enum 강제 — 판정 대상 밖 이름을 스키마 차원에서 막는다. */
@@ -119,32 +91,5 @@ public class IngredientAuditor {
                                         "enum", List.of(TIER_MAIN, TIER_SEASONING, TIER_BASIC)),
                                 "mergeInto", Map.of("type", "STRING")),
                         "required", List.of("name", "tier", "mergeInto")));
-    }
-
-    /** 알맹이 JSON(제안 배열)을 제안 목록으로 — 순수(HTTP·봉투 없음, GeminiJsonClient 이 이미 벗김).
-        모르는 tier 값은 전부 MAIN 으로 정규화한다(안전 기본값 — 스키마가 enum 을 강제하지만
-        모델이 어긴 경우에도 위험한 쪽으로 기울지 않게).
-        묶기 제안이면 tier 는 버린다 — 멤버의 양념 여부는 대표가 정하므로 둘을 같이 제안하면
-        오너가 뭘 승인하는 건지 흐려진다. 자기 자신에게 묶으라는 답(mergeInto == name)은
-        "안 묶음"과 같은 뜻이라 그렇게 정규화한다.
-        제안이 사전에 실재하는 이름인지·대표가 대표 자격이 있는지는 여기서 안 본다 —
-        그건 사전을 아는 호출부(IngredientAuditController)의 몫이다(이 클래스는 사전을 모른다). */
-    static List<Proposal> parse(JsonNode array) {
-        List<Proposal> proposals = new ArrayList<>();
-        for (JsonNode node : array) {
-            String name = node.path("name").asText("").trim();
-            if (name.isEmpty()) {
-                continue;
-            }
-            String mergeInto = node.path("mergeInto").asText("").trim();
-            if (!mergeInto.isEmpty() && !mergeInto.equals(name)) {
-                proposals.add(new Proposal(name, null, mergeInto));
-                continue;
-            }
-            String tier = node.path("tier").asText(TIER_MAIN);
-            boolean known = TIER_SEASONING.equals(tier) || TIER_BASIC.equals(tier);
-            proposals.add(new Proposal(name, known ? tier : TIER_MAIN, null));
-        }
-        return proposals;
     }
 }

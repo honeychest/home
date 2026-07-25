@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
+import com.chs.springboot.domain.recipe.auth.GikkaOwnerGuard;
 import com.chs.springboot.domain.recipe.user.GikkaUserRepository;
 
 import org.junit.jupiter.api.DisplayName;
@@ -34,16 +35,12 @@ class RegistrationControllerSearchTest {
 
     private final RegistrationRepository repository = mock(RegistrationRepository.class);
     private final VideoRepository videos = mock(VideoRepository.class);
-    private final GeminiRateLimiter rateLimiter = mock(GeminiRateLimiter.class);
     private final VideoMetadataClient metadata = mock(VideoMetadataClient.class);
     private final GikkaUserRepository users = mock(GikkaUserRepository.class);
-    private final LocalRecipeExtractor localExtractor = mock(LocalRecipeExtractor.class);
-    private final IngredientDictionaryRepository dictionary = mock(IngredientDictionaryRepository.class);
-    private final IngredientChangeLogRepository changeLog = mock(IngredientChangeLogRepository.class);
 
     private RegistrationController controller() {
-        return new RegistrationController(repository, videos, rateLimiter, metadata,
-                new GikkaAuthProperties(), users, localExtractor, dictionary, changeLog);
+        return new RegistrationController(repository, videos, metadata,
+                new GikkaOwnerGuard(new GikkaAuthProperties(), users));
     }
 
     @Test

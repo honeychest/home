@@ -1,9 +1,9 @@
-// [AGENT] 재료 사전 감사 — 로컬 모델 페일오버 (2026-07-18 확정). Gemini 가 429/503/타임아웃이면
-// IngredientAuditController 가 여기로 넘긴다. gikka-local(mac-mini) 의 POST /audit 는
+// [AGENT] 재료 사전 판정의 로컬 어댑터 (2026-07-18 확정). gikka-local(mac-mini) 의 POST /audit 는
 // yt-dlp·whisper 없이 LM Studio 텍스트 호출만 한다 — LocalRecipeExtractor 와 같은 host,
 // 같은 RestClient.Builder 시임 패턴(PLAYBOOK 관례 4)이나 엔드포인트·페이로드가 달라 별도 클래스.
-// 응답 JSON 은 IngredientAuditor 가 Gemini 응답을 파싱할 때 쓰는 배열과 같은 모양이라
-// IngredientAuditor.parse 를 그대로 재사용한다(대표 자격·실재 검증은 여전히 컨트롤러 몫).
+// 응답 JSON 은 Gemini 채널과 같은 배열 모양이라 파싱은 시임(IngredientJudge.parse)이 소유한다 —
+// 2026-07-25 이전엔 이 클래스가 IngredientAuditor.parse 를 들여다봤다(어댑터가 남의 어댑터에 의존).
+// 어느 순서로 두 채널을 부를지(라우팅)와 제안 검증은 DictionaryJudge 몫.
 package com.chs.springboot.domain.recipe.registration;
 
 import java.util.List;
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 @Component
-public class LocalIngredientAuditor {
+public class LocalIngredientAuditor implements IngredientJudge {
 
     private final RestClient rest;
     private final GikkaMediaProperties properties;
@@ -25,7 +25,8 @@ public class LocalIngredientAuditor {
         this.properties = properties;
     }
 
-    public List<IngredientAuditor.Proposal> audit(List<String> pendingNames, List<String> allRepresentatives) {
+    @Override
+    public List<Proposal> audit(List<String> pendingNames, List<String> allRepresentatives) {
         if (!properties.isLocalExtractorEnabled()) {
             throw new LocalRecipeExtractor.LocalUnavailableException("로컬 추출기 비활성화 설정", null);
         }
@@ -35,7 +36,7 @@ public class LocalIngredientAuditor {
                     .body(Map.of("pendingNames", pendingNames, "allRepresentatives", allRepresentatives))
                     .retrieve()
                     .body(JsonNode.class);
-            return IngredientAuditor.parse(response);
+            return IngredientJudge.parse(response);
         } catch (Exception e) {
             throw new LocalRecipeExtractor.LocalUnavailableException("로컬 감사 호출 실패: " + e.getMessage(), e);
         }

@@ -10,9 +10,8 @@ package com.chs.springboot.domain.recipe.registration;
 import java.util.List;
 import java.util.Map;
 
-import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
+import com.chs.springboot.domain.recipe.auth.GikkaOwnerGuard;
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
-import com.chs.springboot.domain.recipe.user.GikkaUserRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,15 +28,13 @@ public class IngredientReportController {
 
     private final IngredientReportRepository reports;
     private final VideoRepository videos;
-    private final GikkaAuthProperties authProperties;
-    private final GikkaUserRepository users;
+    private final GikkaOwnerGuard owner;
 
     public IngredientReportController(IngredientReportRepository reports, VideoRepository videos,
-                                      GikkaAuthProperties authProperties, GikkaUserRepository users) {
+                                      GikkaOwnerGuard owner) {
         this.reports = reports;
         this.videos = videos;
-        this.authProperties = authProperties;
-        this.users = users;
+        this.owner = owner;
     }
 
     public record ReportRequest(String videoId, String name) {
@@ -65,9 +62,15 @@ public class IngredientReportController {
         return reports.activeNames(videoId, userId);
     }
 
-    /** 공개 전 임시 게이트 — 공개 시 이 호출만 제거 (허용 목록이 비면[공개 상태] 아무도 못 씀) */
+    /**
+     * 공개 전 임시 게이트 — 공개 시 이 호출만 제거 (허용 목록이 비면[공개 상태] 아무도 못 씀).
+     *
+     * <p>판정은 GikkaOwnerGuard 와 같은 것을 쓰지만 <b>이름은 일부러 따로 둔다</b> (2026-07-25).
+     * 이건 "오너 전용 기능"이 아니라 <b>일반 기능의 공개 전 게이트</b>라서다(CONTEXT.md §10).
+     * 이름까지 owner.require 로 합치면, 공개할 때 지워야 할 게 어느 호출인지 구분이 사라진다.
+     */
     private void requireOwnerWhileGated(long userId) {
-        if (!authProperties.isOwner(users.findEmail(userId))) {
+        if (!owner.isOwner(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "공개 전 기능");
         }
     }
