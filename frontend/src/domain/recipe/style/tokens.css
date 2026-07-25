@@ -1,5 +1,8 @@
 /* [AGENT] recipe(기까) 디자인 토큰 — 디자인의 유일한 원본 (CONTEXT.md "디자인 체계")
-   방향: "냉장고 문 × 프레시" — 라이트: 아이스 화이트 + 그린 / 다크: 밤의 냉장고
+   방향: "냉장고 문 × 프레시" — 아이스 화이트 + 그린. 시스템 다크모드와 무관하게
+   이 톤 하나만 사용한다 (2026-07-25 확정 — 로그인 화면 다크모드 색이 앱 본체와
+   너무 이질적이라는 지적으로, 기존 "밤의 냉장고" 다크 팔레트를 폐지하고 로그인
+   화면과 같은 "항상 고정 톤" 원칙으로 통일함. CONTEXT.md 참고).
    규칙: 화면·컴포넌트는 반드시 이 변수만 사용. 임의 색상값 직접 입력 금지.
    스코프: .rcp-app 루트 아래에서만 유효 (다른 도메인에 누출 방지)
    색 변경 시 함께 바꿀 것 — CSS 변수를 못 읽는 정적 파일 2곳 (2026-07-13 전수 검사):
@@ -107,9 +110,8 @@
   --rcp-login-card-bg: #fffdf6;
   --rcp-login-card-border: rgba(51, 41, 28, 0.14);
   --rcp-login-pin: #b6483a;
-  /* 글자·탭 색도 고정 — 앱 전역 --rcp-text/--rcp-accent-strong 은 다크모드에서 값이 바뀌는데,
-     이 화면 배경은 항상 라이트로 고정돼 있어 그대로 쓰면 다크모드에서 흰 배경에 흰 글자가 된다
-     (2026-07-24 실사용 확인·수정) */
+  /* 글자·탭 색도 별도 변수 — 이 화면은 앱 본체(그린)와 분리된 크래프트/종이 배경이라
+     앱 전역 --rcp-text 를 그대로 쓰면 배경과 안 어울린다 (2026-07-24 실사용 확인·수정) */
   --rcp-login-ink: #33291c;
   --rcp-login-tab-bg: #1f7a3d;
   --rcp-login-tab-ink: #ffffff;
@@ -120,52 +122,4 @@
   --rcp-login-comment-ink: #6b5c40;
   --rcp-login-comment-avatar-bg: #d8cbb0;
   --rcp-login-comment-avatar-ink: #8a7a5c;
-}
-
-/* 다크 = "밤의 냉장고": 시스템 설정 자동 전환 (2026-07-09 인터뷰 확정) */
-@media (prefers-color-scheme: dark) {
-  .rcp-app {
-    color-scheme: dark;
-
-    --rcp-bg: #14171a;
-    --rcp-bg-gradient: linear-gradient(175deg, #171a1d 0%, #121517 100%);
-    --rcp-surface: #1e2422;
-    --rcp-surface-dim: #1a1f1d;
-    --rcp-line: #2c332e;
-    --rcp-line-dashed: #3a443c;
-
-    --rcp-text: #e8ede8;
-    --rcp-text-sub: #9aa79d;
-    --rcp-text-faint: #6d7a70;
-
-    --rcp-accent: #4db670;
-    --rcp-accent-strong: #63c983;
-    --rcp-accent-soft: #1e2f24;
-    --rcp-on-accent: #0d1f13;
-
-    --rcp-warn-bg: #ffec8b;
-    --rcp-warn-text: #5c4d00;
-    --rcp-danger: #e06a56;
-
-    /* 배지 — 상태(다크, 같은 원리로 dataviz 스킬 검증) */
-    --rcp-status-good-bg: #1a401d; --rcp-status-good-text: #0ca30c;
-    --rcp-status-warning-bg: #50492f; --rcp-status-warning-text: #ffce5c;
-    --rcp-status-serious-bg: #4c4036; --rcp-status-serious-text: #f0a17e;
-    --rcp-status-critical-bg: #49302e; --rcp-status-critical-text: #e78282;
-
-    /* 배지 — 카테고리(다크, 라이트와 같은 8슬롯 순서·같은 CVD 검증 세트) */
-    --rcp-cat-1-bg: #243a4d; --rcp-cat-1-text: #3987e5;
-    --rcp-cat-2-bg: #1d3f33; --rcp-cat-2-text: #199e70;
-    --rcp-cat-3-bg: #44391b; --rcp-cat-3-text: #c98500;
-    --rcp-cat-4-bg: #17391b; --rcp-cat-4-text: #008300;
-    --rcp-cat-5-bg: #37394e; --rcp-cat-5-text: #9085e9;
-    --rcp-cat-6-bg: #4a3331; --rcp-cat-6-text: #e66767;
-    --rcp-cat-7-bg: #462e37; --rcp-cat-7-text: #d55181;
-    --rcp-cat-8-bg: #473023; --rcp-cat-8-text: #d95926;
-
-    --rcp-shadow-magnet: 0 2px 4px rgba(0, 0, 0, 0.45);
-    --rcp-shadow-postit: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --rcp-shadow-row: 0 1px 0 #10130f;
-    --rcp-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.55);
-  }
 }
