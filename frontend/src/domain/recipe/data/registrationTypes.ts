@@ -55,19 +55,6 @@ export interface RegistrationItem {
     analysisSignals: string[] | null;
 }
 
-/** 보관함 검색의 gikka 전체 보완 결과 항목 (2026-07-16 5차) — 내가 등록 안 한 완료 영상.
-    RegistrationItem 에서 registeredAt 만 뺀 모양(내 등록이 아니므로 등록일이 없다). "내 보관함에
-    등록"으로 내 것이 되면 그때부터 RegistrationItem 이 된다. 서버는 이 항목의 registeredAt 을
-    null 로 내려보내며, 화면은 그 값을 쓰지 않는다. */
-export type GikkaVideo = Omit<RegistrationItem, 'registeredAt'>;
-
-/** 보관함 검색 결과 (2026-07-16 5차) — 내 등록 우선(mine) + gikka 전체 보완(others).
-    임계값 없이 항상 두 갈래를 함께 준다 (CONTEXT.md "5차 확장" 2번 — 부족 기준 임의 설정 금지). */
-export interface SearchResults {
-    mine: RegistrationItem[];
-    others: GikkaVideo[];
-}
-
 /** 같은 영상 재등록 — API 구현체는 409 를 이 에러로 변환한다 (문구는 화면 소유) */
 export class DuplicateVideoError extends Error {
     constructor(videoId: string) {

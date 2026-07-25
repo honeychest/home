@@ -32,7 +32,7 @@ function fakeRepo(over: Partial<RegistrationRepository> = {}): RegistrationRepos
         registerPlaylist: async (url: string) => { calls.push(`playlist:${url}`); return 3; },
         unregister: async () => undefined,
         recentDone: async () => [],
-        search: async () => ({ mine: [], others: [] }),
+        search: async () => [],
         registerByVideoId: async () => item(),
         ...over,
     };

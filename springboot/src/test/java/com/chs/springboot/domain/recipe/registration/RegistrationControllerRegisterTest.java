@@ -109,4 +109,64 @@ class RegistrationControllerRegisterTest {
         assertEquals(1, result.get("added")); // live 만 등록, dead 는 건너뜀
         verify(repository, never()).registerLink(eq(USER_ID), eq(dead), any());
     }
+
+    /** 재생목록 상한(2026-07-25 확정) — 열한 번째부터는 조회·등록 자체를 안 한다(잘림).
+        11개짜리 목록 중 앞 10개만 처리되는지 확인. */
+    @Test
+    @DisplayName("재생목록: 비-오너는 10개까지만 등록되고 그 뒤는 통째로 잘린다")
+    void playlistCapsNonOwnerAtTen() {
+        List<String> ids = elevenVideoIds();
+        String eleventh = ids.get(10);
+        when(metadata.playlistVideoIds(anyString())).thenReturn(ids);
+        when(videos.existsActive(anyString())).thenReturn(false);
+        when(metadata.fetch(any())).thenAnswer(inv -> {
+            List<String> requested = inv.getArgument(0);
+            return requested.stream()
+                    .map(id -> new VideoMetadataClient.VideoMetadata(id, "제목", null, 60, null))
+                    .toList();
+        });
+        when(repository.exists(anyLong(), anyString())).thenReturn(false);
+        when(repository.registerLink(anyLong(), anyString(), any())).thenReturn(true);
+
+        RegistrationController.RegisterRequest req = new RegistrationController.RegisterRequest(
+                "https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+        var result = controller().registerPlaylist(USER_ID, req);
+
+        assertEquals(10, result.get("added"));
+        verify(metadata, never()).fetch(eq(List.of(eleventh)));
+        verify(repository, never()).registerLink(eq(USER_ID), eq(eleventh), any());
+    }
+
+    @Test
+    @DisplayName("재생목록: 오너는 상한 없이 11개 전부 등록된다")
+    void playlistDoesNotCapOwner() {
+        List<String> ids = elevenVideoIds();
+        when(metadata.playlistVideoIds(anyString())).thenReturn(ids);
+        when(videos.existsActive(anyString())).thenReturn(false);
+        when(metadata.fetch(any())).thenAnswer(inv -> {
+            List<String> requested = inv.getArgument(0);
+            return requested.stream()
+                    .map(id -> new VideoMetadataClient.VideoMetadata(id, "제목", null, 60, null))
+                    .toList();
+        });
+        when(repository.exists(anyLong(), anyString())).thenReturn(false);
+        when(repository.registerLink(anyLong(), anyString(), any())).thenReturn(true);
+        when(users.findEmail(USER_ID)).thenReturn("owner@example.com");
+        GikkaAuthProperties ownerProps = new GikkaAuthProperties();
+        ownerProps.setOwnerEmail("owner@example.com");
+        RegistrationController ownerController = new RegistrationController(repository, videos, rateLimiter,
+                metadata, ownerProps, users, localExtractor, dictionary, changeLog);
+
+        RegistrationController.RegisterRequest req = new RegistrationController.RegisterRequest(
+                "https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+        var result = ownerController.registerPlaylist(USER_ID, req);
+
+        assertEquals(11, result.get("added"));
+    }
+
+    private static List<String> elevenVideoIds() {
+        return java.util.stream.IntStream.rangeClosed(1, 11)
+                .mapToObj(i -> String.format("vid%08d", i))
+                .toList();
+    }
 }

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type {
-    GikkaVideo, RegistrationItem, RegistrationStatus, SearchResults, VideoCategory,
+    RegistrationItem, RegistrationStatus, VideoCategory,
 } from '../data/registrationTypes';
 import { DuplicateVideoError } from '../data/registrationTypes';
 import { registrationRepository } from '../data/registrationRepository';
@@ -64,9 +64,7 @@ const CATEGORY_BADGE: Record<VideoCategory, RcpBadgeVariant> = {
 /** 배지 문구: 완료 항목은 분류(레시피/유틸/기타), 나머지는 진행 상태.
     모든 항목이 항상 배지를 갖는다 — 일부만 비면 카드 오른쪽 칼럼이 들쭉날쭉해져
     레이아웃 일관성이 깨짐 (2026-07-14 재확정: "완료" 대신 "레시피"로 문구만 교체) */
-// 검색 보완 항목(GikkaVideo)에도 그대로 쓰이므로 registeredAt 을 안 보는 헬퍼는 GikkaVideo 로 넓힌다
-// (RegistrationItem 은 그 상위이므로 그대로 넘길 수 있다). registeredAt 을 보는 것(resultMetaText 등)만 mine 전용.
-const itemLabel = (item: GikkaVideo): string =>
+const itemLabel = (item: RegistrationItem): string =>
     item.status === 'DONE' ? CATEGORY_LABEL[item.category ?? 'ETC'] : STATUS_LABEL[item.status];
 /** 상태 → 배지 색 (2026-07-15: if-체인에서 표로 — 아래 STATUS_DETAIL 과 같은 이유).
     카테고리 팔레트와 절대 안 겹치는 예약색만 쓴다 (2026-07-14 재설계, dataviz CVD 검증) */
@@ -79,7 +77,7 @@ const STATUS_BADGE: Record<Exclude<RegistrationStatus, 'DONE'>, RcpBadgeVariant>
 };
 /** 배지 색: 완료 항목은 카테고리 팔레트, 나머지는 상태 팔레트 — 서로 절대 안 겹치는
     두 체계 (2026-07-14 재설계, dataviz 스킬 CVD 검증. 예전 "채움/테두리" 구분은 폐지) */
-const itemBadge = (item: GikkaVideo): RcpBadgeVariant =>
+const itemBadge = (item: RegistrationItem): RcpBadgeVariant =>
     item.status === 'DONE' ? CATEGORY_BADGE[item.category ?? 'ETC'] : STATUS_BADGE[item.status];
 /** 상태 → 결과 시트의 설명 문구.
     (2026-07-15: if-체인에서 표로 바꿈 — 체인은 끝에 기본값이 있어서 상태가 새로 생기면
@@ -107,20 +105,13 @@ const TOO_LONG_NOTICE = '7분이 넘는 영상이라 분석하지 않아요 — 
     분류·상태 라벨과 겹치지 않는 이름이어야 한다 — 같은 필터 자리를 쓰므로 */
 const REVIEW_LABEL = '확인 필요';
 
-// 보관함 검색 (2026-07-16 5차 — CONTEXT.md "5차 확장" 2번). others 표시 개수 상한은 프론트 상수 하나가 원본.
-const SEARCH_OTHERS_LIMIT = 10;
+// 보관함 검색 (2026-07-16 5차 도입, 2026-07-25 내 보관함만으로 범위 축소 — gikka 전체 보완은
+// 남의 데이터가 섞이면 개인 데이터 관리가 안 되는 느낌을 주고, 추천 탭이 이미 gikka 전체를
+// 보여주고 있어 중복이라는 판단으로 폐지).
 const SEARCH_DEBOUNCE_MS = 300; // 타이핑 중 매 글자 요청을 막는다 (디바운스)
-const SEARCH_PLACEHOLDER = '보관함·기까 전체에서 검색 (요리 이름·태그)';
-const SEARCH_MINE_LABEL = '내 보관함';
-const SEARCH_OTHERS_LABEL = '이런 것도 있어요';
-const SEARCH_MINE_EMPTY = '검색어와 맞는 내 영상이 없어요';
-const SEARCH_OTHERS_EMPTY = '기까 전체에서도 더 찾지 못했어요';
+const SEARCH_PLACEHOLDER = '보관함에서 검색 (요리 이름·태그)';
+const SEARCH_EMPTY = '검색어와 맞는 영상이 없어요';
 const SEARCHING_TEXT = '검색 중…';
-const ADD_TO_LIBRARY_TEXT = '내 보관함에 담기';
-const EMPTY_SEARCH: SearchResults = { mine: [], others: [] };
-// 검색 보완 항목의 시트 상단 줄 — 문구/데이터 분리(품질 기본선 7): 어순은 여기 한 곳에만
-const otherMetaText = (category: VideoCategory | null) =>
-    `${CATEGORY_LABEL[category ?? 'ETC']} · 아직 내 보관함에 없어요`;
 
 // 재료 신고 (2026-07-18 — CONTEXT.md "재료 신고" 절): 일반 사용자 기능이지만 공개 전이라
 // canReport(=canViewMonitor)로만 노출. 재료 칩 탭 → 확인 → 접수(즉시 응답), 처리는 서버 백그라운드.
@@ -132,7 +123,7 @@ const REPORT_FAIL_TEXT = '신고하지 못했어요 — 네트워크 확인 후 
 
 // 카드 제목: AI가 추출한 요리 이름이 원본 영상 제목보다 "무슨 요리인지" 더 잘 드러남
 // (2026-07-14 확정 — 이전엔 저장만 하고 목록엔 안 보여주고 있었음)
-const itemTitle = (item: GikkaVideo): string => item.recipe?.name || item.title || item.url;
+const itemTitle = (item: RegistrationItem): string => item.recipe?.name || item.title || item.url;
 const cookMinutesText = (minutes: number) => `조리 약 ${minutes}분`;
 const playlistAddedText = (count: number) => `재생목록에서 ${count}개를 대기열에 넣었어요`;
 // 문구/데이터 분리 (품질 기본선 7): 조합 문구는 템플릿 한 곳에
@@ -171,10 +162,8 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
     // 상세 시트의 재료별 있음/없음 표시용 (2026-07-14 확정) — 정확 매칭, 정규화 없음
     const [fridgeNames, setFridgeNames] = useState<Set<string> | null>(null);
     // 보관함 검색 (2026-07-16 5차). searchTerm=입력값, debouncedTerm=실제 조회에 쓰는 값(디바운스).
-    // selectedOther=검색 보완(gikka 전체) 항목의 상세 시트 (내 것 시트 selected 와 분리 — 조작 버튼이 다름)
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedTerm, setDebouncedTerm] = useState('');
-    const [selectedOther, setSelectedOther] = useState<GikkaVideo | null>(null);
 
     const load = useCallback(() => registrationRepository.list(), []);
     const query = useQuery<RegistrationItem[]>(load, loadMessage);
@@ -200,7 +189,7 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
     // 조회 실패는 조용히 — 신고는 보조 기능이라 시트 표시를 막지 않는다.
     const reportMutation = useMutation(() => REPORT_FAIL_TEXT);
     const [reportedNames, setReportedNames] = useState<Set<string>>(new Set());
-    const reportVideoId = selected?.videoId ?? selectedOther?.videoId ?? null;
+    const reportVideoId = selected?.videoId ?? null;
     useEffect(() => {
         setReportedNames(new Set());
         if (!canReport || !reportVideoId) return;
@@ -244,14 +233,13 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
     // 검색 조회 — 공용 useQuery (3상태 손으로 만들지 않음, AGENTS "가져다 쓸 것"). 검색어가 비면
     // 서버를 안 부르고 빈 결과. debouncedTerm 이 바뀔 때마다 load 정체성이 바뀌어 자동 재조회된다.
     const searchLoad = useCallback(
-        () => (debouncedTerm ? registrationRepository.search(debouncedTerm, SEARCH_OTHERS_LIMIT)
-            : Promise.resolve(EMPTY_SEARCH)),
+        () => (debouncedTerm ? registrationRepository.search(debouncedTerm) : Promise.resolve([])),
         [debouncedTerm],
     );
-    const search = useQuery<SearchResults>(searchLoad, loadMessage);
+    const search = useQuery<RegistrationItem[]>(searchLoad, loadMessage);
     const searching = debouncedTerm.length > 0;
     const searchPending = searchTerm.trim() !== debouncedTerm; // 디바운스 대기 중(입력 반영 전)
-    const searchData = search.data ?? EMPTY_SEARCH;
+    const searchData = search.data ?? [];
 
     // 진행 중 항목이 있는 동안만 폴링 (분석이 다 끝나면 조용해짐).
     // 의존성은 "폴링을 켤지"의 판정(active)뿐 — items 를 그대로 넣으면 응답이 올 때마다
@@ -339,19 +327,9 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
         setRegisterOpen(true);
     };
 
-    // 검색 보완 항목을 내 보관함에 담기 — video_id 로 연결만(재분석 없음). 성공하면 others→mine 으로
-    // 옮겨가야 하므로 검색·메인 목록을 함께 재조회 (mutation 실패 시 자동 재동기화는 메인 목록 담당)
-    const handleRegisterOther = (video: GikkaVideo) => mutation.run(async () => {
-        await registrationRepository.registerByVideoId(video.videoId);
-        setSelectedOther(null);
-        await search.reload();
-        await reload();
-    });
-
-    // DONE 결과 상세(요약·재료·조리순서·태그·원본 링크) — 내 것 시트와 검색 보완 시트가 공유.
-    // registeredAt 을 안 보므로 GikkaVideo 로 받는다(RegistrationItem 도 그대로 넘어감). status 가
-    // DONE 이 아니면(분석 전 내 항목) 내용 없이 원본 링크만 — 시트별 상태 설명은 각자 담당.
-    const renderDoneDetail = (item: GikkaVideo) => (
+    // DONE 결과 상세(요약·재료·조리순서·태그·원본 링크). status 가 DONE 이 아니면(분석 전 항목)
+    // 내용 없이 원본 링크만.
+    const renderDoneDetail = (item: RegistrationItem) => (
         <>
             {item.status === 'DONE' && item.summary && (
                 <>
@@ -429,17 +407,6 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
         />
     );
 
-    // 검색 보완 행 — gikka 전체(등록 무관) 완료 영상. 분류 배지만, 등록일 없음(내 것이 아님)
-    const renderOtherRow = (video: GikkaVideo) => (
-        <RcpVideoRow
-            key={video.videoId}
-            title={itemTitle(video)}
-            thumbnailUrl={video.thumbnailUrl}
-            badge={<RcpBadge variant={itemBadge(video)}>{itemLabel(video)}</RcpBadge>}
-            onClick={() => setSelectedOther(video)}
-        />
-    );
-
     const errorLine = <RcpInlineError message={mutation.error ?? reportMutation.error} />;
 
     // 요약줄: 표시 문구(레시피·유틸·기타·분석대기…) 기준으로 집계, 0인 것은 숨김
@@ -502,18 +469,9 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
                             <RcpLoadError message={search.error} onRetry={() => void search.reload()} />
                             {searchPending && !search.error && <p className="rcp-empty">{SEARCHING_TEXT}</p>}
                             {!searchPending && !search.error && (
-                                <>
-                                    <h2 className="rcp-section-label">{SEARCH_MINE_LABEL}</h2>
-                                    {searchData.mine.length === 0
-                                        ? <p className="rcp-empty">{SEARCH_MINE_EMPTY}</p>
-                                        : searchData.mine.map(renderMineRow)}
-                                    {/* 결과 부족 여부와 무관하게 항상 보완 섹션 자리를 지킨다
-                                        (임계값 없이 — CONTEXT.md "5차 확장" 2번, 임의 기준 금지) */}
-                                    <h2 className="rcp-section-label">{SEARCH_OTHERS_LABEL}</h2>
-                                    {searchData.others.length === 0
-                                        ? <p className="rcp-empty">{SEARCH_OTHERS_EMPTY}</p>
-                                        : searchData.others.map(renderOtherRow)}
-                                </>
+                                searchData.length === 0
+                                    ? <p className="rcp-empty">{SEARCH_EMPTY}</p>
+                                    : searchData.map(renderMineRow)
                             )}
                         </section>
                     ) : (
@@ -635,31 +593,6 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
 
                         <RcpButton variant="ghost" onClick={() => void handleUnregister(selected)}>
                             내 목록에서 지우기
-                        </RcpButton>
-                    </>
-                )}
-            </RcpBottomSheet>
-
-            {/* 검색 보완(gikka 전체) 항목 상세 — 내 것이 아니므로 등록일 대신 분류 줄, 조작은 "담기"
-                (2026-07-16 5차). 상세 본문은 내 것 시트와 같은 renderDoneDetail 을 공유 */}
-            <RcpBottomSheet
-                open={selectedOther !== null}
-                title={selectedOther?.recipe?.name ?? selectedOther?.title ?? '분석 결과'}
-                onClose={() => setSelectedOther(null)}
-            >
-                {selectedOther && (
-                    <>
-                        {errorLine}
-                        <p className="rcp-sheet-meta">{otherMetaText(selectedOther.category)}</p>
-
-                        {analysisQualityWarning(selectedOther) && (
-                            <p className="rcp-quality-warning">{analysisQualityWarning(selectedOther)}</p>
-                        )}
-
-                        {renderDoneDetail(selectedOther)}
-
-                        <RcpButton onClick={() => void handleRegisterOther(selectedOther)}>
-                            {ADD_TO_LIBRARY_TEXT}
                         </RcpButton>
                     </>
                 )}

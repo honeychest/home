@@ -81,26 +81,16 @@ public class RegistrationController {
         return repository.list(userId).stream().map(this::toResponse).toList();
     }
 
-    /** 보관함 검색 결과 (2026-07-16 5차) — 내 등록 우선(mine) + gikka 전체 보완(others).
-        others 는 내가 등록 안 한 완료 영상이라 registeredAt=null 로 내려간다 (프론트 GikkaVideo). */
-    public record SearchResponse(List<RegistrationResponse> mine, List<RegistrationResponse> others) {
-    }
-
-    /** 보관함 검색 — 내 보관함 우선, 결과가 부족해도 gikka 전체(등록 무관)를 항상 함께 보완 노출
-        (2026-07-16 5차, 임계값 없이 항상 두 섹션 — CONTEXT.md "5차 확장" 2번). 매칭은 제목·요리
-        이름·태그 부분일치. limit=others 개수 상한(프론트 상수). q 가 비면 빈 결과. */
+    /** 보관함 검색 — 내 보관함만 (2026-07-16 5차 도입, 2026-07-25 gikka 전체 보완 폐지 — 남의
+        데이터가 섞이면 개인 데이터 관리가 안 되는 느낌을 주고, 추천 탭이 이미 gikka 전체를
+        보여주고 있어 중복이라는 사용자 판단). 매칭은 제목·요리 이름·태그 부분일치. q 가 비면 빈 결과. */
     @GetMapping("/search")
-    public SearchResponse search(@GikkaUserId long userId,
-                                 @RequestParam String q, @RequestParam int limit) {
+    public List<RegistrationResponse> search(@GikkaUserId long userId, @RequestParam String q) {
         String query = q.trim();
         if (query.isEmpty()) {
-            return new SearchResponse(List.of(), List.of());
+            return List.of();
         }
-        List<RegistrationResponse> mine = repository.searchMine(userId, query).stream()
-                .map(this::toResponse).toList();
-        List<RegistrationResponse> others = repository.searchOthers(userId, query, limit).stream()
-                .map(this::toResponse).toList();
-        return new SearchResponse(mine, others);
+        return repository.searchMine(userId, query).stream().map(this::toResponse).toList();
     }
 
     /** gikka 전체 보완에서 고른 영상을 내 보관함에 담기 (2026-07-16 5차) — URL 재입력·재분석 없이
@@ -147,12 +137,21 @@ public class RegistrationController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "등록 직후 조회 실패"));
     }
 
+    /** 비-오너의 재생목록 일괄 등록 상한 (2026-07-25 확정) — 한 번 요청으로 대기열에 대량으로
+        밀어넣는 걸 막는 목적. 링크를 하나씩 붙여넣는 일반 등록은 사람이 직접 붙여넣는 속도가
+        자연스러운 제한이 돼 별도 장치를 안 둔다 — 재생목록만 한 번의 클릭으로 대량 등록이 가능해
+        여기만 상한을 둔다. 오너는 검증·시딩 목적이 있어 예외. */
+    private static final int PLAYLIST_LIMIT_FOR_NON_OWNER = 10;
+
     /** 재생목록 일괄 등록 — 이미 있던 영상은 건너뛰고 추가된 수를 반환. 신규 영상만 메타 조회 */
     @PostMapping("/playlist")
     public Map<String, Integer> registerPlaylist(@GikkaUserId long userId, @RequestBody RegisterRequest request) {
         String playlistId = YoutubeVideoId.parsePlaylistId(nonNullUrl(request))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "재생목록 링크 인식 불가"));
         List<String> videoIds = metadata.playlistVideoIds(playlistId);
+        if (!authProperties.isOwner(users.findEmail(userId)) && videoIds.size() > PLAYLIST_LIMIT_FOR_NON_OWNER) {
+            videoIds = videoIds.subList(0, PLAYLIST_LIMIT_FOR_NON_OWNER);
+        }
         List<String> unknownVideoIds = videoIds.stream().filter(id -> !videos.existsActive(id)).toList();
         Map<String, VideoMetadataClient.VideoMetadata> metaById;
         try {

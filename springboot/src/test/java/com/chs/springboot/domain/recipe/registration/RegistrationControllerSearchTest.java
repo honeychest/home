@@ -1,7 +1,8 @@
-// [AGENT] 보관함 검색·by-video 등록의 계약 고정 (DB·HTTP 없는 순수 테스트, 2026-07-16 5차).
+// [AGENT] 보관함 검색·by-video 등록의 계약 고정 (DB·HTTP 없는 순수 테스트, 2026-07-16 5차,
+// 2026-07-25 검색 범위를 내 보관함만으로 축소).
 // 검색 자체의 매칭 SQL 은 저장소 소관이고 여기선 컨트롤러의 위임·상태코드 계약만 잠근다:
 //  - by-video: 없는·삭제된 영상=404 / 이미 내 것=409 / 정상=메타 없이 연결만(registerLink Optional.empty).
-//  - search: q 가 비면 저장소를 안 부르고 빈 결과 / q 가 있으면 mine·others 를 limit 그대로 조회.
+//  - search: q 가 비면 저장소를 안 부르고 빈 결과 / q 가 있으면 내 등록만 트림된 쿼리로 조회.
 package com.chs.springboot.domain.recipe.registration;
 
 import java.util.List;
@@ -19,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -84,25 +84,20 @@ class RegistrationControllerSearchTest {
     @Test
     @DisplayName("search: q 가 비면 저장소를 안 부르고 빈 결과")
     void searchBlankQueryReturnsEmpty() {
-        var result = controller().search(USER_ID, "   ", 10);
+        var result = controller().search(USER_ID, "   ");
 
-        assertTrue(result.mine().isEmpty());
-        assertTrue(result.others().isEmpty());
+        assertTrue(result.isEmpty());
         verify(repository, never()).searchMine(anyLong(), anyString());
-        verify(repository, never()).searchOthers(anyLong(), anyString(), anyInt());
     }
 
     @Test
-    @DisplayName("search: q 가 있으면 mine·others 를 limit 그대로 조회한다 (앞뒤 공백은 잘라서)")
-    void searchDelegatesTrimmedQueryAndLimit() {
+    @DisplayName("search: q 가 있으면 내 등록만 트림된 쿼리로 조회한다")
+    void searchDelegatesTrimmedQuery() {
         when(repository.searchMine(USER_ID, "김치")).thenReturn(List.of());
-        when(repository.searchOthers(USER_ID, "김치", 10)).thenReturn(List.of());
 
-        var result = controller().search(USER_ID, "  김치  ", 10);
+        var result = controller().search(USER_ID, "  김치  ");
 
-        assertTrue(result.mine().isEmpty());
-        assertTrue(result.others().isEmpty());
+        assertTrue(result.isEmpty());
         verify(repository).searchMine(USER_ID, "김치");
-        verify(repository).searchOthers(USER_ID, "김치", 10);
     }
 }

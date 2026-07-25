@@ -47,7 +47,18 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-18 · <b>이번 세션 — 사전 그룹 관리 시트 + 추천 성능(캐시·슬림·스켈레톤·커버플로우) + 분석 입력에 제목 추가 + 사전 265건 전수 재점검 DB 반영.</b>
+  <div class="updated">갱신: 2026-07-25 · <b>앱 분리(2단계 착수 준비) track 진행 중 — 이 문서 밖에서 관리된다.
+    진행 상태·다음 할 일의 원본은 <code>docs/HANDOFF.md</code>, 설계 결정 원본은 CONTEXT.md
+    "2단계 착수 준비 — 앱 분리" 절. 아래 "다음 세션이 이어서 할 일"은 그 track 을 담지 않으므로
+    새 세션은 HANDOFF.md 를 먼저 읽을 것.</b>
+    <br>· <b>2026-07-25 — 네이티브 전환 대비 어댑터 격리 + 가드 테스트(6d9571f, 커밋·푸시 완료)</b>:
+    TWA 로 먼저 내고 나중에 Capacitor 로 셸을 바꾸는 계획이라, "나중에 하면 여러 파일로 번지는 것"만
+    골라 먼저 막음 — tokenStorage 의 <code>getToken()</code> 동기 못박음(+initTokenStorage·storageReady
+    게이트) · <code>data/platform.ts</code> 신설(환경 API 집결) · <code>data/googleSignIn.ts</code> 신설
+    (GIS 접촉면 격리) · <code>platformIsolation.test.ts</code> 신설(화면의 환경 API 직접 호출을 막는
+    가드, 백엔드 ArchUnit 과 같은 역할). vitest 65 · build 통과. 판단 기준과 미룬 항목은 CONTEXT.md ·
+    frontend/AGENTS.md 의 "네이티브 전환 대비" 절 참고.
+    <br>· 갱신: 2026-07-18 · <b>사전 그룹 관리 시트 + 추천 성능(캐시·슬림·스켈레톤·커버플로우) + 분석 입력에 제목 추가 + 사전 265건 전수 재점검 DB 반영.</b>
     <br>· <b>대기열 탭 탐색·분석 내용(ee9395c·aa4b7f3 — 배포 확인 완료)</b> — "오빠게티를 못 찾겠다": 최신 100개 컷 밖은 존재
     자체가 안 보였음. 검색(제목·요리명·태그) + 상태 칩 필터(전체 개수 겸) + 무한 스크롤(sentinel)
     추가, 항목 탭 시트에 분석 내용(분류·재료·단계·요약·태그) 표시 — 탭한 1건만 /analysis 조회.
@@ -495,6 +506,13 @@
 <div class="card next">
   <h2>다음 세션이 이어서 할 일</h2>
   <ul>
+    <li><b>앱 분리 track 은 여기 없다 — <code>docs/HANDOFF.md</code> 를 먼저 읽을 것</b> (2026-07-25).
+      Play 스토어 배포(TWA)를 위한 백엔드 완전 분리·프론트 서브도메인 격리·네이티브 전환 대비는
+      일회성 작업이라 HANDOFF.md 가 진행 상태의 원본이고, 설계 결정 원본은 CONTEXT.md
+      "2단계 착수 준비 — 앱 분리" 절이다. 아래 항목들은 그 track 과 별개인 기능 차수 작업이므로,
+      둘이 다른 "다음 할 일"을 가리켜도 충돌이 아니다.
+      현재 HANDOFF.md 상 최우선: <b>저장소 루트 <code>gikka/</code> 신설(Spring Boot 프로젝트)</b>
+      — 지금 빈 폴더. 그 앞에 사용자 액션(mac-mini plist 경로 확인)이 걸려 있다.</li>
     <li><b>2026-07-19 확인창 킷(미커밋)</b>: 사용자 지적("신고 확인이 시스템 경고창") →
       RcpConfirm 킷 신설(중앙 카드·배경 탭 취소·danger 변형, z 60 = 시트 위). window.confirm
       3곳 전부 교체(재료 신고 · 사전 [제안 전체 적용] · 모니터 영상 삭제 — 이제 시스템 창 0곳,
