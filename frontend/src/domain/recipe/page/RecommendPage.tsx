@@ -144,24 +144,28 @@ export default function RecommendPage() {
             )}
 
             {!loadError && snapshot !== null && !isEmpty && (
-                <div className="rcp-recommend-sections rcp-fade-in">
+                <div className="rcp-recommend-sections">
                     {sections.map((section) => (
                         <section className="rcp-recommend-section" key={section.key} aria-label={section.label}>
+                            {/* 섹션 라벨(제목·부제)은 스켈레톤 단계에서 이미 같은 문구로 떠 있었으므로
+                                애니메이션 없이 그대로 — 데이터(카드/빈 문구)만 페이드인 (2026-07-25) */}
                             <div className="rcp-recommend-section-head">
                                 <span className="rcp-recommend-section-title">{section.label}</span>
                                 <span className="rcp-recommend-section-sub">{section.subtitle}</span>
                             </div>
-                            {section.items.length === 0 ? (
-                                <p className="rcp-recommend-section-empty">{section.emptyText}</p>
-                            ) : (
-                                <RcpCoverflow
-                                    items={section.items}
-                                    keyOf={(item) => item.videoId}
-                                    cardClassOf={(item) => (item.inLibrary ? MINE_CARD_CLASS : undefined)}
-                                    renderCard={(item) => <RecommendCard item={item} />}
-                                    onCardClick={(item) => setSelected(item)}
-                                />
-                            )}
+                            <div className="rcp-fade-in">
+                                {section.items.length === 0 ? (
+                                    <p className="rcp-recommend-section-empty">{section.emptyText}</p>
+                                ) : (
+                                    <RcpCoverflow
+                                        items={section.items}
+                                        keyOf={(item) => item.videoId}
+                                        cardClassOf={(item) => (item.inLibrary ? MINE_CARD_CLASS : undefined)}
+                                        renderCard={(item) => <RecommendCard item={item} />}
+                                        onCardClick={(item) => setSelected(item)}
+                                    />
+                                )}
+                            </div>
                         </section>
                     ))}
                 </div>
