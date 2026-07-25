@@ -65,14 +65,24 @@ export default function RcpCoverflow<T>({ items, keyOf, renderCard, onCardClick,
             card.style.marginLeft = i === 0 ? '0px' : `${OVERLAP_PX}px`;
         });
         // 카드 폭이 고정 px 가 아니라 섹션 높이에서 역산(aspect-ratio)되므로, 첫/끝 카드도
-        // 가운데에 스냅되도록 좌우 padding 을 실측한 폭으로 계산한다.
+        // 가운데에 스냅되도록 좌우 여백을 실측한 폭으로 계산한다.
         // offsetWidth/offsetLeft 사용(transform scale 은 시각적 효과일 뿐 레이아웃 박스는 안 바꿈)
         const firstCard = cards[0];
         const cardWidth = firstCard ? firstCard.offsetWidth : 0;
         if (firstCard) {
             const halfWidth = cardWidth / 2;
             track.style.paddingLeft = `calc(50% - ${halfWidth}px)`;
-            track.style.paddingRight = `calc(50% - ${halfWidth}px)`;
+            // 오른쪽 여백은 padding 이 아니라 "마지막 카드의 margin" 으로 준다 (2026-07-25 확정).
+            // 가로 스크롤 컨테이너의 끝쪽 padding 은 브라우저(특히 WebKit)가 스크롤 가능 범위에
+            // 넣지 않아 그 몫만큼 범위가 깎인다. 카드가 3장쯤으로 적으면 깎이는 양이 전체 범위와
+            // 맞먹어 스크롤이 아예 안 되고 뒤 카드에 닿을 수 없었다 (iOS 추천 "완전 가능" 실사용
+            // 발견). margin 은 어느 브라우저에서나 스크롤 범위에 포함되므로 여백 총량은 그대로면서
+            // 마지막 카드까지 가운데로 온다.
+            track.style.paddingRight = '0px';
+            const trailing = Math.max(track.clientWidth / 2 - halfWidth, 0);
+            cards.forEach((card, i) => {
+                card.style.marginRight = i === cards.length - 1 ? `${trailing}px` : '0px';
+            });
         }
         metricsRef.current = {
             cards,

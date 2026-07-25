@@ -71,15 +71,16 @@ html.rcp-locked body {
    1) 높이가 아이콘 줄 값 그대로였는데 box-sizing:border-box 라 안전영역 패딩이 아이콘 자리를
       먹었다 → 아이콘이 위로 몰리고 그 아래에 빈 흰 띠가 남았다. 이제 아이콘 줄 + 안전영역을
       더한 값이 실제 높이다.
-   2) 안전영역(홈 인디케이터·iOS 크롬 하단 조작부) 몫까지 흰색이라 "빈 판"으로 보였다 →
-      흰 판은 아이콘 줄까지만 칠하고 그 아래는 투명하게 둬서 앱 배경이 그대로 비치게 한다.
+   2) 색은 안전영역까지 한 가지(흰색)로 둔다 — iOS 기본 앱들처럼 탭 바 판이 홈 인디케이터
+      뒤까지 이어지는 모습. 중간에 앱 배경색 띠를 넣어봤더니(2026-07-25 1차 시도) 흰 판과
+      연두 띠 2단으로 보여 탭 바가 떠 있는 것처럼 어색하다는 실사용 지적으로 되돌렸다.
    안전영역 여백 자체를 없애는 안은 기각 — 홈 인디케이터(가로 막대)가 탭 아이콘과 겹쳐
-   홈 제스처와 탭이 서로 오작동한다 (2026-07-25 사용자 선택). */
+   홈 제스처와 탭이 서로 오작동한다 (2026-07-25 사용자 선택, iPhone 11 Pro Max 기준). */
 .rcp-tab-bar {
   position: fixed; left: 0; right: 0; bottom: 0;
   height: calc(var(--rcp-tab-height) + env(safe-area-inset-bottom));
   display: flex;
-  background: linear-gradient(var(--rcp-surface) 0 var(--rcp-tab-height), transparent 0);
+  background: var(--rcp-surface);
   border-top: 1px solid var(--rcp-line);
   padding-bottom: env(safe-area-inset-bottom);
   z-index: 40;
