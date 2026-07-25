@@ -551,6 +551,19 @@ button.rcp-chip:disabled, button.rcp-sticker:disabled { cursor: default; }
   50% { opacity: 0.55; }
 }
 
+/* ── 콘텐츠 페이드인: rcp-fade-in (2026-07-25 확정) ── 탭 이동 후 데이터가 도착해
+   목록/콘텐츠가 나타나는 지점에만 붙인다 — 레이블(제목·부제)은 애니메이션 없이 그대로
+   즉시 표시(실사용 확인 — 화면 전체를 같이 움직이면 이미 즉시 보이던 레이블까지 움직여
+   더 어색했음). 데이터가 준비된 시점에 처음 마운트되는 요소에 붙이면 1회 재생된다. */
+.rcp-fade-in { animation: rcp-fade-in 220ms ease-out; }
+@keyframes rcp-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rcp-fade-in { animation: none; }
+}
+
 /* ── 겹침형 커버플로우: rcp-coverflow-wrap > rcp-coverflow > rcp-coverflow-card ──
    (2026-07-14 확정, 4차 추천 화면. 목업에서 사용자가 직접 슬라이더로 맞춘 값을 RcpCoverflow.tsx
    상수로 고정. 카드는 부모가 주는 높이를 그대로 채우고(aspect-ratio 로 폭을 계산) — 고정

@@ -144,7 +144,7 @@ export default function RecommendPage() {
             )}
 
             {!loadError && snapshot !== null && !isEmpty && (
-                <div className="rcp-recommend-sections">
+                <div className="rcp-recommend-sections rcp-fade-in">
                     {sections.map((section) => (
                         <section className="rcp-recommend-section" key={section.key} aria-label={section.label}>
                             <div className="rcp-recommend-section-head">

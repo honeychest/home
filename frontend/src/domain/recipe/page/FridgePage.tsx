@@ -271,7 +271,11 @@ export default function FridgePage() {
             <RcpLoadError message={loadError} onRetry={retryLoad} />
             {!loadError && items === null && <p className="rcp-empty">불러오는 중…</p>}
 
-            <section id="rcp-fridge-shelves" aria-label="냉장고 재료 선반">
+            <section
+                id="rcp-fridge-shelves"
+                aria-label="냉장고 재료 선반"
+                className={items !== null ? 'rcp-fade-in' : undefined}
+            >
                 {items !== null && items.length === 0 && (
                     <p className="rcp-empty">아직 비어 있어요. 아래 [+ 재료 추가]로 채워보세요.</p>
                 )}

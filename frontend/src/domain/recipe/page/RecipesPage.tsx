@@ -475,6 +475,10 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
 
             {items !== null && (
                 <>
+                {/* rcp-fade-in 은 transform 애니메이션을 잠깐 걸기 때문에 position:fixed 인
+                    RcpFab 을 안에 두면 그 잠깐 동안 fixed 기준이 이 div 로 바뀐다 — FAB 는
+                    이 래퍼 밖(형제)에 둔다 (2026-07-25 확정) */}
+                <div className="rcp-fade-in">
                     {/* 검색바 (2026-07-16 5차) — 등록 폼과 같은 rcp-input-row 구조 재사용(새 CSS 없음).
                         검색어가 비면 아래는 기존 대기열/목록 그대로, 있으면 검색 결과로 전환 */}
                     <div className="rcp-input-row" id="rcp-search">
@@ -544,12 +548,13 @@ export default function RecipesPage({ canReport = false }: RecipesPageProps) {
                             </section>
                         </>
                     )}
+                </div>
 
-                    {/* 목록 끝이 아니라 떠 있는 자리 — 영상이 몇 개든 위치가 안 변한다
-                        (2026-07-16 확정: 목록이 길어질수록 등록 버튼을 못 찾겠다는 실사용 제보) */}
-                    <RcpFab id="rcp-register-button" onClick={openRegisterSheet}>
-                        + 영상 등록
-                    </RcpFab>
+                {/* 목록 끝이 아니라 떠 있는 자리 — 영상이 몇 개든 위치가 안 변한다
+                    (2026-07-16 확정: 목록이 길어질수록 등록 버튼을 못 찾겠다는 실사용 제보) */}
+                <RcpFab id="rcp-register-button" onClick={openRegisterSheet}>
+                    + 영상 등록
+                </RcpFab>
                 </>
             )}
 

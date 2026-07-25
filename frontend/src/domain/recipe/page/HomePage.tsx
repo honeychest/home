@@ -176,7 +176,7 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
             {recent.length === 0 ? (
                 <p className="rcp-empty">분석이 끝난 영상이 여기 섬네일로 쌓여요</p>
             ) : (
-                <div className="rcp-thumb-strip" id="rcp-home-recent" aria-label="최근 분석된 영상">
+                <div className="rcp-thumb-strip rcp-fade-in" id="rcp-home-recent" aria-label="최근 분석된 영상">
                     {/* 탭 → 보관함 탭의 결과 시트 (2026-07-18 확정 — 유튜브 직행은 실수 탭에
                         안전장치가 없어 폐지. 원본 이동은 시트 안 "원본 영상 보기"로 명시적) */}
                     {recent.map((item) => (
