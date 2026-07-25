@@ -13,6 +13,7 @@ import { HttpError } from '../data/http';
 import { xDownloadRepository } from '../data/xDownloadRepository';
 import type { XResolveResult, XVideoOption } from '../data/xDownloadRepository';
 import { clipboardReadSupported, readClipboardText } from '../data/clipboard';
+import { isDevSession } from '../data/platform';
 import { useMutation } from './useMutation';
 import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
@@ -55,7 +56,8 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
     // prop 전달 버그, 같은데도 화면에 안 보이면 렌더링 쪽 버그. 원인 확정되면 제거.
     console.log('[recipe-auth] HomePage render, canViewMonitor=', canViewMonitor);
     // dev 폴백은 http(로컬 개발)에서만, 진짜 구글 로그인은 배포(https)에서만 — CONTEXT.md 인증 절
-    const isDevSession = window.location.protocol !== 'https:';
+    // (판정은 data/platform.ts 소유 — 화면이 window.location 을 직접 보지 않는다)
+    const devSession = isDevSession();
     const navigate = useNavigate();
     const [accountSheetOpen, setAccountSheetOpen] = useState(false);
     const [recent, setRecent] = useState<RegistrationItem[]>([]);
@@ -244,7 +246,7 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
             <RcpBottomSheet open={accountSheetOpen} title="계정" onClose={() => setAccountSheetOpen(false)}>
                 {/* 오너 본인 이메일도 시트 안에서 가림 — 헤더 트리거와 같은 이유(스크린샷 노출) */}
                 {!canViewMonitor && <span className="rcp-account-email">{email}</span>}
-                {isDevSession && (
+                {devSession && (
                     <span className="rcp-account-dev" id="rcp-home-account-dev">
                         개발 모드 — 구글 로그인 없이 자동 접속 중이에요
                     </span>
@@ -259,7 +261,7 @@ export default function HomePage({ email, canViewMonitor, onLogout }: HomePagePr
                         모니터링
                     </RcpButton>
                 )}
-                {!isDevSession && (
+                {!devSession && (
                     <RcpButton variant="ghost" className="rcp-btn-full" id="rcp-home-logout" onClick={onLogout}>
                         로그아웃
                     </RcpButton>

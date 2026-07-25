@@ -34,6 +34,19 @@
 - 인증 토큰 저장: `src/domain/recipe/data/tokenStorage.ts` (`getToken`/`setToken`/`clearToken`).
   세션은 쿠키가 아니라 Authorization: Bearer 헤더(2026-07-2x 전환, 네이티브 대비) — 헤더 조립은
   `http.ts`의 `authHeader()`가 이 포트를 감싸 담당하므로 화면·저장소는 토큰을 직접 만지지 않는다.
+  **`getToken()`은 반드시 동기로 유지한다** (2026-07-25) — 비동기로 바꾸는 순간 `authHeader()` →
+  `request()` → 저장소 전부로 async 가 번진다. 네이티브 보안 저장소(비동기)는 앱 시작 시
+  `initTokenStorage()`로 메모리에 적재하고 `getToken()`은 그 값을 돌려주는 방식으로 받는다.
+  셸(RecipeApp)의 `storageReady` 게이트가 적재 전 세션 확인을 막는다 — 지우지 말 것.
+- 실행 환경(셸) 판정: `src/domain/recipe/data/platform.ts`
+  (`isNativeShell`/`isStandaloneDisplay`/`isIOS`/`isDevSession`/`registerServiceWorker`/설치 안내 시각).
+  화면에서 `window.location`·`navigator.userAgent`·`localStorage`·`navigator.serviceWorker` 를
+  직접 부르지 말 것 — 네이티브 셸 전환 시 동작이 달라지는 API 라 어댑터 한 곳에 모아 둔다.
+  새 환경 API 가 필요하면 이 파일에 함수를 추가해서 쓴다.
+- 구글 로그인(GIS): `src/domain/recipe/data/googleSignIn.ts` (`mountGoogleSignInButton`).
+  화면은 "이 자리에 버튼을 붙이고 성공하면 ID 토큰을 달라"만 안다. 웹 GIS 는 임베디드 WebView
+  에서 구글 정책상 차단되므로(`disallowed_useragent`) 네이티브 전환 시 재작업이 불가피한데,
+  그 범위를 이 파일 하나로 묶어 두는 것이 목적이다 (2026-07-25 격리).
 - 목록 조회 실행기: `src/domain/recipe/page/useQuery.ts` — "3상태"(data=null 첫 로딩 /
   error / 다시 시도)를 화면마다 손으로 만들지 말 것. `{ data, error, failure, setData,
   reload, refresh }` 제공. reload=실패 시 문구, refresh=조용한 재조회(폴링용),
@@ -65,6 +78,27 @@
 |---|---|
 | `src/domain/recipe/**` | `docs/recipe/PLAYBOOK.md` 공통 규칙 + "가져다 쓸 것" 절 — 필수 |
 
+## 네이티브 전환 대비 — 무엇을 지금 하고 무엇을 미루나 (2026-07-25 확정)
+recipe 는 TWA 로 먼저 출시하고 나중에 네이티브 셸(Capacitor)로 교체할 예정이다.
+"네이티브 대비"라는 이름으로 지금 인터페이스를 다 만들면, 어댑터가 1개뿐인데 추상화부터 하는
+가상의 seam 이 된다. 그래서 기준은 하나다.
+
+- **지금 한다** = 나중에 하면 여러 파일로 번지는 것
+  (예: `getToken()` 을 비동기로 바꾸면 저장소 전부에 async 가 번진다 → 지금 막았다.
+   환경 판정이 화면마다 흩어지면 전환 때 화면 수만큼 비용이 붙는다 → `platform.ts` 로 모았다)
+- **나중에 한다** = 나중에도 파일 하나만 갈아끼우면 되는 것
+  (예: Share Target 진입점, 라우터 base 경로 — 전환 시점에 포트를 만들어도 늦지 않다.
+   구글 로그인은 재작업이 불가피하되 `googleSignIn.ts` 하나로 범위를 묶어 뒀으므로 여기 해당)
+
+미룬 것 목록(전환 시 손볼 곳): Share Target 진입점(URL 쿼리 → 네이티브 인텐트),
+`'/recipe'` 경로 하드코딩(서브도메인 격리 작업에서 상수 하나로 모을 것),
+HomePage 의 X다운로드 blob 저장(`document.createElement('a')` → 파일시스템 플러그인),
+안드로이드 하드웨어 뒤로가기 처리.
+
 ## 검증
 - `npm run test`(vitest) + `npm run build` 통과 후 보고. 새 공용 컴포넌트는
   `/recipe/styleguide` 등록 + 긴 글자 스트레스 케이스 추가가 의무.
+- `src/domain/recipe/platformIsolation.test.ts` 는 화면(page/·ui/)의 환경 API 직접 호출을
+  막는 가드다 (springboot 의 `RecipeIsolationArchTest` 와 같은 역할). 실패하면 우회하지 말고
+  해당 API 를 `data/` 어댑터로 옮긴다. 규칙에 예외를 추가하지 말 것 — "이번 한 번만" 이 쌓이면
+  이 가드는 무의미해지고, 그러면 전환 비용이 다시 화면 수만큼 늘어난다.

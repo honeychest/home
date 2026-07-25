@@ -19,6 +19,19 @@ Play 스토어에 TWA로 배포하려면(비공개 테스트 12명·14일 요건
   `launchctl kickstart -k`를 실행할 때 존재하지 않는 경로라 로컬 추출기가 죽는다(전량 Gemini
   폴백 → 한도 소모 가속). **사용자가 이미 고쳤는지 확인하고, 안 했으면 최우선으로 처리할 것.**
 
+### 프론트 네이티브 전환 대비 — 완료 (2026-07-25, 재작업 불필요)
+TWA 로 먼저 내고 나중에 Capacitor 로 셸을 바꾸는 계획 때문에, "나중에 하면 여러 파일로 번지는
+것"만 골라 먼저 막았다. 판단 기준과 미룬 항목은 `docs/recipe/CONTEXT.md` "네이티브 전환 대비의
+판단 기준" 절 + `frontend/AGENTS.md` 동명 절이 단일 원본이다. 요지만:
+- `data/tokenStorage.ts` — `getToken()` 은 **반드시 동기 유지**. 네이티브 비동기 저장소는
+  `initTokenStorage()` + 셸(RecipeApp)의 `storageReady` 게이트로 받는다. 이 게이트 지우지 말 것.
+- `data/platform.ts` (신설) — 환경 API 는 전부 여기. 전환 시 `isNativeShell()` 만 true 로.
+- `data/googleSignIn.ts` (신설) — GIS 접촉면 격리. 로그인 재작업 범위를 이 파일로 한정.
+- `platformIsolation.test.ts` (신설) — 화면이 환경 API 를 직접 부르면 실패하는 가드
+  (백엔드 ArchUnit 과 같은 역할). **실패하면 우회·예외 추가 말고 `data/` 어댑터로 옮길 것.**
+  참고: 이 저장소 eslint 는 대상이 `**/*.{js,jsx}` 라 recipe 의 .ts/.tsx 를 안 본다. 그래서
+  ESLint 가 아니라 vitest 가드로 만들었다(typescript-eslint 새 의존성 회피).
+
 ### 다음 세션 최우선 작업 — `gikka/` 신설 (Spring Boot 프로젝트)
 1. 저장소 루트에 새 Gradle 프로젝트 `gikka/` 생성(기존 `springboot/`는 건드리지 않고 완전히
    새로 만듦 — 멀티모듈 아님, 독립 프로젝트).
@@ -59,6 +72,9 @@ Play 스토어에 TWA로 배포하려면(비공개 테스트 12명·14일 요건
 - mac-mini nginx: 서브도메인 서버 블록(정적 파일 + `/api/recipe` 프록시, 백엔드 분리 후엔
   `chs-gikka` 업스트림으로)
 - Google Cloud Console: OAuth 승인된 오리진에 `https://gikka.devcontext.net` 추가
-- Play Console: 비공개 테스트 트랙 생성, 안드로이드 패키지명(applicationId) 결정 + 키스토어 백업
+- Play Console: 비공개 테스트 트랙 생성. 패키지명·서명은 2026-07-25 에 결정됨 (CONTEXT.md
+  "되돌릴 수 없는 스토어 결정" 절) — applicationId `net.devcontext.gikka`, Play App Signing 사용.
+  주의: `assetlinks.json` 에 넣을 SHA-256 은 내 업로드 키가 아니라 **Play Console 이 발급한 앱
+  서명 키 지문**이다. 틀리면 앱이 죽는 게 아니라 주소창 보이는 브라우저 모드로 조용히 떨어진다.
 - `gikka.auth.allowed-emails`: 이미 2026-07-20 커밋(`b744f05`)으로 비워둬서 전체 공개 상태 —
   로그인이 막히면 배포 반영 여부부터 확인(코드 문제 아님)

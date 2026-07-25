@@ -12,7 +12,15 @@ import RcpButton from '../ui/RcpButton';
 import RcpBottomSheet from '../ui/RcpBottomSheet';
 import { authRepository } from '../data/authRepository';
 import { setSessionExpiredHandler } from '../data/http';
-import { getToken } from '../data/tokenStorage';
+import { getToken, initTokenStorage, isTokenStorageReady } from '../data/tokenStorage';
+import {
+    getInstallPromptShownAt,
+    isIOS,
+    isNativeShell,
+    isStandaloneDisplay,
+    markInstallPromptShown,
+    registerServiceWorker,
+} from '../data/platform';
 import DictionaryPage from './DictionaryPage';
 import FridgePage from './FridgePage';
 import HomePage from './HomePage';
@@ -77,11 +85,11 @@ function useGikkaDocumentMeta(isLoginScreen: boolean) {
 /** 서비스 워커 등록 (2026-07-24 확정) — 크롬 안드로이드가 "홈 화면에 추가"를 완전한
     standalone WebAPK로 만들어주는 요건 중 하나. 이게 없으면 약식 바로가기로 설치돼
     상태바 아래 얇은 구분선이 안 사라지는 문제가 실사용에서 확인됨. 캐싱 없는 순수
-    통과(pass-through) 워커라 recipe/sw.js scope(/recipe/)만 관여 — 다른 도메인 무관. */
+    통과(pass-through) 워커라 recipe/sw.js scope(/recipe/)만 관여 — 다른 도메인 무관.
+    등록 여부(네이티브 셸에서는 안 함) 판단은 data/platform.ts 가 소유한다. */
 function useGikkaServiceWorker() {
     useEffect(() => {
-        if (!('serviceWorker' in navigator)) return;
-        navigator.serviceWorker.register('/recipe/sw.js', { scope: '/recipe/' }).catch(() => undefined);
+        registerServiceWorker('/recipe/sw.js', '/recipe/');
     }, []);
 }
 
@@ -98,7 +106,8 @@ function useGikkaServiceWorker() {
 // 평생 추천이 안 뜨는 문제가 실사용에서 발견됨. isStandalone() 이 매번 실제 설치 상태를
 // 다시 확인해주므로 별도 영구 플래그 없이 이 시간 규칙 하나로 통일 — 이미 설치돼 있으면
 // isStandalone() 이 걸러주고, 지워졌으면 24시간 뒤 다시 자연스럽게 추천된다
-const INSTALL_SHOWN_AT_KEY = 'gikka-install-shown-at';
+// (2026-07-25 — 저장 열쇠·환경 판정은 data/platform.ts 로 옮김. 네이티브 셸에는 "설치 안내"
+// 라는 개념 자체가 없어 이 기능이 통째로 사라지므로, 그때 지울 것을 한곳에 모아 둔 것)
 // 24시간으로는 실사용 확인이 잘 안 돼 6시간으로 단축 (2026-07-25 확정) — 평소 사용자에게
 // 하루 최대 4번까지 보일 수 있다는 트레이드오프를 감수하고 테스트 편의를 우선함
 const INSTALL_REPROMPT_MS = 6 * 60 * 60 * 1000;
@@ -108,16 +117,9 @@ interface BeforeInstallPromptEvent extends Event {
     userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-const isStandalone = () =>
-    window.matchMedia('(display-mode: standalone)').matches
-    // iOS Safari 는 display-mode 미디어쿼리 대신 이 비표준 플래그로만 확인 가능
-    || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-const isIOS = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
-
 /** 마지막으로 띄운 지 재노출 간격이 지났으면(또는 띄운 적 없으면) 다시 보여줄 차례 */
 function isRepromptDue(): boolean {
-    const shownAt = Number(localStorage.getItem(INSTALL_SHOWN_AT_KEY) ?? 0);
-    return Date.now() - shownAt >= INSTALL_REPROMPT_MS;
+    return Date.now() - getInstallPromptShownAt() >= INSTALL_REPROMPT_MS;
 }
 
 function useInstallPrompt() {
@@ -125,13 +127,14 @@ function useInstallPrompt() {
     const [open, setOpen] = useState(false);
 
     useEffect(() => {
-        if (isStandalone() || !isRepromptDue()) return undefined;
+        // 네이티브 셸은 이미 "설치된 앱" 이라 설치 안내가 성립하지 않는다 (2026-07-25)
+        if (isNativeShell() || isStandaloneDisplay() || !isRepromptDue()) return undefined;
 
         const onBeforeInstall = (e: Event) => {
             e.preventDefault(); // 브라우저 기본 미니 인포바 대신 우리 시트로
             setDeferredEvent(e as BeforeInstallPromptEvent);
             setOpen(true);
-            localStorage.setItem(INSTALL_SHOWN_AT_KEY, String(Date.now()));
+            markInstallPromptShown();
         };
         const onInstalled = () => setOpen(false);
         window.addEventListener('beforeinstallprompt', onBeforeInstall);
@@ -140,7 +143,7 @@ function useInstallPrompt() {
         // iOS 는 beforeinstallprompt 가 아예 없어 안내문만 — 이벤트 대신 바로 연다
         if (isIOS()) {
             setOpen(true);
-            localStorage.setItem(INSTALL_SHOWN_AT_KEY, String(Date.now()));
+            markInstallPromptShown();
         }
 
         return () => {
@@ -187,6 +190,15 @@ export default function RecipeApp() {
     // 이 깜빡임이 안드로이드 상태바에 자국(선)을 남기는 것으로 실사용에서 확인됨
     // (2026-07-24) — checkSession 이 돌 때마다 토큰을 다시 읽도록 수정.
     const [probablyLoggedOut, setProbablyLoggedOut] = useState(() => !getToken());
+    // 토큰 저장소 적재 게이트 (2026-07-25 신설, 네이티브 전환 대비) — 지금의 localStorage
+    // 어댑터는 동기라 시작부터 준비 완료(true)이므로 웹 동작은 한 프레임도 안 바뀐다.
+    // 네이티브 보안 저장소(비동기)로 갈아끼우면 여기가 false 로 시작해, 토큰을 읽기도 전에
+    // 세션을 확인해 전원 로그아웃시키는 사고를 막는다. tokenStorage.ts 상단 주석 참고.
+    const [storageReady, setStorageReady] = useState(isTokenStorageReady);
+    useEffect(() => {
+        if (storageReady) return;
+        void initTokenStorage().then(() => setStorageReady(true));
+    }, [storageReady]);
     const showLoginVisuals = auth.phase === 'out' || (probablyLoggedOut && auth.phase !== 'in');
     useGikkaDocumentMeta(showLoginVisuals);
     useGikkaServiceWorker();
@@ -207,8 +219,9 @@ export default function RecipeApp() {
     }, []);
 
     useEffect(() => {
+        if (!storageReady) return; // 토큰을 읽기 전에 세션을 물으면 무조건 401 이 된다
         checkSession();
-    }, [checkSession]);
+    }, [checkSession, storageReady]);
 
     // 로그아웃 = 저장된 토큰 삭제 후 세션 재확인 (배포에서는 401 → 로그인 화면으로)
     const logout = useCallback(() => {
@@ -223,7 +236,7 @@ export default function RecipeApp() {
     }, []);
 
     const shellStatusClass = `rcp-shell-status${showLoginVisuals ? ' rcp-shell-status-login' : ''}`;
-    if (auth.phase === 'loading') {
+    if (!storageReady || auth.phase === 'loading') {
         return (
             <div className="rcp-app" id="rcp-app">
                 <div className={shellStatusClass} id="rcp-shell-loading">확인 중…</div>

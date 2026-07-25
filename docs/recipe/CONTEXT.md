@@ -177,9 +177,19 @@
   가능한 앱(.aab)으로 만드는 Google 공식 방식(Bubblewrap 도구). Capacitor 같은 완전 네이티브
   래핑과 달리 실제 도메인을 그대로 열어(Chrome Custom Tabs + Digital Asset Links) 오리진이
   동일해 쿠키/CORS 문제가 없음. 단, 위치 기반 알림(냉장고 근처 마트 geofencing, 확정 기능·
-  우선순위 낮음)은 TWA로 불가 — 착수 시점에 TWA 셸을 Capacitor로 교체 예정(웹 코드는 그대로
-  재사용, **안드로이드 패키지명(applicationId)을 최초 설정 그대로 유지해야** 스토어 리뷰·
-  테스터 실적·설치 이력이 안 끊김 — 셸 교체가 "업데이트"로 처리되는 핵심 조건).
+  우선순위 낮음)은 TWA로 불가 — 착수 시점에 TWA 셸을 Capacitor로 교체 예정
+  (**안드로이드 패키지명(applicationId)을 최초 설정 그대로 유지해야** 스토어 리뷰·테스터 실적·
+  설치 이력이 안 끊김 — 셸 교체가 "업데이트"로 처리되는 핵심 조건).
+  **교체 비용 정정 (2026-07-25 — 기존 "웹 코드는 그대로 재사용"은 과소평가였음)**: 화면·스타일·
+  도메인 로직은 실제로 그대로 재사용되지만, **구글 로그인은 재작업이 불가피하다.** 웹 GIS 는
+  임베디드 WebView 에서 구글 정책상 차단되고(`disallowed_useragent`) TWA 가 통과하는 이유는
+  속이 Chrome Custom Tabs, 즉 진짜 크롬이기 때문이다. Capacitor 는 WebView 라 어느 모드로 쓰든
+  네이티브 로그인 플러그인으로 갈아타야 한다. 그 재작업 범위는 `data/googleSignIn.ts` 한 파일로
+  묶어 뒀다(아래 "네이티브 전환 대비의 판단 기준" 절). 함께 딸려오는 것: 오리진이 실제 도메인이
+  아니라 `https://localhost`·`capacitor://localhost` 로 바뀌므로 백엔드
+  `gikka.auth.allowed-origins` 를 채워야 하고(비 http 스킴은 Spring 의 `allowedOrigins` 가
+  거부할 수 있어 `allowedOriginPatterns` 사용), 저장소가 크롬에서 WebView 로 바뀌어 전 사용자가
+  한 번 로그아웃된다.
 - 도메인: 전용 도메인 구입은 보류. 기존 `devcontext.net` 아래 서브도메인
   `gikka.devcontext.net` 사용(경로`/recipe`가 아니라 서브도메인 — home의 다른 기능과 완전히
   분리된 주소를 원함).
@@ -196,6 +206,34 @@
   기존 `gikka/`(mac-mini 로컬 추출기 호스트 서비스)는 `gikka-extractor/`로 이름을 옮겨 자리를
   비워둠(2026-07-24, Jenkinsfile·관련 문서 경로 갱신 완료). **`gikka/`는 현재 빈 폴더 —
   다음 세션 최우선 작업(`docs/HANDOFF.md` 참고).**
+- **네이티브 전환 대비의 판단 기준 (2026-07-25 확정)**: TWA 로 먼저 내고 나중에 Capacitor 로
+  셸을 바꾼다는 계획 때문에 "지금 미리 대비"할 것이 계속 생기는데, 다 만들면 어댑터가 1개뿐인
+  가상의 seam 이 된다. 기준은 하나다 — **지금 한다 = 나중에 하면 여러 파일로 번지는 것,
+  나중에 한다 = 나중에도 파일 하나만 갈아끼우면 되는 것.** 이 기준으로 2026-07-25 에 처리한 것:
+  (1) `tokenStorage` 의 `getToken()` 을 동기로 못박음 — 네이티브 보안 저장소는 읽기가 비동기라,
+  그대로 뒀으면 전환 시 `authHeader()`→`request()`→저장소 전부로 async 가 번졌다. 대신
+  `initTokenStorage()`(앱 시작 시 1회 적재) + 셸의 `storageReady` 게이트로 받는다.
+  (2) `data/platform.ts` 신설 — 서비스워커·설치 안내·개발모드 판정 등 네이티브에서 없어지거나
+  달라지는 환경 API 를 한곳에 모음. 전환 시 `isNativeShell()` 하나가 true 가 되면 관련 분기가
+  한꺼번에 꺼진다. (3) `data/googleSignIn.ts` 신설 — GIS 접촉면을 LoginPage 밖으로 격리.
+  공통 인터페이스는 일부러 안 만듦(GIS 는 구글이 DOM 에 버튼을 그리는 방식, 네이티브 플러그인은
+  `signIn(): Promise<idToken>` 형태라 모양이 달라 억지로 맞추면 승인된 버튼 디자인까지 바꿔야
+  함 — 어댑터가 실제로 둘이 될 때 정한다). (4) `platformIsolation.test.ts` 신설 — 화면이 환경
+  API 를 직접 부르면 테스트가 실패한다. 백엔드 격리가 싸게 끝난 이유가 문서가 아니라 ArchUnit
+  이었으므로 같은 장치를 프론트에 둔 것(문서 규칙만 있던 항목들이 실제로 4곳 새고 있었다).
+  미룬 것: Share Target 진입점, `'/recipe'` 경로 하드코딩(서브도메인 격리 작업에서 함께),
+  X다운로드 blob 저장, 안드로이드 하드웨어 뒤로가기.
+- **되돌릴 수 없는 스토어 결정 (2026-07-25 확정, 코드 아님 — Play Console 최초 설정 시 확정할 것)**:
+  - 안드로이드 패키지명(applicationId): 도메인 역순 관례로 `net.devcontext.gikka`.
+    한 번 스토어에 올리면 영구 고정이며, Capacitor 로 셸을 바꿔도 이 값이 같아야 "업데이트"로
+    처리되어 테스터 실적·설치 이력이 안 끊긴다. **셸 기술 이름(twa 등)을 넣지 말 것** —
+    셸을 바꾸는 게 이미 계획에 있는데 이름에 박아두면 영구히 안 맞는 이름이 된다.
+  - Play App Signing: **사용한다.** 안 쓰면 키스토어 분실 = 앱 업데이트 영구 불가인데, 쓰면
+    업로드 키를 잃어도 재발급이 된다. 대신 `assetlinks.json` 에 넣을 SHA-256 지문은 내 업로드
+    키가 아니라 **Play Console 이 발급한 앱 서명 키 지문**이다 — 이걸 헷갈리면 앱이 죽지 않고
+    "주소창 보이는 브라우저 모드"로 조용히 떨어져서 알아채기 어렵다.
+  - 셸 교체 시 전 사용자 1회 로그아웃: TWA 는 크롬 저장소, Capacitor 는 WebView 저장소를 써서
+    토큰이 안 넘어간다. 30일 JWT 라 재로그인 한 번이면 끝이지만 교체 배포 시 안내가 필요하다.
 - 남은 수동 작업(서버·콘솔, 코드 아님): mac-mini plist 경로 갱신(`gikka/`→`gikka-extractor/`,
   이번 rename 배포 직후 긴급), DNS `gikka.devcontext.net` 레코드, nginx 서브도메인 서버 블록,
   Google Cloud Console OAuth 승인된 오리진에 `https://gikka.devcontext.net` 추가, Play Console
