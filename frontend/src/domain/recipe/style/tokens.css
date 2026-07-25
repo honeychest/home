@@ -8,7 +8,9 @@
    색 변경 시 함께 바꿀 것 — CSS 변수를 못 읽는 정적 파일 2곳 (2026-07-13 전수 검사):
      public/recipe/manifest.webmanifest (theme_color·background_color, 스플래시 색)
      public/recipe/icon.svg (앱 아이콘)
-   theme-color 메타는 RecipeApp 이 --rcp-accent-strong 을 실행 시점에 읽음 — 자동 연동 */
+   theme-color 메타는 RecipeApp 이 화면별 배경색 변수(로그인 --rcp-login-theme-color,
+   앱 본체 --rcp-bg)를 실행 시점에 읽음 — 자동 연동 (2026-07-25 갱신, 이전엔 앱 본체가
+   --rcp-accent-strong 이었으나 노치만 튀는 문제로 배경색으로 교체) */
 
 .rcp-app {
   /* 전역(index.css)의 color-scheme: dark 를 recipe 실제 테마로 교정 —

@@ -36,7 +36,9 @@ const MONITOR_TABS: RcpTab[] = [
 
 /** 기까 전용 문서 메타(제목·manifest·테마색)를 recipe 안에서만 적용하고 나가면 원복.
     isLoginScreen 이 바뀌면(로그인↔앱 본체 전환) 테마색을 다시 계산한다 — 로그인 화면은
-    크래프트 배경과 맞춰야 해서 앱 본체(그린)와 다른 색을 쓴다 (2026-07-24 확정) */
+    크래프트 배경, 앱 본체는 아이스화이트 배경으로 서로 다른 배경색을 쓰므로 노치도 각자
+    배경에 맞춘다 (2026-07-25 확정 — 이전엔 앱 본체 노치가 그린 포인트색이라 배경과 따로
+    튀어 화면이 좁아 보인다는 지적으로, 포인트색 대신 배경색을 쓰도록 변경) */
 function useGikkaDocumentMeta(isLoginScreen: boolean) {
     useEffect(() => {
         const previousTitle = document.title;
@@ -51,7 +53,7 @@ function useGikkaDocumentMeta(isLoginScreen: boolean) {
         themeColor.name = 'theme-color';
         // 색의 원본은 tokens.css — 여기 하드코딩하면 테마 색 변경 시 이 줄만 옛 색으로 남는다 (2026-07-13)
         const appRoot = document.getElementById('rcp-app');
-        const colorVar = isLoginScreen ? '--rcp-login-theme-color' : '--rcp-accent-strong';
+        const colorVar = isLoginScreen ? '--rcp-login-theme-color' : '--rcp-bg';
         themeColor.content = appRoot
             ? getComputedStyle(appRoot).getPropertyValue(colorVar).trim()
             : '';
