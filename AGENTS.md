@@ -4,9 +4,12 @@ Apply Always : /chs/chs-rules.md
 - `docs/HANDOFF.md` 가 비어 있지 않으면 먼저 읽고 이어서 작업한다 (일회성 작업의 세션 간 인계).
 
 # 폴더별 코드 규칙 (모든 AI 에이전트)
-- `frontend/AGENTS.md`, `springboot/AGENTS.md` — 해당 폴더의 파일을 수정하기 전에 읽는다.
+- `frontend/AGENTS.md`, `springboot/AGENTS.md`, `gikka/AGENTS.md` — 해당 폴더의 파일을 수정하기 전에 읽는다.
   (공용 훅·순수 모듈 등 "가져다 쓸 것" 모범 패턴과 금지 사항이 정리돼 있음)
 - recipe(기까) 도메인 작업은 `docs/recipe/CONTEXT.md` 를 읽는 것으로 시작한다.
+  **백엔드 코드는 `gikka/` 에 있다** — 2026-07-26 에 `springboot/domain/recipe/` 에서
+  독립 Spring Boot 앱으로 이관됐다(패키지 `com.chs.gikka`). 두 프로젝트는 서로 코드를
+  주고받지 않는다.
 - `gikka-extractor/README.md` — recipe 의 로컬 모델 페일오버 호스트 서비스(mac-mini 상시 프로세스,
   yt-dlp·ffmpeg·whisper.cpp·LM Studio 호출) 관련 작업 전에 읽는다. Jenkins/도커 파이프라인
   대상이 아니라 배포·설정이 별도 절차임에 주의.

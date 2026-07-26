@@ -317,8 +317,17 @@
 - 도메인: `gikka.devcontext.net`(전용 도메인 구입 보류).
 - 프론트 격리(미구현): 호스트네임이 `gikka.devcontext.net` 이면 `RecipeApp` 만 루트에 마운트하고 다른
   라우트는 등록조차 안 한다. 완전 별도 빌드 파이프라인은 안 만든다(코드 분할이 이미 있음).
-- 백엔드 분리(미구현): 배포가 서로 영향을 주면 안 되므로 **완전히 별도 Spring Boot 서비스**로 분리
-  (별도 이미지·`chs-gikka-1,2`·별도 Jenkins stage). 새 프로젝트는 저장소 루트 `gikka/`.
+- 백엔드 분리(**코드 이관 완료 2026-07-26 / 배포 미구현**): 배포가 서로 영향을 주면 안 되므로
+  **완전히 별도 Spring Boot 서비스**로 분리. 새 프로젝트는 저장소 루트 `gikka/`, 패키지 `com.chs.gikka`.
+  - 이관된 것: recipe 메인 61 + 테스트 26 + Flyway 15개. 코드 수정은 패키지 선언·import 치환뿐이다 —
+    규율 7("공용 코드 허용 목록 없음")을 ArchUnit 이 계속 강제해 온 덕에 **폴더째 들어내도 컴파일이
+    깨지지 않았다.** 규율이 값을 치른 지점이 여기다.
+  - 이관하며 확인된 사실: recipe 에는 JPA·Redis·Lombok·Kafka·RabbitMQ·jasypt·bean validation
+    사용처가 하나도 없다(DB 접근은 `JdbcClient` 뿐). `gikka/build.gradle` 의존성이 9개인 근거.
+  - **인스턴스는 1개**(2026-07-26 결정 — `chs-gikka-1,2` 안에서 변경). 서버 메모리 여유 때문이며,
+    배포 시 수십 초 끊김을 받아들인다. 늘릴 때를 대비해 워커의 중복 실행 안전장치는 유지한다.
+  - 컷오버는 **병행 후 전환** — 새 앱을 먼저 띄우고 nginx 를 돌린 뒤 옛 코드를 지운다.
+    양쪽이 같은 gikka DB 를 봐도 안전한 근거는 `claimNext` 의 SKIP LOCKED. 단계별 절차는 `docs/HANDOFF.md`.
 - **되돌릴 수 없는 스토어 결정**: applicationId `net.devcontext.gikka`(셸 기술 이름을 넣지 말 것) /
   **Play App Signing 사용**(업로드 키 분실 시 재발급 가능) / `assetlinks.json` 의 SHA-256 은 업로드 키가
   아니라 **Play Console 이 발급한 앱 서명 키** 지문(틀리면 앱이 죽지 않고 주소창 보이는 브라우저 모드로 조용히 떨어진다).
