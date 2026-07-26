@@ -43,8 +43,12 @@
   **경로 확정**: `docker-volumes/nginx/gikka/{releases,dist,previous}`
   (lab 은 `docker-volumes/nginx/{releases,dist}` — 한 단계 아래로 넣어 섞이지 않게 한다)
 - gikka `Jenkinsfile` 에 프론트 stage 추가.
-- `chs/server/nginx/gikka.conf` 의 `location /` root 를 새 dist 로 교체 (**이 저장소 파일** — 서버
-  라우팅 전체를 lab 이 소유한다). 이걸 바꾸기 전까지 앱 도메인은 lab dist(cesium 포함)를 계속 준다.
+- `gikka.conf` 의 `location /` root 를 새 dist 로 교체. 이걸 바꾸기 전까지 앱 도메인은
+  lab dist(cesium 포함)를 계속 준다.
+  **주의: nginx 설정은 git 으로 배포되지 않는다** — 이 저장소의 `.gitignore` 가 `/chs/` 를
+  제외하므로 `chs/server/nginx/*.conf` 는 로컬·서버 각자의 파일이다. 변경은 **서버에서 직접**
+  하고, 이 체크아웃의 사본에도 같은 내용을 반영해 둔다(사본이 낡으면 다음 사람이 서버 상태를
+  다시 조사해야 한다). 명령은 gikka 저장소 `serverAgent.md` 7절.
 
 ### 2단계: 실기 확인
 `gikka.devcontext.net` 에서 로그인·보관함·냉장고·추천·등록 1건·사전·X다운로드.
@@ -52,7 +56,11 @@
 preflight 에서 `src/base.css` 로 갈아탔으므로 여백이 어긋날 수 있는 지점이 여기다.
 
 ### 3단계: 앱 패키징 (TWA)
-Bubblewrap 프로젝트 위치·키스토어 생성·백업 → AAB → Play Console 비공개 테스트 업로드 →
+절차·문답 값·릴리스 규칙은 **gikka 저장소의 `android/README.md`** 가 단일 원본.
+빌드 자리는 **개발 PC 한 곳**으로 확정(2026-07-26) — 버전코드가 커밋돼야 하고, mac-mini 의
+체크아웃은 Jenkins 가 `git pull` 하는 폴더라 거기서 커밋하면 배포가 갈린다. 서버에는 설치하지 않는다.
+
+키스토어 생성·백업(파일과 비밀번호를 서로 다른 곳에) → AAB → Play Console 비공개 테스트 업로드 →
 **Play 앱 서명 키 SHA-256** 확보 → `assetlinks.json` 을 그 지문으로 채워
 `https://gikka.devcontext.net/.well-known/assetlinks.json` 로 서빙 → 앱에서 주소창이 안 보이는지 확인.
 (지문은 업로드 키가 아니다. 틀리면 앱이 죽지 않고 브라우저 모드로 조용히 떨어진다.)
@@ -65,8 +73,15 @@ Bubblewrap 프로젝트 위치·키스토어 생성·백업 → AAB → Play Con
 - `springboot/src/**/domain/recipe/**`(+test, 합 88개) 삭제, `application*.properties` 의 `gikka.*` 삭제,
   `RecipeIsolationArchTest` 삭제, recipe 전용 의존성 정리
   (`flyway-database-postgresql` 은 챗봇 pgvector 도 쓰는지 확인 후 판단)
-- `chs/server/nginx/devcontext.conf` — `upstream chs_gikka`(21행)는 `gikka.conf` 가 쓰므로 **남기고**,
-  `location ^~ /api/recipe/llm/` 블록만 삭제
+- `devcontext.conf`(서버에서 직접 — 위 1단계의 주의 참고) — `upstream chs_gikka` 는 `gikka.conf` 가
+  쓰므로 **남기고**, `location ^~ /api/recipe/llm/` 블록만 삭제
+- **권고: 옛 주소 리다이렉트를 남긴다.** `devcontext.net/recipe` 로 공유해둔 링크·북마크가 죽는다.
+  ```nginx
+  location ^~ /recipe { return 301 https://gikka.devcontext.net$request_uri; }
+  ```
+  단 **이미 설치된 iOS 홈화면 앱은 이걸로 살아나지 않는다** — PWA 는 오리진 단위로 저장소가
+  갈려서 옛 오리진의 앱은 재설치 + 재로그인이 필요하다. 대상이 본인과 소수 테스터뿐이라
+  한 번 안내하면 끝난다(안내를 빠뜨리면 "앱이 안 열린다" 로 돌아온다).
 - 문서: `docs/recipe/CONTEXT.md` 18절(프론트 격리·lazy 서술 → 별도 빌드로 갱신) · 19절(격리 규율의
   "프론트는 src/domain/recipe" 서술), `frontend/AGENTS.md` 의 recipe 서술,
   `springboot/AGENTS.md` 의 recipe 패턴 표, `frontend/.../backendPatterns.js` 의 `[gikka 저장소]` 표기
