@@ -31,9 +31,9 @@ final class XxxRules {
 // 컨트롤러에서는:
 String status = XxxRules.initialStatus(meta.duration(), props.getMaxMinutes());`,
         examples: [
-            'springboot/.../domain/recipe/registration/RegistrationRules.java',
-            'springboot/.../domain/recipe/fridge/FridgeRepository.java (rankFrequent)',
-            'springboot/.../domain/recipe/registration/GeminiRecipeExtractor.java (parseEnvelope)',
+            'gikka/.../com/chs/gikka/registration/RegistrationRules.java',
+            'gikka/.../com/chs/gikka/fridge/FridgeRepository.java (rankFrequent)',
+            'gikka/.../com/chs/gikka/registration/GeminiRecipeExtractor.java (parseEnvelope)',
         ],
     },
     {
@@ -62,8 +62,8 @@ class XxxClient {
 MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 server.expect(requestTo(...)).andRespond(withSuccess(json, APPLICATION_JSON));`,
         examples: [
-            'springboot/.../domain/recipe/registration/GeminiRecipeExtractor.java',
-            'springboot/.../domain/recipe/registration/YoutubeMetadataClient.java',
+            'gikka/.../com/chs/gikka/registration/GeminiRecipeExtractor.java',
+            'gikka/.../com/chs/gikka/registration/YoutubeMetadataClient.java',
         ],
     },
     {
@@ -123,11 +123,11 @@ class DictionaryJudge {
     }
 }`,
         examples: [
-            'springboot/.../domain/recipe/registration/RecipeExtractor.java',
-            'springboot/.../domain/recipe/registration/HybridRecipeExtractor.java',
-            'springboot/.../domain/recipe/registration/IngredientJudge.java',
-            'springboot/.../domain/recipe/registration/DictionaryJudge.java',
-            'springboot/.../domain/recipe/registration/VideoMetadataClient.java',
+            'gikka/.../com/chs/gikka/registration/RecipeExtractor.java',
+            'gikka/.../com/chs/gikka/registration/HybridRecipeExtractor.java',
+            'gikka/.../com/chs/gikka/registration/IngredientJudge.java',
+            'gikka/.../com/chs/gikka/registration/DictionaryJudge.java',
+            'gikka/.../com/chs/gikka/registration/VideoMetadataClient.java',
         ],
     },
     {
@@ -156,8 +156,8 @@ try {
     throw e;
 }`,
         examples: [
-            'springboot/.../domain/recipe/registration/GeminiRecipeExtractor.java (페일오버)',
-            'springboot/.../domain/recipe/registration/GikkaTelegramNotifier.java',
+            'gikka/.../com/chs/gikka/registration/GeminiRecipeExtractor.java (페일오버)',
+            'gikka/.../com/chs/gikka/registration/GikkaTelegramNotifier.java',
         ],
     },
     {
@@ -186,8 +186,8 @@ public void processNext() {
     catch (Exception e) { repository.markFailed(item); }
 }`,
         examples: [
-            'springboot/.../domain/recipe/registration/RegistrationWorker.java',
-            'springboot/.../domain/recipe/registration/RegistrationController.java (등록부)',
+            'gikka/.../com/chs/gikka/registration/RegistrationWorker.java',
+            'gikka/.../com/chs/gikka/registration/RegistrationController.java (등록부)',
         ],
     },
     {
@@ -213,7 +213,7 @@ int added = gikkaTxTemplate.execute(status -> {
     return count;   // 정상 반환 = 커밋, 예외 = 롤백
 });`,
         examples: [
-            'springboot/.../domain/recipe/config/GikkaDataSourceConfig.java (gikkaTxTemplate)',
+            'gikka/.../com/chs/gikka/config/GikkaDataSourceConfig.java (gikkaTxTemplate)',
         ],
     },
 ];

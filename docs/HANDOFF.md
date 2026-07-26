@@ -27,21 +27,37 @@ local 프로파일 실기동으로 Flyway 검증(schema v15 일치)·엔드포�
    (Flyway 기본 validateOnMigrate=true). 꼭 필요하면 **같은 파일을 양쪽 폴더에 동시에** 넣는다.
    기존 V1~V15 는 양쪽 내용이 같아 안전하다(2026-07-26 실기동으로 schema v15 일치 확인).
 
-### 다음 — 2단계: 배포 파이프라인 (`gikka/` 를 실제로 띄우기)
-1. `gikka/Dockerfile` — `springboot/Dockerfile` 을 본뜨되 `gikka.jar`, 힙은 인스턴스 1개 기준.
-2. `springboot/docker-compose.yml` 에 `gikka1` 서비스 추가 (**인스턴스 1개로 확정** —
-   메모리 여유 때문. 나중에 2개로 늘릴 여지를 위해 이름은 `gikka1`). 포트는 app1/app2(8080·8081),
-   nexus 와 겹치지 않게. `env_file` 은 기존 `.env` 재사용 — 환경변수 이름이 분리 전과 같다.
-3. `Jenkinsfile` — `Detect Changes` 에 `env.DEPLOY_GIKKA_APP = changed.contains('gikka/')`
-   추가(주의: 기존 `DEPLOY_GIKKA` 는 `gikka-extractor/` 용이라 이름이 겹친다) +
-   Build/Deploy stage 신설(`chs-gikka` 이미지). `nexus` stage 를 본뜨면 된다.
-   인스턴스 1개라 블루그린이 안 되므로 배포 시 수십 초 끊긴다 — 받아들이기로 한 트레이드오프.
-4. 배포 후 `gikka1` 컨테이너가 기동·헬스체크 통과하는지만 확인한다. 이 시점에는 nginx 가
-   아직 app 으로 보내므로 **트래픽은 안 간다** (양쪽이 같은 DB 를 보지만 워커 중복은
-   `claimNext` 의 SKIP LOCKED 가 막는다).
+### 완료 — 2단계: 배포 파이프라인 (2026-07-26)
+- `gikka/Dockerfile` (`gikka.jar`) · `gikka/deploy-gikka.sh` (stop→up→헬스체크 50회×3초)
+- `springboot/docker-compose.yml` 에 `gikka1` — 이미지 `chs-gikka`, 컨테이너 `chs-gikka-1`,
+  포트 `127.0.0.1:8082:8080`, 힙 `-Xmx512m` / 컨테이너 1024M.
+  `<<: *common` 도 `env_file` 도 안 쓴다 — 저 앵커는 MySQL·Rabbit·Kafka·Redis 를 달고 오는데
+  gikka 는 그중 무엇도 쓰지 않고, `.env` 통째 주입은 안 쓰는 시크릿까지 컨테이너에 넣는다.
+  필요한 7개만 `environment` 에 명시하고 값은 compose 가 같은 폴더 `.env` 에서 보간한다.
+- `Jenkinsfile` — `DEPLOY_GIKKA_APP`(`gikka/`) + Build/Deploy Gikka App stage,
+  파라미터 `GIKKA_APP_ONLY`. 기존 `DEPLOY_GIKKA` 는 mac-mini launchd 추출기용이라 이름을 갈랐다.
 
-### 3단계: nginx 전환 (사용자가 직접 — 서버 작업)
-`/api/recipe/**` 프록시 대상을 app(8080·8081) → gikka1 포트로 변경. 문제 시 원복이 롤백이다.
+> **이번 푸시에서 gikka stage 는 안 돈다.** Jenkins 는 push 웹훅을 받으면 *그 시점 브랜치의*
+> Jenkinsfile 로 파이프라인을 정의한 뒤 Sync Local(git pull)을 돈다 — stage 정의가 처음 들어오는
+> 커밋은 옛 정의로 실행된다(2026-07-16 `Deploy Gikka Local` 신설 때 실측). 그래서 **첫 배포는
+> `GIKKA_APP_ONLY=true` 로 수동 재기동**해야 한다. 이후 `gikka/` 변경부터는 자동으로 잡힌다.
+> 참고: 이번 커밋은 `springboot/` 도 건드리므로(compose·AGENTS.md) 백엔드 재배포는 돈다 —
+> springboot 코드는 무수정이라 같은 코드가 롤링으로 다시 뜰 뿐이다.
+
+### 다음 — 3단계: 배포 확인 → nginx 전환
+1. **먼저 gikka1 이 떠 있는지 확인**(위 수동 재기동 후). 이 시점엔 nginx 가 아직 app 으로 보내므로
+   트래픽은 안 간다 — 양쪽이 같은 DB 를 봐도 워커 중복은 `claimNext` 의 SKIP LOCKED 가 막는다.
+2. 확인되면 `chs/server/nginx/devcontext.conf` 를 고친다. **아직 안 고쳐 뒀다** — 미리 커밋해 두면
+   서버가 pull·reload 하는 순간 gikka1 이 없는 상태에서 recipe 가 502 가 되기 때문이다.
+   고칠 곳 (upstream 은 단일이라 `$sticky_backend`·`SRV_ID` 쿠키가 필요 없다):
+   - `upstream chs_gikka { server 127.0.0.1:8082 max_fails=2 fail_timeout=3s; }` 추가
+   - 기존 `location ^~ /api/recipe/llm/` 의 `proxy_pass` 를 `http://chs_gikka` 로
+     (read_timeout 120s·`proxy_next_upstream off` 는 그대로 — 사고 계기가 여전히 유효하다)
+   - 새 `location ^~ /api/recipe/` 블록 추가, `proxy_pass http://chs_gikka`.
+     **`location /api` 보다 먼저 매칭돼야 한다**(`^~` 라 접두 매칭 우선). read_timeout 은 지금과
+     같은 15s 로 시작한다 — X다운로드 resolve 가 그 아래에서 이미 돌고 있다.
+3. `nginx -t` → `nginx -s reload` → 기까 앱에서 보관함·냉장고·추천·등록 1건 확인.
+   **롤백 = conf 원복 후 reload.** 앱은 건드리지 않는다(옛 코드가 app1/app2 에 아직 살아 있다).
 
 ### 4단계: `springboot/` 에서 recipe 제거
 3단계가 실사용으로 확인된 뒤에만. `springboot/src/**/domain/recipe/**`(+test) 삭제,

@@ -1336,3 +1336,44 @@ Gemini 추출 품질을 먼저 검증하는 순서가 낫다 (localStorage 최�
 - 남은 후보(다음에 이어서 할 수 있는 것): 보관함 화면 판정 순수 모듈화(`RecipesPage.tsx` 611줄) ·
   운영자 대기열 생존 판정 순수 모듈화(`MonitorPage.tsx`) · 설치 안내 한 덩어리로(`RecipeApp.tsx`) ·
   컨트롤러 둘의 `readJson` 중복.
+
+---
+
+## 2026-07-26 — 앱 분리 1·2단계 (gikka/ 신설 + 배포 파이프라인)
+결정문은 `CONTEXT.md` 18절. 여기엔 경위와 기각안만 남긴다.
+
+- **컷오버를 "병행 후 전환"으로 한 이유**: 한 커밋에 이관+삭제를 담는 안(B)과 코드만 먼저 옮기는
+  안(C)을 함께 검토했다. B 는 배포와 nginx 변경이 한 순간에 맞아떨어져야 하고 하나만 어긋나면
+  recipe 가 전면 다운이다. A 는 각 단계가 되돌릴 수 있고, 특히 **3단계 롤백이 nginx conf 원복
+  하나**로 끝난다 — 옛 코드가 app1/app2 에 아직 살아 있기 때문이다. 대가는 병행 기간의 코드 중복
+  8,330줄이고, 그건 "수정은 gikka/ 에만"이라는 규칙으로 관리한다.
+- **패키지를 `com.chs.gikka` 로 바꾼 이유**: `com.chs.springboot.domain.recipe` 를 그대로 두면
+  git diff 가 순수 이동으로 남아 리뷰가 쉽다는 이점이 있었다. 기각 — 새 앱이 영원히 옛 앱의
+  패키지 이름을 이고 가는 비용이 그보다 크다. 지금이 이름을 정할 유일하게 싼 시점이었다.
+- **의존성을 복사하지 않고 다시 센 이유**: springboot/build.gradle 을 그대로 가져오는 게 빠르지만,
+  이관하면서 실제 import 를 세어 보니 recipe 에는 **JPA·Redis·Lombok·Kafka·RabbitMQ·jasypt·
+  bean validation 사용처가 하나도 없었다**(DB 접근은 JdbcClient 뿐). 9개로 끝났고, 이 가벼움이
+  인스턴스 1개로 돌린다는 결정의 근거가 됐다.
+- **인스턴스 1개(`gikka1`)**: HANDOFF 원안은 `gikka1`/`gikka2` 블루그린이었다. 서버 메모리 여유를
+  감안해 1개로 시작한다 — 대가는 배포 시 수십 초 끊김. 워커의 중복 실행 안전장치(SKIP LOCKED,
+  DB 원자적 UPDATE)는 그대로 두어 나중에 2개로 늘릴 때 조용히 깨지지 않게 한다.
+- **`GikkaSecurityConfig` 무수정으로 동작**: springboot 는 `SecurityAutoConfiguration` 을
+  exclude 하고 전역 SecurityConfig 가 `@EnableWebSecurity` 를 소유했다. gikka 는 exclude 하지
+  않는다 — `SecurityFilterChain` 빈이 있으면 부트 기본 체인이 `@ConditionalOnMissingBean` 으로
+  빠지기 때문이다. 결과적으로 `/api/recipe/**` 는 gikka 체인이, `/actuator/health`(배포 헬스체크)는
+  어떤 체인에도 안 걸려 통과한다.
+- **ArchUnit 규칙 4개 중 2개만 남긴 이유**: 바깥 담 둘(recipe ↛ 다른 도메인, 그 역방향)은 다른
+  도메인이 새 프로젝트에 아예 없어 물리적으로 보장된다. 파일 이름도 `RecipeIsolationArchTest` →
+  `GikkaArchitectureTest` 로 바꿨다 — 없는 담을 가리키는 이름이 되기 때문. 안쪽 방향 규칙 둘
+  (`dictionary ↛ registration`, `external ↛ 다른 패키지`)은 그대로 살아 있다.
+- **분리가 싸게 끝난 진짜 이유**: 규율 7("공용 코드 허용 목록 없음 — 필요하면 복사해 소유")을
+  ArchUnit 이 처음부터 강제해 왔다. 그래서 **폴더째 들어냈는데 컴파일이 안 깨졌다.** 코드 수정은
+  패키지 선언·import 치환뿐이었다. 규율이 값을 치른 지점이 여기다.
+- **병행 기간의 Flyway 함정(커밋 전 점검에서 발견)**: 두 앱이 같은 `gikka` DB 에 각자의 Flyway 로
+  붙는다. 새 마이그레이션을 `gikka/` 에만 넣으면 DB 이력에는 적용되는데 `springboot/` 의
+  locations 에는 없어 **다음 백엔드 배포 때 springboot 앱이 기동 실패**한다
+  (`applied migration not resolved locally`, validateOnMigrate 기본 true). 4단계 전까지
+  마이그레이션 추가 금지 — 꼭 필요하면 같은 파일을 양쪽 폴더에 동시에 넣는다.
+- **Jenkins 환경변수 이름**: 기존 `DEPLOY_GIKKA` 는 mac-mini launchd 추출기용이라 앱 stage 는
+  `DEPLOY_GIKKA_APP` 으로 갈랐다. 경로 판정은 `changed.contains('gikka/')` —
+  `gikka-extractor/` 와는 슬래시 위치가 달라 겹치지 않는다.
