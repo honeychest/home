@@ -7,10 +7,15 @@
 // 이 클래스는 채널 하나일 뿐이다 (2026-07-25 점검) — 판정 대상 선정·라우팅·제안 검증은
 // DictionaryJudge, 제안 어휘와 응답 파싱은 IngredientJudge 시임이 소유한다. 예전엔 이 셋이 전부
 // 여기와 두 호출부에 흩어져 있었고, 로컬 어댑터가 이 클래스의 parse 를 들여다보고 있었다.
-package com.chs.springboot.domain.recipe.registration;
+//
+// 2026-07-26 registration → dictionary 이관 (공유 seam 은 external 중립 지대로).
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.util.List;
 import java.util.Map;
+
+import com.chs.springboot.domain.recipe.external.GeminiJsonClient;
+import com.chs.springboot.domain.recipe.external.GikkaLlmProperties;
 
 import org.springframework.stereotype.Component;
 
@@ -49,9 +54,9 @@ public class IngredientAuditor implements IngredientJudge {
             """;
 
     private final GeminiJsonClient gemini;
-    private final GikkaMediaProperties properties;
+    private final GikkaLlmProperties properties;
 
-    public IngredientAuditor(GeminiJsonClient gemini, GikkaMediaProperties properties) {
+    public IngredientAuditor(GeminiJsonClient gemini, GikkaLlmProperties properties) {
         this.gemini = gemini;
         this.properties = properties;
     }
@@ -60,7 +65,7 @@ public class IngredientAuditor implements IngredientJudge {
         빈 목록 — 키 없는 환경(로컬 개발 기본)에서 [AI 점검]이 500 으로 죽지 않게. */
     @Override
     public List<Proposal> audit(List<String> pendingNames, List<String> allRepresentatives) {
-        if (pendingNames.isEmpty() || properties.getGeminiApiKey().isBlank()) {
+        if (pendingNames.isEmpty() || properties.getApiKey().isBlank()) {
             return List.of();
         }
         List<Map<String, Object>> parts = List.of(
@@ -76,7 +81,7 @@ public class IngredientAuditor implements IngredientJudge {
                 "responseMimeType", "application/json",
                 "responseSchema", responseSchema(pendingNames),
                 "thinkingConfig", Map.of("thinkingBudget", 0));
-        return IngredientJudge.parse(gemini.generate(properties.getGeminiModel(), parts, generationConfig));
+        return IngredientJudge.parse(gemini.generate(properties.getModel(), parts, generationConfig));
     }
 
     /** name 필드를 pendingNames 로 enum 강제 — 판정 대상 밖 이름을 스키마 차원에서 막는다. */

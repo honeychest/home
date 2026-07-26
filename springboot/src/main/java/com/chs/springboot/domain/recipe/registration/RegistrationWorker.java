@@ -11,8 +11,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
+import com.chs.springboot.domain.recipe.dictionary.IngredientAutoJudge;
 import com.chs.springboot.domain.recipe.dictionary.IngredientChangeLogRepository;
 import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
+import com.chs.springboot.domain.recipe.external.GikkaLlmProperties;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,19 +52,22 @@ public class RegistrationWorker {
     private final VideoRepository videos;
     private final GeminiRateLimiter rateLimiter;
     private final RecipeExtractor extractor;
-    private final GikkaMediaProperties properties;
+    private final GikkaLlmProperties llm;
+    private final GikkaReportProperties reportPolicy;
     private final IngredientDictionaryRepository dictionary;
     private final IngredientReportRepository reports;
 
     public RegistrationWorker(VideoRepository videos, GeminiRateLimiter rateLimiter,
-                              RecipeExtractor extractor, GikkaMediaProperties properties,
+                              RecipeExtractor extractor, GikkaLlmProperties llm,
+                              GikkaReportProperties reportPolicy,
                               IngredientDictionaryRepository dictionary,
                               IngredientChangeLogRepository changeLog, IngredientAutoJudge autoJudge,
                               IngredientReportRepository reports) {
         this.videos = videos;
         this.rateLimiter = rateLimiter;
         this.extractor = extractor;
-        this.properties = properties;
+        this.llm = llm;
+        this.reportPolicy = reportPolicy;
         this.dictionary = dictionary;
         this.reports = reports;
         this.ingredientPipeline = List.of(
@@ -88,13 +94,13 @@ public class RegistrationWorker {
 
     @Scheduled(fixedDelay = 5000, initialDelay = 15000)
     public void processOne() {
-        if (properties.getGeminiApiKey().isBlank()) {
+        if (llm.getApiKey().isBlank()) {
             return; // 키 없는 환경(로컬 기본)에서는 워커가 쉰다
         }
         rateLimiter.touchHeartbeat(); // 일할 게 없어도 갱신 — 모니터링 화면의 워커 생존 신호 (2026-07-13 확정)
         videos.requeueStale();
         promoteReportCase(); // DB 작업뿐이라 Gemini 슬롯과 무관 — 매 틱 승격 시도 (없으면 no-op)
-        if (!rateLimiter.tryAcquireSlot(properties.getGeminiMinIntervalSeconds())) {
+        if (!rateLimiter.tryAcquireSlot(llm.getMinIntervalSeconds())) {
             return; // 다른 인스턴스가 방금 호출함 — 이번 틱은 쉼
         }
         videos.claimNext().ifPresent(this::analyze);
@@ -103,7 +109,7 @@ public class RegistrationWorker {
     /** 임계값을 넘은 재료 신고 건을 재분석 대기열로 승격 (2026-07-18 — CONTEXT.md "재료 신고" 절).
         old 재료 기록이 초기화(queueReportReanalysis 의 CLEAR)보다 먼저여야 한다 — 순서 고정. */
     private void promoteReportCase() {
-        reports.claimEligibleCase(properties.getReportAnalyzeThreshold(), properties.getReportMaxRuns())
+        reports.claimEligibleCase(reportPolicy.getAnalyzeThreshold(), reportPolicy.getMaxRuns())
                 .ifPresent(c -> {
                     reports.recordRunStart(c.videoId(), c.ingredientName());
                     videos.queueReportReanalysis(c.videoId(), c.ingredientName());
@@ -141,7 +147,7 @@ public class RegistrationWorker {
                 reports.completeCase(item.videoId(), item.reportIngredient());
             }
             log.info("[gikka] 분석 완료 video={} category={}", item.videoId(), result.category());
-        } catch (RecipeExtractor.TransientFailureException e) {
+        } catch (TransientFailureException e) {
             videos.releaseAfterRateLimit(item.videoId(), e.getMessage());
             rateLimiter.backoff(TRANSIENT_FAILURE_BACKOFF_SECONDS);
             log.info("[gikka] Gemini 일시적 실패(한도·과부하·타임아웃 등) — {}초 휴식 후 자동 재개: {}",

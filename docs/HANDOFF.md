@@ -16,7 +16,9 @@
 1. 저장소 루트에 새 Gradle 프로젝트 `gikka/` (멀티모듈 아님, `springboot/` 는 건드리지 않음).
 2. `springboot/.../domain/recipe/**`(+test) 전체 이관. 설정도 함께 — `GikkaSecurityConfig`,
    `GikkaAuthProperties`, `GikkaDataSourceConfig`, `CurrentUserConfig`, `gikka.*` 프로퍼티 전부.
-3. 기존 `springboot/` 에서 recipe 코드·`RecipeIsolationArchTest` 제거(같은 프로세스가 아니게 되어 무의미).
+3. 기존 `springboot/` 에서 recipe 코드 제거. `RecipeIsolationArchTest` 는 **통째로 지우지 말 것** —
+   바깥 담(규칙 1·2)만 무의미해지고, **안쪽 방향 규칙 둘은 새 프로젝트에서 그대로 살려야 한다**:
+   `dictionary ↛ registration` · `external ↛ recipe 의 다른 패키지`(2026-07-26 신설, CONTEXT 19절 12번).
 4. `gikka/` Dockerfile + `docker-compose.yml` 에 `gikka1`/`gikka2` 서비스(기존 `app1`/`app2` 본떠 포트만 변경).
 5. `Jenkinsfile` 에 Build/Deploy stage 신설 — `nexus` stage 를 그대로 본뜨면 된다(`chs-gikka` 이미지).
 6. (병행 가능) 프론트 격리: 호스트네임이 `gikka.devcontext.net` 이면 `MainRouter.jsx` 가 `RecipeApp` 만

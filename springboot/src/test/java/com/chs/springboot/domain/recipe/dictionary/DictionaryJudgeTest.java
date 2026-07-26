@@ -6,11 +6,12 @@
 // 자동 적용은 사람 확인이 없는 경로라, "무엇을 절대 안 건드리는가"(오너 판정·멤버·지어낸 이름)가
 // 이 파일의 핵심이다. 실제 쓰기의 PENDING 가드는 SQL(updateStatusIfPending·autoMergeVariant)이
 // 한 번 더 지킨다 — 이중 방어.
-package com.chs.springboot.domain.recipe.registration;
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.util.List;
 
-import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
+import com.chs.springboot.domain.recipe.external.LocalUnavailableException;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -118,7 +119,7 @@ class DictionaryJudgeTest {
         when(dictionary.all()).thenReturn(List.of(entry("굴소스",
                 IngredientDictionaryRepository.STATUS_PENDING)));
         when(gemini.audit(anyList(), anyList()))
-                .thenThrow(new RecipeExtractor.TransientFailureException("503 overloaded"));
+                .thenThrow(new TransientFailureException("503 overloaded"));
         when(local.audit(List.of("굴소스"), List.of("굴소스")))
                 .thenReturn(List.of(tier("굴소스", IngredientJudge.TIER_SEASONING)));
 
@@ -133,7 +134,7 @@ class DictionaryJudgeTest {
         when(dictionary.all()).thenReturn(List.of(entry("굴소스",
                 IngredientDictionaryRepository.STATUS_PENDING)));
         when(local.audit(anyList(), anyList()))
-                .thenThrow(new LocalRecipeExtractor.LocalUnavailableException("service down", null));
+                .thenThrow(new LocalUnavailableException("service down", null));
         when(gemini.audit(List.of("굴소스"), List.of("굴소스")))
                 .thenReturn(List.of(tier("굴소스", IngredientJudge.TIER_BASIC)));
 
@@ -146,16 +147,16 @@ class DictionaryJudgeTest {
     @DisplayName("두 채널이 다 막히면 1차 채널의 예외를 그대로 던진다 — 호출부의 에러 계약"
             + "(컨트롤러의 503 매핑)이 그 타입에 걸려 있다")
     void bothChannelsDownRethrowsPrimaryFailure() {
-        RecipeExtractor.TransientFailureException primary =
-                new RecipeExtractor.TransientFailureException("429 quota");
+        TransientFailureException primary =
+                new TransientFailureException("429 quota");
         when(dictionary.all()).thenReturn(List.of(entry("굴소스",
                 IngredientDictionaryRepository.STATUS_PENDING)));
         when(gemini.audit(anyList(), anyList())).thenThrow(primary);
         when(local.audit(anyList(), anyList()))
-                .thenThrow(new LocalRecipeExtractor.LocalUnavailableException("service down", null));
+                .thenThrow(new LocalUnavailableException("service down", null));
 
-        RecipeExtractor.TransientFailureException thrown =
-                assertThrows(RecipeExtractor.TransientFailureException.class,
+        TransientFailureException thrown =
+                assertThrows(TransientFailureException.class,
                         () -> judge.propose(DictionaryJudge.Order.GEMINI_FIRST));
 
         assertSame(primary, thrown);

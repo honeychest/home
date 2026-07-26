@@ -16,9 +16,9 @@ public class GikkaTelegramNotifier {
     private static final Logger log = LoggerFactory.getLogger(GikkaTelegramNotifier.class);
 
     private final RestClient rest;
-    private final GikkaMediaProperties properties;
+    private final GikkaNotifyProperties properties;
 
-    public GikkaTelegramNotifier(RestClient.Builder builder, GikkaMediaProperties properties) {
+    public GikkaTelegramNotifier(RestClient.Builder builder, GikkaNotifyProperties properties) {
         this.rest = builder.baseUrl("https://api.telegram.org").build();
         this.properties = properties;
     }

@@ -20,13 +20,13 @@
 //   - 어떤 실패도 영상 분석을 실패시키지 않는다 — 판정은 부가 작업이라 조용히 건너뛴다
 //     (남은 PENDING 은 다음 분석 또는 수동 [AI 점검]이 처리). 오너 경로가 503 을 내는 것과
 //     대비되는 지점이며, 이 차이 때문에 실패 정책은 DictionaryJudge 로 안 올렸다.
-package com.chs.springboot.domain.recipe.registration;
+//
+// 2026-07-26 registration → dictionary 이관. 워커(registration)가 이 클래스를 부르는 방향은
+// 그대로 정상이다 — 사전은 registration 의 산출물이므로 registration → dictionary 한 방향.
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.util.List;
 import java.util.Optional;
-
-import com.chs.springboot.domain.recipe.dictionary.IngredientChangeLogRepository;
-import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -22,16 +22,16 @@ public class YoutubeMetadataClient implements VideoMetadataClient {
     private static final int PLAYLIST_MAX = 500;       // 폭주 방지 상한
 
     private final RestClient rest;
-    private final GikkaMediaProperties properties;
+    private final GikkaYoutubeProperties properties;
 
-    public YoutubeMetadataClient(RestClient.Builder builder, GikkaMediaProperties properties) {
+    public YoutubeMetadataClient(RestClient.Builder builder, GikkaYoutubeProperties properties) {
         this.rest = builder.baseUrl("https://www.googleapis.com/youtube/v3").build();
         this.properties = properties;
     }
 
     @Override
     public List<VideoMetadata> fetch(List<String> videoIds) {
-        if (properties.getYoutubeApiKey().isBlank() || videoIds.isEmpty()) {
+        if (properties.getApiKey().isBlank() || videoIds.isEmpty()) {
             return List.of();
         }
         List<VideoMetadata> result = new ArrayList<>();
@@ -42,7 +42,7 @@ public class YoutubeMetadataClient implements VideoMetadataClient {
                         .uri(uri -> uri.path("/videos")
                                 .queryParam("part", "snippet,contentDetails")
                                 .queryParam("id", String.join(",", page))
-                                .queryParam("key", properties.getYoutubeApiKey())
+                                .queryParam("key", properties.getApiKey())
                                 .build())
                         .retrieve()
                         .body(JsonNode.class);
@@ -75,7 +75,7 @@ public class YoutubeMetadataClient implements VideoMetadataClient {
                                 .queryParam("part", "contentDetails")
                                 .queryParam("playlistId", playlistId)
                                 .queryParam("maxResults", PAGE_SIZE)
-                                .queryParam("key", properties.getYoutubeApiKey());
+                                .queryParam("key", properties.getApiKey());
                         if (token != null) {
                             b.queryParam("pageToken", token);
                         }

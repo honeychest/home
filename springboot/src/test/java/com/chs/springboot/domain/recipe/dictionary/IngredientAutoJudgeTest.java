@@ -2,13 +2,12 @@
 // 판정 규칙(대상 선정·라우팅·제안 검증)은 DictionaryJudgeTest 가 잠근다 (2026-07-25 분리).
 // 여기 남은 관심사는 둘: 제안을 어떤 사전 쓰기로 옮기는가, 그리고 실패해도 영상 분석을 안 깨뜨리는가.
 // 변경 로그는 "실제로 바뀐 것만" 남아야 한다 — 사후 감사가 안 바뀐 것으로 오염되면 오너가 못 믿는다.
-package com.chs.springboot.domain.recipe.registration;
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.util.List;
 import java.util.Optional;
 
-import com.chs.springboot.domain.recipe.dictionary.IngredientChangeLogRepository;
-import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -105,7 +104,7 @@ class IngredientAutoJudgeTest {
             + "(남은 PENDING 은 다음 분석이나 수동 [AI 점검]이 처리)")
     void neverBreaksTheAnalysis() {
         when(judge.propose(DictionaryJudge.Order.LOCAL_FIRST))
-                .thenThrow(new RecipeExtractor.TransientFailureException("429 quota"));
+                .thenThrow(new TransientFailureException("429 quota"));
 
         assertDoesNotThrow(autoJudge::judgePending);
 

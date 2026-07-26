@@ -11,6 +11,9 @@
 // RegistrationWorker 는 RecipeExtractor 인터페이스만 알면 되므로 무수정 (분리 규율 4).
 package com.chs.springboot.domain.recipe.registration;
 
+import com.chs.springboot.domain.recipe.external.LocalUnavailableException;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Primary;
@@ -54,14 +57,14 @@ public class HybridRecipeExtractor implements RecipeExtractor {
             }
             log.info("[gikka] 로컬 분류 {} — 세계 지식 신뢰도 문제로 Gemini 재분석", localResult.category());
             localFallback = localResult;
-        } catch (LocalRecipeExtractor.LocalUnavailableException e) {
+        } catch (LocalUnavailableException e) {
             log.warn("[gikka] 로컬 추출 불가 — Gemini 로 전체 폴백: {}", e.getMessage());
         }
         // TIP/ETC 로 버려진 로컬 결과라도 transcriptChars(음성 인식 신호)는 최종 채택 결과에 이어붙인다 —
         // "이 영상에 음성 정보가 얼마나 있었나"는 어느 쪽이 채택되든 변하지 않는 사실이므로
         try {
             return gemini.extract(videoUrl, title, description).withTranscriptChars(transcriptChars);
-        } catch (RecipeExtractor.TransientFailureException e) {
+        } catch (TransientFailureException e) {
             if (localFallback != null) {
                 log.warn("[gikka] Gemini 검증 실패({}) — 로컬 {} 결과로 대신 완료: {}",
                         e.getMessage(), localFallback.category(), e.getMessage());

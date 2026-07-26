@@ -1056,7 +1056,8 @@
   할루시네이션 방지).
 - 노이즈 제거(사용자 확정 — "신고는 한 사람이 한 번만"): **1인 1신고를 DB UNIQUE 가 강제**
   (`ingredient_report`, (영상·재료·사용자) 고유). 임계값 = 서로 다른 신고자 수
-  (`gikka.media.report-analyze-threshold`, 지금 1 — 공개 시 2→10 처럼 설정만 올림).
+  (`gikka.report.analyze-threshold` — 2026-07-26 설정 분할 전 이름은 `gikka.media.report-analyze-threshold`.
+  지금 1 — 공개 시 2→10 처럼 설정만 올림).
   재분석 뒤에도 이상하면 같은 사용자가 자기 신고를 재접수(DONE→OPEN)할 수 있되(여전히 1표),
   (영상·재료)당 재분석 실행 상한(`report-max-runs`, 지금 2)으로 무한 루프를 차단 — 상한 뒤의
   신고는 기록만 남는다("재분석으로 못 고치는 부류"라는 관찰 데이터).
@@ -1306,3 +1307,32 @@ Gemini 추출 품질을 먼저 검증하는 순서가 낫다 (localStorage 최�
 - 추출 품질 미검증: 5차에서 검증. 부족하면 프롬프트·해상도 조정 → 그래도 안 되면 유료 모델 소액(영상당 10~15원) 재논의.
 - 유튜브가 유사 기능 출시 가능성: 개인 도구 가치는 불변. 상용화 판단 시점에 재평가.
 - 무료 등급 한도: 일 약 250~1,500요청, 분당 약 10요청, 유튜브 URL 일 8시간 분량.
+
+### 중립 지대 `external` 신설 + 사전 판정 이관 (2026-07-26 확정·구현 완료 — improve-codebase-architecture high)
+- 계기: 아키텍처 점검에서 나온 후보 6개 중 1번. **코드가 스스로 막힘을 적어두고 있었다** —
+  `RecipeIsolationArchTest` 주석: *"그 넷을 중립 지대로 옮기기 전에는 판정도 옮길 수 없다."*
+- 증상 셋:
+  · `LocalIngredientAuditor`(재료 사전의 로컬 어댑터)가 로컬 불가를 알리려고
+    `LocalRecipeExtractor.LocalUnavailableException` 을 던졌다 — **사전이 영상 추출 어댑터를 붙들고
+    있었다**. 이름 하나 때문에.
+  · `xdownload` 가 호스트 주소 하나 때문에 `registration.GikkaMediaProperties` 를 import.
+  · `registration` 패키지 26개 파일 · 관심사 5종. 컨트롤러는 2026-07-25에 청중별로 갈랐는데
+    패키지는 안 갈렸다.
+- **왜 중립 지대가 하나인가(`external`)**: `llm` + `hostservice` 둘로 가르는 안도 검토했다. 개념은
+  더 정확하다 — 같은 mac-mini 서비스를 X 영상 다운로드(yt-dlp만 씀)도 쓰므로 "호스트 서비스"는
+  LLM 이 아니다. 기각 이유: 지금 규모(파일 7개)에서 둘로 가르면 **얕은 패키지 두 개**가 되고,
+  그건 이 점검이 없애려는 바로 그 모양이다. "밖으로 나가는 접촉면" 하나로 묶고, 로컬 모델이
+  커지면 그때 가른다 — 그때 갈라도 이사 비용은 같다.
+- **실패 타입 둘을 합치지 않은 이유**(합치고 싶어지는 함정): 이름은 형제 같지만 처리가 반대다.
+  `TransientFailureException` = "기다리면 풀린다" → 워커가 60초 백오프 후 재개, **시도 횟수 안 깎음**.
+  `LocalUnavailableException` = "이 채널은 지금 없다" → 즉시 다른 채널로. 합치면 로컬이 꺼져 있을
+  때도 60초씩 쉬게 된다.
+- 설정 분할(`gikka.media.*` → `llm`·`host-service`·`youtube`·`report`·`notify`): 값 10개·관심사 5종
+  짜리 한 덩어리라 값 하나가 필요한 쪽도 전체를 주입받았다. 특히 `report-*`(신고 임계값)는 "미디어"가
+  아니었다. **환경변수 이름은 안 건드렸다** — `.properties` 안의 자리표시자일 뿐이라 배포 무관.
+- 안전망: `RecipeRoutingTest` 18개 경로가 이사 중에도 그대로 잠겨 있어 **프론트·nginx 무수정**이
+  성립함을 빌드가 증명한다(`/api/recipe/llm/**` 포함). ArchUnit 에 "중립 지대는 남을 모른다" 규칙 추가.
+- 결과: recipe 백엔드 테스트 189개 통과(신설 ArchUnit 규칙 포함). 동작 변경 0 — 순수 구조 이동.
+- 남은 후보(다음에 이어서 할 수 있는 것): 보관함 화면 판정 순수 모듈화(`RecipesPage.tsx` 611줄) ·
+  운영자 대기열 생존 판정 순수 모듈화(`MonitorPage.tsx`) · 설치 안내 한 덩어리로(`RecipeApp.tsx`) ·
+  컨트롤러 둘의 `readJson` 중복.

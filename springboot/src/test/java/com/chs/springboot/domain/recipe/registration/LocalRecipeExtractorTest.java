@@ -1,6 +1,9 @@
 // [AGENT] 로컬 추출기 판정 고정 — 실 호스트 서비스 없이 MockRestServiceServer 로 검증 (PLAYBOOK 관례 4)
 package com.chs.springboot.domain.recipe.registration;
 
+import com.chs.springboot.domain.recipe.external.GikkaHostServiceProperties;
+import com.chs.springboot.domain.recipe.external.LocalUnavailableException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,8 +29,8 @@ class LocalRecipeExtractorTest {
 
     @BeforeEach
     void setUp() {
-        GikkaMediaProperties properties = new GikkaMediaProperties();
-        properties.setLocalExtractorBaseUrl("http://gikka-local.test");
+        GikkaHostServiceProperties properties = new GikkaHostServiceProperties();
+        properties.setBaseUrl("http://gikka-local.test");
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         extractor = new LocalRecipeExtractor(builder, properties);
@@ -74,18 +77,18 @@ class LocalRecipeExtractorTest {
         server.expect(method(org.springframework.http.HttpMethod.POST))
                 .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
 
-        assertThrows(LocalRecipeExtractor.LocalUnavailableException.class,
+        assertThrows(LocalUnavailableException.class,
                 () -> extractor.extract("https://www.youtube.com/watch?v=abc", null, null));
     }
 
     @Test
     @DisplayName("비활성화 설정(local-extractor-enabled=false) 이면 호출 없이 즉시 unavailable")
     void disabledSkipsCall() {
-        GikkaMediaProperties properties = new GikkaMediaProperties();
-        properties.setLocalExtractorEnabled(false);
+        GikkaHostServiceProperties properties = new GikkaHostServiceProperties();
+        properties.setEnabled(false);
         LocalRecipeExtractor disabled = new LocalRecipeExtractor(RestClient.builder(), properties);
 
-        assertThrows(LocalRecipeExtractor.LocalUnavailableException.class,
+        assertThrows(LocalUnavailableException.class,
                 () -> disabled.extract("https://www.youtube.com/watch?v=abc", null, null));
     }
 }

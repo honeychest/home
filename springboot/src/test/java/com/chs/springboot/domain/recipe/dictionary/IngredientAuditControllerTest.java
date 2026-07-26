@@ -6,12 +6,13 @@
 //   · 503: 두 채널이 다 막힌 일시적 실패는 500 이 아니라 503 — 감사기는 워커와 달리 재시도
 //     정책이 없어 그대로 올라오면 500 이 나가고, 프론트가 "잠시 후 다시"를 못 띄운다
 //     (2026-07-17. 이때 화면에 뜬 오류의 진짜 원인은 nginx 15초 타임아웃이었지만 이 구멍도 실재했다).
-package com.chs.springboot.domain.recipe.registration;
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.util.List;
 
 import com.chs.springboot.domain.recipe.auth.GikkaAuthProperties;
 import com.chs.springboot.domain.recipe.auth.GikkaOwnerGuard;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
 import com.chs.springboot.domain.recipe.user.GikkaUserRepository;
 
 import org.junit.jupiter.api.DisplayName;
@@ -69,7 +70,7 @@ class IngredientAuditControllerTest {
     @DisplayName("두 채널이 다 막힌 일시적 실패는 503 — 500 으로 새지 않는다")
     void transientFailureBecomes503() {
         when(judge.propose(DictionaryJudge.Order.GEMINI_FIRST))
-                .thenThrow(new RecipeExtractor.TransientFailureException("429 quota"));
+                .thenThrow(new TransientFailureException("429 quota"));
 
         ResponseStatusException e = assertThrows(ResponseStatusException.class,
                 () -> controller().auditDictionary(OWNER_ID));

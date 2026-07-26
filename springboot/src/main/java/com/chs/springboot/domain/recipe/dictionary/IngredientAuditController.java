@@ -12,6 +12,8 @@
 // 경로를 옮기면 nginx 설정도 함께 옮길 것 (mac-mini `/opt/homebrew/etc/nginx/servers/
 // devcontext.conf` + 저장소 백업 사본 `chs/server/nginx/devcontext.conf`). 안 그러면 조용히
 // `location /api` 의 15초로 돌아가 같은 버그가 재발한다 — 테스트가 못 잡는 종류다.
+// (2026-07-26 패키지만 registration → dictionary 로 옮겼고 <b>경로는 그대로다</b> —
+//  RecipeRoutingTest 가 그 사실을 잠근다. nginx 는 무관.)
 //
 // 이건 임시 처방이다. 근본 해결은 대기열·워커(pattern-queue-worker)로 비동기화해서 이
 // 경로 자체를 없애는 것 — 영상 분석은 이미 그렇게 하고 있고 AI 점검만 그 규율 밖에 있다.
@@ -19,12 +21,13 @@
 //
 // 판정 자체(대상 선정·채널 라우팅·제안 검증)는 DictionaryJudge 가 한다 (2026-07-25 점검).
 // 여기 남은 것은 이 경로만의 계약 둘 — 오너 게이트(403)와 일시적 실패의 503 매핑이다.
-package com.chs.springboot.domain.recipe.registration;
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.util.List;
 
 import com.chs.springboot.domain.recipe.auth.GikkaOwnerGuard;
 import com.chs.springboot.domain.recipe.auth.GikkaUserId;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -63,7 +66,7 @@ public class IngredientAuditController {
         owner.require(userId);
         try {
             return judge.propose(DictionaryJudge.Order.GEMINI_FIRST);
-        } catch (RecipeExtractor.TransientFailureException e) {
+        } catch (TransientFailureException e) {
             // 두 채널이 다 막힌 경우에만 여기 온다 (DictionaryJudge 가 1차 예외를 그대로 던진다).
             // 감사기는 워커와 달리 재시도 정책이 없어, 안 막으면 500 으로 새어 프론트가 "잠시 후
             // 다시"를 못 띄운다 (2026-07-17).

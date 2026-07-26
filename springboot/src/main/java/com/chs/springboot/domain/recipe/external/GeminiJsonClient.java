@@ -4,7 +4,10 @@
 // IngredientAuditor 는 일시적 실패 매핑이 빠져 조용히 다르게 동작했다(두 어댑터 = 실체 seam).
 // 호출자는 프롬프트(parts)·generationConfig(스키마·해상도 등)·알맹이 파싱만 소유한다.
 // 외부 HTTP 는 RestClient.Builder 주입 (PLAYBOOK 관례 4, pattern-rest-seam).
-package com.chs.springboot.domain.recipe.registration;
+//
+// 2026-07-26 registration → external 이관: 호출자가 둘(영상 추출 registration / 재료 판정
+// dictionary)이라 어느 한쪽 패키지에 두면 다른 쪽이 남의 집을 import 하게 된다.
+package com.chs.springboot.domain.recipe.external;
 
 import java.util.List;
 import java.util.Map;
@@ -28,16 +31,16 @@ public class GeminiJsonClient {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final RestClient rest;
-    private final GikkaMediaProperties properties;
+    private final GikkaLlmProperties properties;
 
-    public GeminiJsonClient(RestClient.Builder builder, GikkaMediaProperties properties) {
+    public GeminiJsonClient(RestClient.Builder builder, GikkaLlmProperties properties) {
         this.rest = builder.baseUrl("https://generativelanguage.googleapis.com").build();
         this.properties = properties;
     }
 
     /**
      * generateContent 호출 → 구조화 JSON 봉투(candidates[0]…parts[0].text)를 벗겨 알맹이 JsonNode 반환.
-     * 일시적 실패(429·503·타임아웃)는 {@link RecipeExtractor.TransientFailureException} 으로 매핑한다.
+     * 일시적 실패(429·503·타임아웃)는 {@link TransientFailureException} 으로 매핑한다.
      * 그 외 4xx(404 등)는 그대로 전파 — 호출자 정책(예: 추출기의 모델 폐쇄 페일오버)이 처리한다.
      * generationConfig 는 호출자가 소유(responseSchema·mediaResolution 등 호출마다 다름).
      */
@@ -50,24 +53,24 @@ public class GeminiJsonClient {
         try {
             response = rest.post()
                     .uri("/v1beta/models/{model}:generateContent?key={key}",
-                            model, properties.getGeminiApiKey())
+                            model, properties.getApiKey())
                     .body(body)
                     .retrieve()
                     .body(JsonNode.class);
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
                 log.warn("Gemini 일시적 실패: {} - {}", "429 한도초과", e.getMessage());
-                throw new RecipeExtractor.TransientFailureException(e.getMessage());
+                throw new TransientFailureException(e.getMessage());
             }
             throw e; // 404(모델 폐쇄) 등은 호출자 정책으로
         } catch (HttpServerErrorException e) {
             // 503 "high demand" 등 Gemini 쪽 일시적 과부하 (2026-07-13 실측)
             log.warn("Gemini 일시적 실패: {} - {}", "503 과부하", e.getMessage());
-            throw new RecipeExtractor.TransientFailureException(e.getMessage());
+            throw new TransientFailureException(e.getMessage());
         } catch (ResourceAccessException e) {
             // 응답 지연 타임아웃 — 실측상 일시적 현상
             log.warn("Gemini 일시적 실패: {} - {}", "타임아웃", e.getMessage());
-            throw new RecipeExtractor.TransientFailureException(e.getMessage());
+            throw new TransientFailureException(e.getMessage());
         }
         return unwrap(response);
     }

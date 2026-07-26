@@ -9,6 +9,8 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.Map;
 
+import com.chs.springboot.domain.recipe.external.GikkaHostServiceProperties;
+import com.chs.springboot.domain.recipe.external.LocalUnavailableException;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -24,10 +26,10 @@ public class LocalRecipeExtractor implements RecipeExtractor {
 
     private final RestClient rest;
     private final RestClient healthRest;
-    private final GikkaMediaProperties properties;
+    private final GikkaHostServiceProperties properties;
 
-    public LocalRecipeExtractor(RestClient.Builder builder, GikkaMediaProperties properties) {
-        String baseUrl = properties.getLocalExtractorBaseUrl();
+    public LocalRecipeExtractor(RestClient.Builder builder, GikkaHostServiceProperties properties) {
+        String baseUrl = properties.getBaseUrl();
         this.rest = builder.baseUrl(baseUrl).build();
         this.healthRest = builder.clone().baseUrl(baseUrl)
                 .requestFactory(healthRequestFactory()).build();
@@ -46,12 +48,9 @@ public class LocalRecipeExtractor implements RecipeExtractor {
         return factory;
     }
 
-    /** 서비스 미기동 등 로컬 파이프라인 자체가 안 되는 상황 — Hybrid 가 Gemini 로 넘어가야 함 */
-    public static class LocalUnavailableException extends RuntimeException {
-        public LocalUnavailableException(String message, Throwable cause) {
-            super(message, cause);
-        }
-    }
+    // 서비스 미기동 등 로컬 파이프라인 자체가 안 되는 상황은 external.LocalUnavailableException —
+    // 2026-07-26 중립 지대로 옮겼다. 재료 사전의 로컬 어댑터(LocalIngredientAuditor)도 같은 뜻을
+    // 던져야 하는데, 여기 중첩 클래스로 두면 사전이 "영상 추출 어댑터"를 import 하게 된다.
 
     /**
      * 호스트 서비스가 스스로 관측한 사실 (2026-07-16 신설, 오너 모니터링용).
@@ -60,7 +59,7 @@ public class LocalRecipeExtractor implements RecipeExtractor {
      * "지금 로컬을 못 쓴다"는 사실이다.
      */
     public JsonNode health() {
-        if (!properties.isLocalExtractorEnabled()) {
+        if (!properties.isEnabled()) {
             return null;
         }
         try {
@@ -72,7 +71,7 @@ public class LocalRecipeExtractor implements RecipeExtractor {
 
     @Override
     public ExtractionResult extract(String videoUrl, String title, String description) {
-        if (!properties.isLocalExtractorEnabled()) {
+        if (!properties.isEnabled()) {
             throw new LocalUnavailableException("로컬 추출기 비활성화 설정", null);
         }
         // title·description 은 없을 수 있어 있는 것만 싣는다 (Map.of 는 null 값을 못 담는다)

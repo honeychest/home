@@ -148,7 +148,8 @@
   **2)가 3)보다 먼저여야 한다** — 순서가 바뀌면 "간장 2큰술"이 CONFIRMED 가 돼 병합 가드에 걸려 영영 홀로 남는다.
   어떤 실패도 영상 분석을 실패시키지 않는다(조용히 건너뜀). 반영 내역은 `ingredient_change_log`(V14, append 전용)
   → 사전 화면 [자동 반영] 시트. 오너의 역할은 사전 승인이 아니라 **사후 감사**다. 알림은 두지 않는다.
-- **사전 판정 규칙의 단일 원본 = `DictionaryJudge`**(2026-07-25). 셋을 소유한다: 판정 대상 선정
+- **사전 판정 규칙의 단일 원본 = `DictionaryJudge`**(2026-07-25, 2026-07-26부터 `dictionary` 패키지 —
+  19절 12번). 셋을 소유한다: 판정 대상 선정
   (PENDING 대표만 / 전체 대표는 mergeInto 참고용) · 채널 라우팅 · 제안 검증(지어낸 이름·없는 대표·
   체인·이미 판정된 것 거르기). 채널은 `IngredientJudge` 시임 뒤 어댑터 2개(Gemini `IngredientAuditor` /
   로컬 `LocalIngredientAuditor`)이고, 제안 어휘·응답 파싱도 시임이 소유한다.
@@ -341,16 +342,34 @@
 9. **recipe 안쪽 방향 규칙(2026-07-25)**: `dictionary` 는 `registration` 을 import 하지 않는다
    (ArchUnit 이 강제). 사전은 registration 의 산출물이자 recommend 의 입력이라 어느 한쪽 소유가
    아니어서 별도 패키지로 뒀는데, 양방향이 되면 패키지 순환이라 분리한 이득이 사라진다.
-   이 규칙 때문에 **LLM 판정 6개(`IngredientJudge`·`DictionaryJudge`·어댑터 등)는 registration 에
-   남겼다** — `GeminiJsonClient`·`GikkaMediaProperties`·`TransientFailureException`·
-   `LocalUnavailableException` 을 쓰기 때문. 그 넷을 중립 지대로 옮기기 전에는 판정도 못 옮긴다.
 10. **컨트롤러는 청중 단위로 나눈다(2026-07-25)**: 보관함 `RegistrationController` / 운영자 대기열
-   `MonitorController` / 사전 `dictionary.DictionaryController` / 동기 LLM `IngredientAuditController`.
+   `MonitorController` / 사전 `dictionary.DictionaryController` / 동기 LLM
+   `dictionary.IngredientAuditController`.
    경로는 넷 다 **분할 전 그대로**이고 `RecipeRoutingTest` 가 18개 경로를 잠근다(프론트 무수정의 근거).
    사전 경로 `/registrations/dictionary/**` 는 유산 — `gikka/` 분리 때 `/api/recipe/dictionary/**` 로 옮긴다.
 11. **오너 판정은 `GikkaOwnerGuard` 하나** — `require`(403으로 막기) / `isOwner`(상한 면제 같은 분기).
    예외: `IngredientReportController.requireOwnerWhileGated` 는 같은 판정을 쓰되 이름을 따로 둔다 —
    그건 오너 전용 기능이 아니라 **일반 기능의 공개 전 게이트**라, 공개 시 지울 호출을 구분해야 한다(10절).
+12. **중립 지대 `external`(2026-07-26)**: "밖으로 나가는 접촉면"만 산다 — Gemini 호출 봉투
+   (`GeminiJsonClient`) · 실패 타입 둘(`TransientFailureException` = 기다리면 풀림,
+   `LocalUnavailableException` = 이 채널은 지금 없음) · `GikkaLlmProperties` ·
+   `GikkaHostServiceProperties`. **여기서 recipe 의 다른 패키지를 import 하면 안 된다**(ArchUnit 강제) —
+   중립 지대가 남을 알면 그걸 쓰는 세 패키지가 여기를 통해 서로 엮여 그냥 공용 잡동사니가 된다.
+   - 이걸 만들면서 **LLM 판정 6개(`IngredientJudge`·`DictionaryJudge`·어댑터 2개·`IngredientAutoJudge`·
+     `IngredientAuditController`)가 `dictionary` 로 이사했다**. 규율 9 때문에 registration 에 묶여
+     있었는데, 묶고 있던 것이 위의 넷이었다. 특히 실패 타입 둘이 **추출 클래스의 중첩 클래스**여서
+     (구 `RecipeExtractor.TransientFailureException`·`LocalRecipeExtractor.LocalUnavailableException`)
+     사전 판정이 "일시적 실패"를 말하려면 영상 추출을 import 해야 했다.
+   - **실패 타입 둘을 합치지 말 것**: 이름은 비슷하지만 처리가 다르다 — Transient 는 워커가 60초
+     백오프 후 재개(시도 횟수 안 깎음), LocalUnavailable 은 즉시 다른 채널로. 합치면 로컬이 꺼져
+     있을 때도 60초씩 쉰다.
+   - `/api/recipe/llm/**` 경로는 이사와 무관하게 **그대로**다(`RecipeRoutingTest` 가 잠금) — nginx 무관.
+13. **설정은 관심사별로(2026-07-26)**: 구 `gikka.media.*` 한 덩어리(값 10개·관심사 5종)를 쪼갰다 —
+   `gikka.llm.*` · `gikka.host-service.*`(external) / `gikka.youtube.*`(키·길이컷) · `gikka.report.*` ·
+   `gikka.notify.*`(registration). 값 하나가 필요한 쪽이 열 개짜리 덩어리를 주입받던 문제
+   (X다운로드가 호스트 주소 하나 때문에 registration 을 import 했다). **환경변수 이름은 안 바뀌었다** —
+   `.properties` 안의 자리표시자일 뿐이라 서버 env·`.env`·Jenkinsfile 은 무관.
+   - `host-service` 를 `llm` 과 가른 이유: 같은 mac-mini 서비스를 X 영상 다운로드(yt-dlp만 씀)도 쓴다.
 
 ## 20. 구현 순서
 1차 디자인·골격·냉장고(완료) → 2차 백엔드 기반(완료) → 3차 Gemini 추출·등록·Share Target(완료) →

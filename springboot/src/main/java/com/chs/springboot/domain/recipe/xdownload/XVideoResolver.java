@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.chs.springboot.domain.recipe.registration.GikkaMediaProperties;
+import com.chs.springboot.domain.recipe.external.GikkaHostServiceProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import org.springframework.stereotype.Component;
@@ -20,8 +20,8 @@ public class XVideoResolver {
 
     private final RestClient rest;
 
-    public XVideoResolver(RestClient.Builder builder, GikkaMediaProperties properties) {
-        this.rest = builder.baseUrl(properties.getLocalExtractorBaseUrl()).build();
+    public XVideoResolver(RestClient.Builder builder, GikkaHostServiceProperties properties) {
+        this.rest = builder.baseUrl(properties.getBaseUrl()).build();
     }
 
     /** 호스트 서비스 호출 실패(네트워크·비공개 게시물·지원 안 되는 형식 등) — 전부 하나로 묶는다 */

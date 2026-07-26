@@ -9,8 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.chs.springboot.domain.recipe.dictionary.IngredientAutoJudge;
 import com.chs.springboot.domain.recipe.dictionary.IngredientChangeLogRepository;
 import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
+import com.chs.springboot.domain.recipe.external.GikkaLlmProperties;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,14 +39,15 @@ class RegistrationWorkerTest {
     private final VideoRepository videos = mock(VideoRepository.class);
     private final GeminiRateLimiter rateLimiter = mock(GeminiRateLimiter.class);
     private final RecipeExtractor extractor = mock(RecipeExtractor.class);
-    private final GikkaMediaProperties properties = new GikkaMediaProperties();
+    private final GikkaLlmProperties llm = new GikkaLlmProperties();
+    private final GikkaReportProperties reportPolicy = new GikkaReportProperties();
     private final IngredientDictionaryRepository dictionary = mock(IngredientDictionaryRepository.class);
     private final IngredientChangeLogRepository changeLog = mock(IngredientChangeLogRepository.class);
     private final IngredientAutoJudge autoJudge = mock(IngredientAutoJudge.class);
     private final IngredientReportRepository reports = mock(IngredientReportRepository.class);
 
     private RegistrationWorker worker() {
-        return new RegistrationWorker(videos, rateLimiter, extractor, properties, dictionary,
+        return new RegistrationWorker(videos, rateLimiter, extractor, llm, reportPolicy, dictionary,
                 changeLog, autoJudge, reports);
     }
 
@@ -60,14 +64,14 @@ class RegistrationWorkerTest {
 
     /** 슬롯 획득까지 통과시켜 실제 분석 경로를 태우는 준비 */
     private void givenSlotAcquired() {
-        properties.setGeminiApiKey("test-key");
+        llm.setApiKey("test-key");
         when(rateLimiter.tryAcquireSlot(anyInt())).thenReturn(true);
     }
 
     @Test
     @DisplayName("API 키가 없으면(로컬 기본) 워커는 아무것도 하지 않는다 — 생존 신호조차 안 남김")
     void blankApiKeyDoesNothing() {
-        properties.setGeminiApiKey("");
+        llm.setApiKey("");
 
         worker().processOne();
 
@@ -77,7 +81,7 @@ class RegistrationWorkerTest {
     @Test
     @DisplayName("슬롯을 못 잡으면(다른 인스턴스가 방금 호출) 대기열을 건드리지 않는다 — 생존 신호는 남김")
     void withoutSlotDoesNotClaim() {
-        properties.setGeminiApiKey("test-key");
+        llm.setApiKey("test-key");
         when(rateLimiter.tryAcquireSlot(anyInt())).thenReturn(false);
 
         worker().processOne();
@@ -173,7 +177,7 @@ class RegistrationWorkerTest {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row(null)));
         when(extractor.extract(anyString(), any(), any(), any()))
-                .thenThrow(new RecipeExtractor.TransientFailureException("429 한도"));
+                .thenThrow(new TransientFailureException("429 한도"));
 
         worker().processOne();
 
@@ -266,7 +270,7 @@ class RegistrationWorkerTest {
         givenSlotAcquired();
         when(videos.claimNext()).thenReturn(Optional.of(row(null, "쭈유(참기름)")));
         when(extractor.extract(anyString(), any(), any(), any()))
-                .thenThrow(new RecipeExtractor.TransientFailureException("503 과부하"));
+                .thenThrow(new TransientFailureException("503 과부하"));
 
         worker().processOne();
 

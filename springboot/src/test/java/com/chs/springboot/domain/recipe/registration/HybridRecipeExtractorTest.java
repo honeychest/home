@@ -1,6 +1,11 @@
 // [AGENT] 로컬 우선 라우팅 고정 (2026-07-14 grill-me 확정) — 실 네트워크 없이 두 MockRestServiceServer 로 검증
 package com.chs.springboot.domain.recipe.registration;
 
+import com.chs.springboot.domain.recipe.external.GeminiJsonClient;
+import com.chs.springboot.domain.recipe.external.GikkaHostServiceProperties;
+import com.chs.springboot.domain.recipe.external.GikkaLlmProperties;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,19 +27,21 @@ class HybridRecipeExtractorTest {
 
     @BeforeEach
     void setUp() {
-        GikkaMediaProperties properties = new GikkaMediaProperties();
-        properties.setLocalExtractorBaseUrl("http://gikka-local.test");
-        properties.setGeminiApiKey("test-key");
+        GikkaHostServiceProperties hostService = new GikkaHostServiceProperties();
+        hostService.setBaseUrl("http://gikka-local.test");
+        GikkaLlmProperties llm = new GikkaLlmProperties();
+        llm.setApiKey("test-key");
 
         RestClient.Builder localBuilder = RestClient.builder();
         localServer = MockRestServiceServer.bindTo(localBuilder).build();
-        LocalRecipeExtractor local = new LocalRecipeExtractor(localBuilder, properties);
+        LocalRecipeExtractor local = new LocalRecipeExtractor(localBuilder, hostService);
 
         RestClient.Builder geminiBuilder = RestClient.builder();
         geminiServer = MockRestServiceServer.bindTo(geminiBuilder).build();
-        GikkaTelegramNotifier notifier = new GikkaTelegramNotifier(RestClient.builder(), properties);
+        GikkaTelegramNotifier notifier =
+                new GikkaTelegramNotifier(RestClient.builder(), new GikkaNotifyProperties());
         GeminiRecipeExtractor gemini = new GeminiRecipeExtractor(
-                new GeminiJsonClient(geminiBuilder, properties), properties, notifier);
+                new GeminiJsonClient(geminiBuilder, llm), llm, notifier);
 
         hybrid = new HybridRecipeExtractor(local, gemini);
     }
@@ -129,7 +136,7 @@ class HybridRecipeExtractorTest {
                 .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
 
         org.junit.jupiter.api.Assertions.assertThrows(
-                RecipeExtractor.TransientFailureException.class,
+                TransientFailureException.class,
                 () -> hybrid.extract("https://www.youtube.com/watch?v=abc", null, null));
     }
 }

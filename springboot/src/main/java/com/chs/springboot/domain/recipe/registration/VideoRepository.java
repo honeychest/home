@@ -22,12 +22,12 @@ public class VideoRepository {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
-    private final GikkaMediaProperties properties;
+    private final GikkaYoutubeProperties properties;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public VideoRepository(@Qualifier("gikkaJdbcClient") JdbcClient jdbc,
                            @Qualifier("gikkaTxTemplate") TransactionTemplate tx,
-                           GikkaMediaProperties properties) {
+                           GikkaYoutubeProperties properties) {
         this.jdbc = jdbc;
         this.tx = tx;
         this.properties = properties;

@@ -1,7 +1,7 @@
 // [AGENT] Gemini 호출 seam 고정 (2026-07-17 점검에서 추출) — 봉투 언랩은 순수(HTTP 없음),
 // 일시적 실패 매핑은 MockRestServiceServer. 이 규칙이 seam 에 있으므로 추출기·감사기 두 호출자가
 // 동일하게 받는다(이전엔 감사기에 매핑이 빠져 있었음 — 그 어긋남을 seam 통합으로 해소).
-package com.chs.springboot.domain.recipe.registration;
+package com.chs.springboot.domain.recipe.external;
 
 import java.util.List;
 import java.util.Map;
@@ -50,14 +50,14 @@ class GeminiJsonClientTest {
     @Test
     @DisplayName("429 는 TransientFailureException — seam 이 매핑하므로 추출기·감사기 두 호출자가 공유")
     void rateLimitBecomesTransient() {
-        GikkaMediaProperties properties = new GikkaMediaProperties();
-        properties.setGeminiApiKey("test-key");
+        GikkaLlmProperties properties = new GikkaLlmProperties();
+        properties.setApiKey("test-key");
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(method(HttpMethod.POST)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
         GeminiJsonClient client = new GeminiJsonClient(builder, properties);
 
-        assertThrows(RecipeExtractor.TransientFailureException.class,
+        assertThrows(TransientFailureException.class,
                 () -> client.generate("model", List.of(Map.of("text", "x")), Map.of()));
     }
 }

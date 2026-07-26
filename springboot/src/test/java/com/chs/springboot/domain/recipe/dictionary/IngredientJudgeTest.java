@@ -1,7 +1,7 @@
 // [AGENT] 재료 사전 판정 시임의 응답 파싱 고정 — 순수 함수라 HTTP 없이 검증된다.
 // (2026-07-17 GeminiJsonClient seam 분리로 봉투가 빠지면서 parse 가 순수해진 이득 /
 //  2026-07-25 두 채널이 같은 배열 모양을 쓰므로 파싱을 시임으로 올림 — 구 IngredientAuditorTest)
-package com.chs.springboot.domain.recipe.registration;
+package com.chs.springboot.domain.recipe.dictionary;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 

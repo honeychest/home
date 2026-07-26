@@ -33,16 +33,9 @@ public interface RecipeExtractor {
         }
     }
 
-    /**
-     * 일시적 실패 — Gemini 쪽 사정으로 지금 당장은 안 되지만 곧 풀릴 상황 (2026-07-13 확정,
-     * 실측: 429 무료 한도 + 503 "high demand" 과부하 + 타임아웃 전부 이 성격으로 관찰됨).
-     * 영상 자체의 문제가 아니므로 워커가 시도 횟수 안 깎고 대기 후 자동 재개한다.
-     */
-    class TransientFailureException extends RuntimeException {
-        public TransientFailureException(String message) {
-            super(message);
-        }
-    }
+    // 일시적 실패(429·503·타임아웃)는 external.TransientFailureException — 2026-07-26 중립 지대로
+    // 옮겼다. 재료 사전 판정도 같은 예외를 쓰는데 사전은 영상 추출과 무관해서, 여기 중첩 클래스로
+    // 두면 사전이 "일시적 실패"를 말하려고 이 인터페이스를 import 해야 했다.
 
     /** title: 영상 제목 원문 (2026-07-18 추가 — 상품명·요리명이 제목에 정확히 적힌 경우가 많은데
         분석 입력에 안 들어가 STT 오인식("오징어짬뽕"→"진라면", TqtR1cSDnm8 실사례)을 못 잡았다).

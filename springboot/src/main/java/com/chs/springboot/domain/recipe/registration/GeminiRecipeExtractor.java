@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.chs.springboot.domain.recipe.external.GeminiJsonClient;
+import com.chs.springboot.domain.recipe.external.GikkaLlmProperties;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -59,14 +62,14 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
     private static final Logger log = LoggerFactory.getLogger(GeminiRecipeExtractor.class);
 
     private final GeminiJsonClient gemini;
-    private final GikkaMediaProperties properties;
+    private final GikkaLlmProperties properties;
     private final GikkaTelegramNotifier notifier;
 
     // 모델 폐쇄 페일오버 (2026-07-12 승인): 설정 모델이 404 를 내면 폴백 모델로 전환하고
     // 재기동 전까지 유지한다 (매 호출 404 낭비 방지. 인스턴스별 판정 — 2인스턴스 각자 전환).
     private volatile boolean failedOver = false;
 
-    public GeminiRecipeExtractor(GeminiJsonClient gemini, GikkaMediaProperties properties,
+    public GeminiRecipeExtractor(GeminiJsonClient gemini, GikkaLlmProperties properties,
                                  GikkaTelegramNotifier notifier) {
         this.gemini = gemini;
         this.properties = properties;
@@ -90,7 +93,7 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
     @Override
     public ExtractionResult extract(String videoUrl, String title, String description,
                                     String reportedIngredient) {
-        String model = failedOver ? properties.getGeminiFallbackModel() : properties.getGeminiModel();
+        String model = failedOver ? properties.getFallbackModel() : properties.getModel();
         try {
             return callGemini(model, videoUrl, title, description, reportedIngredient);
         } catch (HttpClientErrorException.NotFound e) {
@@ -98,7 +101,7 @@ public class GeminiRecipeExtractor implements RecipeExtractor {
                 throw e; // 폴백 모델까지 404 — 일반 실패 경로(3회 후 FAILED)로
             }
             failedOver = true;
-            String fallback = properties.getGeminiFallbackModel();
+            String fallback = properties.getFallbackModel();
             log.warn("[gikka] Gemini 모델 {} 404 — {} 로 페일오버", model, fallback);
             notifier.notify("[기까] Gemini 모델 '" + model + "' 이 404(폐쇄 추정)입니다. '"
                     + fallback + "' 로 자동 전환해 분석을 계속합니다. 설정 모델 교체가 필요합니다.");

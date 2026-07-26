@@ -47,10 +47,20 @@
 <body>
 <header>
   <h1>냉장고 레시피 — 진행 현황</h1>
-  <div class="updated">갱신: 2026-07-25 · <b>앱 분리(2단계 착수 준비) track 진행 중 — 이 문서 밖에서 관리된다.
+  <div class="updated">갱신: 2026-07-26 · <b>앱 분리(2단계 착수 준비) track 진행 중 — 이 문서 밖에서 관리된다.
     진행 상태·다음 할 일의 원본은 <code>docs/HANDOFF.md</code>, 설계 결정 원본은 CONTEXT.md
     "2단계 착수 준비 — 앱 분리" 절. 아래 "다음 세션이 이어서 할 일"은 그 track 을 담지 않으므로
     새 세션은 HANDOFF.md 를 먼저 읽을 것.</b>
+    <br>· <b>2026-07-26 — 중립 지대 <code>external</code> 신설 + 사전 판정 이관 (미커밋,
+    improve-codebase-architecture high)</b>: 코드가 스스로 적어둔 막힘을 풀었다 —
+    <code>RecipeIsolationArchTest</code> 주석의 "그 넷을 중립 지대로 옮기기 전에는 판정도 옮길 수 없다".
+    실패 타입 둘이 <b>추출 클래스의 중첩 클래스</b>여서 재료 사전 판정 6개가 registration 을 못 떠나고
+    있었다(<code>LocalIngredientAuditor</code> 가 <code>LocalRecipeExtractor</code> 를 이름 하나 때문에
+    붙들고 있었음). <code>external/</code> 신설(GeminiJsonClient · 실패 타입 2 · 설정 2) → 판정 6개를
+    <code>dictionary/</code> 로 이관 → <code>gikka.media.*</code> 를 관심사별 5조각으로 분할.
+    <b>동작 변경 0</b>(순수 구조 이동) · 경로·프론트·배포 env 무변경 · ArchUnit 에 "중립 지대는 남을
+    모른다" 규칙 추가. recipe 백엔드 <b>189개 통과</b>. 근거는 DECISIONS-LOG 맨 아래 절,
+    규칙은 CONTEXT 19절 12·13번. 남은 후보 4개도 그 절 끝에 적어둠.
     <br>· <b>2026-07-25 — 네이티브 전환 대비 어댑터 격리 + 가드 테스트(6d9571f, 커밋·푸시 완료)</b>:
     TWA 로 먼저 내고 나중에 Capacitor 로 셸을 바꾸는 계획이라, "나중에 하면 여러 파일로 번지는 것"만
     골라 먼저 막음 — tokenStorage 의 <code>getToken()</code> 동기 못박음(+initTokenStorage·storageReady

@@ -10,11 +10,16 @@
 // 제안의 어휘(Proposal·TIER_*)와 두 어댑터가 공유하는 응답 형식(parse)은 이 시임이 소유한다.
 // 예전엔 Gemini 구현체(IngredientAuditor)가 들고 있어서 로컬 어댑터가 남의 구현체를 들여다봤다 —
 // 시임의 어휘를 구현체 하나가 소유하면 그 구현체를 못 빼낸다.
-package com.chs.springboot.domain.recipe.registration;
+//
+// 2026-07-26 registration → dictionary 이관: 사전 규칙이 사전 패키지 밖에 있던 마지막 덩어리였다.
+// 막고 있던 것은 예외 두 개(추출 클래스의 중첩)였고, 그것들이 external 중립 지대로 나오면서 풀렸다.
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import com.chs.springboot.domain.recipe.external.LocalUnavailableException;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
 import com.fasterxml.jackson.databind.JsonNode;
 
 public interface IngredientJudge {
@@ -26,9 +31,8 @@ public interface IngredientJudge {
      * 자라다가 gikka-local max_tokens 를 넘겨 503 이 재발했다).
      *
      * <p>구현체는 자기 채널이 지금 불가하면 예외를 던진다 — Gemini 는 일시적 실패에
-     * {@link RecipeExtractor.TransientFailureException}, 로컬은
-     * {@link LocalRecipeExtractor.LocalUnavailableException}. 그 둘을 보고 다른 쪽으로 넘기는 것이
-     * DictionaryJudge 의 라우팅이다.
+     * {@link TransientFailureException}, 로컬은 {@link LocalUnavailableException}.
+     * 그 둘을 보고 다른 쪽으로 넘기는 것이 DictionaryJudge 의 라우팅이다.
      */
     List<Proposal> audit(List<String> pendingNames, List<String> allRepresentatives);
 

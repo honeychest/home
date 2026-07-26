@@ -11,14 +11,18 @@
 // 여기 없는 것 두 가지 — 청중이 달라서 일부러 남겼다:
 //   · 적용(사전 쓰기·변경 로그): 워커만 한다. 오너 경로는 제안을 화면에 보여주고 오너가 고른다.
 //   · 실패 정책: 워커는 조용히 삼키고(분석을 안 깨뜨린다) 컨트롤러는 503 으로 매핑한다.
-package com.chs.springboot.domain.recipe.registration;
+//
+// 2026-07-26 registration → dictionary 이관: "사전 판정 규칙의 단일 원본"이 사전 패키지 밖에
+// 있던 모순을 해소. 막고 있던 예외 두 개가 external 중립 지대로 나오면서 가능해졌다.
+package com.chs.springboot.domain.recipe.dictionary;
 
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.chs.springboot.domain.recipe.dictionary.IngredientDictionaryRepository;
+import com.chs.springboot.domain.recipe.external.LocalUnavailableException;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,14 +106,12 @@ public class DictionaryJudge {
         IngredientJudge secondary = order == Order.LOCAL_FIRST ? gemini : local;
         try {
             return primary.audit(pending, representatives);
-        } catch (LocalRecipeExtractor.LocalUnavailableException
-                 | RecipeExtractor.TransientFailureException e) {
+        } catch (LocalUnavailableException | TransientFailureException e) {
             log.info("[gikka] 사전 판정 1차 채널({}) 불가 — 다른 채널로 폴백: {}",
                     order, e.getMessage());
             try {
                 return secondary.audit(pending, representatives);
-            } catch (LocalRecipeExtractor.LocalUnavailableException
-                     | RecipeExtractor.TransientFailureException fallbackFailure) {
+            } catch (LocalUnavailableException | TransientFailureException fallbackFailure) {
                 log.warn("[gikka] 사전 판정 2차 채널도 불가: {}", fallbackFailure.getMessage());
                 e.addSuppressed(fallbackFailure);
                 throw e; // 1차 예외를 그대로 — 호출부(503 매핑)가 이 타입을 본다

@@ -1,6 +1,10 @@
 // [AGENT] Gemini 추출 판정 고정 — 실 Gemini 없이 MockRestServiceServer 로 검증 (PLAYBOOK 관례 4)
 package com.chs.springboot.domain.recipe.registration;
 
+import com.chs.springboot.domain.recipe.external.GeminiJsonClient;
+import com.chs.springboot.domain.recipe.external.GikkaLlmProperties;
+import com.chs.springboot.domain.recipe.external.TransientFailureException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,12 +32,13 @@ class GeminiRecipeExtractorTest {
 
     @BeforeEach
     void setUp() {
-        GikkaMediaProperties properties = new GikkaMediaProperties();
-        properties.setGeminiApiKey("test-key");
+        GikkaLlmProperties properties = new GikkaLlmProperties();
+        properties.setApiKey("test-key");
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         // 토큰이 비어 있으므로 notify 는 무발송 — 테스트에서 외부 호출 없음
-        GikkaTelegramNotifier notifier = new GikkaTelegramNotifier(RestClient.builder(), properties);
+        GikkaTelegramNotifier notifier =
+                new GikkaTelegramNotifier(RestClient.builder(), new GikkaNotifyProperties());
         // Gemini 호출 봉투·일시적 실패 매핑은 GeminiJsonClient seam 소유 (2026-07-17 점검) — mock 서버는
         // 그 client 의 builder 에 바인딩. 추출기의 HTTP 레벨 기대(모델 URL·429/503·페일오버)는 그대로 통과.
         extractor = new GeminiRecipeExtractor(new GeminiJsonClient(builder, properties), properties, notifier);
@@ -133,7 +138,7 @@ class GeminiRecipeExtractorTest {
         server.expect(method(org.springframework.http.HttpMethod.POST))
                 .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
 
-        assertThrows(RecipeExtractor.TransientFailureException.class,
+        assertThrows(TransientFailureException.class,
                 () -> extractor.extract("https://www.youtube.com/shorts/abc", null, null));
     }
 
@@ -143,7 +148,7 @@ class GeminiRecipeExtractorTest {
         server.expect(method(org.springframework.http.HttpMethod.POST))
                 .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
 
-        assertThrows(RecipeExtractor.TransientFailureException.class,
+        assertThrows(TransientFailureException.class,
                 () -> extractor.extract("https://www.youtube.com/shorts/abc", null, null));
     }
 
@@ -153,7 +158,7 @@ class GeminiRecipeExtractorTest {
         server.expect(method(org.springframework.http.HttpMethod.POST))
                 .andRespond(request -> { throw new java.io.IOException("Request timed out"); });
 
-        assertThrows(RecipeExtractor.TransientFailureException.class,
+        assertThrows(TransientFailureException.class,
                 () -> extractor.extract("https://www.youtube.com/shorts/abc", null, null));
     }
 
