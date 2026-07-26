@@ -44,6 +44,9 @@ local 프로파일 실기동으로 Flyway 검증(schema v15 일치)·엔드포�
 > 참고: 이번 커밋은 `springboot/` 도 건드리므로(compose·AGENTS.md) 백엔드 재배포는 돈다 —
 > springboot 코드는 무수정이라 같은 코드가 롤링으로 다시 뜰 뿐이다.
 
+서버 쪽에서 할 일(전제조건 확인·배포·진단·nginx 전환·분리 시 변경점)은 `gikka/serverAgent.md`
+한 곳에 모았다 — 저장소가 갈라져도 그 파일이 gikka 를 따라가도록 `gikka/` 안에 뒀다.
+
 ### 다음 — 3단계: 배포 확인 → nginx 전환
 1. **먼저 gikka1 이 떠 있는지 확인**(위 수동 재기동 후). 이 시점엔 nginx 가 아직 app 으로 보내므로
    트래픽은 안 간다 — 양쪽이 같은 DB 를 봐도 워커 중복은 `claimNext` 의 SKIP LOCKED 가 막는다.
