@@ -315,18 +315,26 @@
   `gikka.auth.allowed-origins` 를 채워야 하고(비 http 스킴은 `allowedOriginPatterns` 사용),
   저장소가 바뀌어 **전 사용자가 한 번 로그아웃**된다(교체 배포 시 안내 필요).
 - 도메인: `gikka.devcontext.net`(전용 도메인 구입 보류).
-- 프론트 격리(**절반 구현**): 호스트네임이 `gikka.devcontext.net` 이면 `/recipe` 외 경로를 되돌린다
-  (`MainRouter.jsx` 64~71행 — 동작은 이미 막힌다). 남은 것은 **번들**이다: 정적 import 23개가
-  그대로 실려 gikka 도메인 사용자도 `index-*.js` 1.8M 을 받는다(RecipeApp 청크는 89K).
-  해법은 저장소·빌드 분리가 아니라 **lazy 화**다 — 정적 파일은 배포가 파일 교체라 다운타임이
-  없고 실행은 브라우저가 이미 격리하므로, 프론트에 남은 문제는 "남의 코드를 다운로드한다" 하나뿐이다.
-  완전 별도 빌드 파이프라인은 여전히 안 만든다.
+- 프론트 격리(**gikka 저장소로 이관 완료 2026-07-26 / 서버 전환 미완**): recipe 프론트는
+  **gikka 저장소의 `frontend/`** 에 있다(`src/domain/recipe/` 경로 유지, 55개 파일 + `public/recipe/`).
+  같은 날 오전의 "lazy 화로 충분, 별도 빌드는 안 만든다"를 뒤집은 결정이다 — 근거는 DECISIONS-LOG
+  같은 날 마지막 절. 요약하면 두 가지다.
+  - `vite-plugin-cesium` 이 **조건 없이** index.html 에 `<script src="cesium/Cesium.js">`(5.7MB)를
+    주입한다. import 가 아니라 태그 주입이라 **lazy 화로는 걷히지 않는다.** 앱 사용자가 그걸 받고 있었다.
+  - lab 은 `gikka.conf` 의 정적 root 를 lab dist 로 두고 있어 **lab 프론트 배포가 스토어 앱의
+    내용물을 바꾼다.** 출시 전에는 무해했지만 출시 후엔 사고 경로다.
+  실측: 독립 빌드 323.57KB(gzip 102KB) · cesium 0. 남은 것은 서버 쪽 전환뿐이다
+  (배포 스크립트 · Jenkins 프론트 stage · `gikka.conf` root 교체 — 절차는 `docs/HANDOFF.md`).
+  **주의**: 프론트는 백엔드와 달리 공유분이 0 이 아니었다 — recipe CSS 가 lab 의 tailwind
+  preflight 위에서 작성돼 있었다(`<p>`·`<h1~h3>`·`<ol>`·`<button>` 의 여백이 0 이라는 전제).
+  gikka 쪽에서 `src/base.css` 가 그 몫을 소유한다.
 - 백엔드 분리(**별도 저장소 완료 2026-07-26 / nginx 전환 미완**): 배포가 서로 영향을 주면 안 되므로
   **완전히 별도 Spring Boot 서비스**로 분리. **`honeychest/gikka` 별도 git 저장소**, 패키지 `com.chs.gikka`.
   - 저장소까지 가른 이유: 분리가 확정된 미래인데 lab 파이프라인으로 먼저 띄우면 나중에 컨테이너
     재생성·Jenkins job 교체를 다시 해야 한다. **서버에 아무것도 올리기 전인 시점**이라 그 재작업이
-    0 이었다. 프론트는 가르지 않았다 — 공통 컴포넌트·라우터를 공유해서 가르면 복제가 생긴다
-    (백엔드는 규율 7 덕에 공유분이 0 이라 그냥 떨어져 나갔다).
+    0 이었다. (프론트도 같은 날 늦게 이 저장소로 따라왔다 — 위 "프론트 격리" 항목. 처음엔 공통
+    컴포넌트 공유 때문에 가르면 복제가 생긴다고 봤는데, 실측하니 recipe 프론트가 밖을 import 하는
+    곳이 0 건이었다. 규율 7 을 프론트에서도 지켜온 결과였다.)
   - 이관된 것: recipe 메인 61 + 테스트 26 + Flyway 15개. 코드 수정은 패키지 선언·import 치환뿐이다 —
     규율 7("공용 코드 허용 목록 없음")을 ArchUnit 이 계속 강제해 온 덕에 **폴더째 들어내도 컴파일이
     깨지지 않았다.** 규율이 값을 치른 지점이 여기다.
@@ -344,11 +352,15 @@
   이미 처리 — `tokenStorage.getToken()` 동기 고정 + `initTokenStorage()` + 셸 `storageReady` 게이트 /
   `data/platform.ts`(환경 API 집결) / `data/googleSignIn.ts`(GIS 격리) / `platformIsolation.test.ts`(가드).
   미룬 것 — Share Target 진입점, `'/recipe'` 경로 하드코딩, X다운로드 blob 저장, 안드로이드 하드웨어 뒤로가기.
-- 남은 수동 작업(코드 아님): DNS · nginx 서브도메인 · OAuth 승인 오리진 추가 · Play Console 비공개 테스트 ·
-  키스토어 백업. (진행 상황은 `docs/HANDOFF.md`)
+- 남은 수동 작업(코드 아님): OAuth 승인 오리진 추가 · Play Console 비공개 테스트 · 키스토어 백업.
+  (DNS 와 nginx 서브도메인은 2026-07-26 완료 — 앱 도메인이 이미 8082 에 붙어 있다.
+  진행 상황은 `docs/HANDOFF.md`)
 
 ## 19. 격리 규율 (ArchUnit 이 강제)
 1. 코드: 백엔드는 `domain/recipe` 안에서만, 다른 도메인과 상호 참조 금지. 프론트는 `src/domain/recipe/`.
+   (2026-07-26 이후 **둘 다 실물은 gikka 저장소**다 — 백엔드 `com.chs.gikka`, 프론트
+   `frontend/src/domain/recipe/`. lab 에 남은 것은 곧 지울 사본이므로 수정은 gikka 에서만 한다.
+   규율 자체는 그대로 유효하다 — 저장소가 갈렸어도 "밖을 참조하지 않는다"가 이 이관을 싸게 만들었다.)
 2. DB: recipe 전용 데이터베이스 + 전용 DataSource. 기존 테이블과 외래키·조인 금지.
 3. API: `/api/recipe/**` 통일.
 4. AI 호출: 인터페이스 뒤에 숨김(구현체 교체로 끝나게).
