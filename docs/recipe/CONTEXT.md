@@ -315,16 +315,17 @@
   `gikka.auth.allowed-origins` 를 채워야 하고(비 http 스킴은 `allowedOriginPatterns` 사용),
   저장소가 바뀌어 **전 사용자가 한 번 로그아웃**된다(교체 배포 시 안내 필요).
 - 도메인: `gikka.devcontext.net`(전용 도메인 구입 보류).
-- 프론트 격리(**gikka 저장소로 이관 완료 2026-07-26 / 서버 전환 미완**): recipe 프론트는
+- 프론트 격리(**완료 2026-07-26 — 이관 + 서버 전환까지**): recipe 프론트는
   **gikka 저장소의 `frontend/`** 에 있다(`src/domain/recipe/` 경로 유지, 55개 파일 + `public/recipe/`).
   같은 날 오전의 "lazy 화로 충분, 별도 빌드는 안 만든다"를 뒤집은 결정이다 — 근거는 DECISIONS-LOG
   같은 날 마지막 절. 요약하면 두 가지다.
   - `vite-plugin-cesium` 이 **조건 없이** index.html 에 `<script src="cesium/Cesium.js">`(5.7MB)를
     주입한다. import 가 아니라 태그 주입이라 **lazy 화로는 걷히지 않는다.** 앱 사용자가 그걸 받고 있었다.
-  - lab 은 `gikka.conf` 의 정적 root 를 lab dist 로 두고 있어 **lab 프론트 배포가 스토어 앱의
-    내용물을 바꾼다.** 출시 전에는 무해했지만 출시 후엔 사고 경로다.
-  실측: 독립 빌드 323.57KB(gzip 102KB) · cesium 0. 남은 것은 서버 쪽 전환뿐이다
-  (배포 스크립트 · Jenkins 프론트 stage · `gikka.conf` root 교체 — 절차는 `docs/HANDOFF.md`).
+  - lab 이 `gikka.conf` 의 정적 root 를 lab dist 로 두고 있었고, 그러면 **lab 프론트 배포가
+    스토어 앱의 내용물을 바꾼다.** 출시 전에는 무해했지만 출시 후엔 사고 경로다.
+  실측: 독립 빌드 323.57KB(gzip 102KB) · cesium 0. 서버 전환도 같은 날 끝났다 —
+  전용 배포 스크립트(릴리스+심링크, 무중단) · Jenkins 경로 감지 · 롤백 도구(`rollback-gikka.sh`) ·
+  `gikka.conf` root 교체까지. **앱 도메인은 이제 gikka 저장소가 배포한 것만 본다.**
   **주의**: 프론트는 백엔드와 달리 공유분이 0 이 아니었다 — recipe CSS 가 lab 의 tailwind
   preflight 위에서 작성돼 있었다(`<p>`·`<h1~h3>`·`<ol>`·`<button>` 의 여백이 0 이라는 전제).
   gikka 쪽에서 `src/base.css` 가 그 몫을 소유한다.

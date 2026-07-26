@@ -9,71 +9,65 @@
 **목표는 "웹 기능을 옮기기"가 아니라 "기까를 별도 앱으로 출시하기"** 다 — 아래 순서가 그 기준으로 잡혀 있다.
 
 ### 완료 (2026-07-26)
-- **백엔드**: `honeychest/gikka` 별도 저장소(패키지 `com.chs.gikka`). 서버에 이미 떠 있다
+- **백엔드**: `honeychest/gikka` 별도 저장소(패키지 `com.chs.gikka`). 서버에 떠 있다
   (`chs-gikka-1`, 8082). 자체 Jenkinsfile(Multibranch) · docker-compose · deploy-gikka.sh.
-- **앱 전용 도메인**: `gikka.devcontext.net` → `/api/recipe/**` 가 `chs_gikka`(8082)로 간다
-  (`chs/server/nginx/gikka.conf`). 즉 **앱이 쓸 백엔드는 이미 연결돼 있다.**
-- **프론트 사본**: lab 의 `frontend/src/domain/recipe/**`(55개) + `public/recipe/**` 를
-  gikka 저장소 `frontend/` 로 복사하고 독립 빌드를 세웠다 — `npm run test` 65개 · `typecheck` ·
-  `build` 통과. 산출물 323KB(gzip 102KB), cesium 0.
-  (lab 번들은 `index-*.js` 1.8MB + `Cesium.js` 5.7MB 를 앱 사용자에게도 내려보내고 있었다.
-  `vite-plugin-cesium` 이 조건 없이 index.html 에 주입하므로 lazy 화로는 안 걷힌다 — 이것이
+- **프론트**: lab 의 `frontend/src/domain/recipe/**`(55개) + `public/recipe/**` 를 gikka 저장소
+  `frontend/` 로 옮기고 독립 빌드를 세웠다(테스트 65개·typecheck·build 통과, 323KB·cesium 0).
+  전용 배포 스크립트(`frontend/deploy-front.sh`, 릴리스+심링크) · Jenkins 경로 감지(백엔드와
+  프론트가 각각 필요할 때만 배포) · 롤백 도구(`rollback-gikka.sh`) 를 갖췄다.
+- **앱 도메인 전환 완료**: `gikka.devcontext.net` 이 이제 gikka 저장소가 배포한 것만 본다 —
+  정적은 `nginx/gikka/dist`, API 는 `chs_gikka`(8082). `grep -c cesium` 0 으로 확인.
+  이전에는 lab 웹과 같은 dist 를 봤고, 그래서 lab 프론트 배포가 앱 내용물을 바꿨다.
+  (lab 번들은 `index-*.js` 1.8MB + `Cesium.js` 5.7MB 를 앱 사용자에게도 내려보냈다.
+  `vite-plugin-cesium` 이 index.html 에 태그로 주입하므로 lazy 화로는 안 걷힌다 — 이것이
   CONTEXT 18절의 "lazy 화로 충분"을 뒤집고 빌드를 가른 이유다.)
 
-### 확정된 결정 (이번에 정한 것 — 다시 논의하지 말 것)
+### 확정된 결정 (다시 논의하지 말 것)
 1. **프론트는 gikka 저장소 안 `frontend/`** (별도 저장소로 또 가르지 않는다). 프론트와 백엔드는
    같은 앱이라 같이 배포되는 편이 정상이고, 저장소를 가르면 API 계약 변경이 두 커밋으로 쪼개진다.
 2. **웹 `devcontext.net/recipe` 는 유지하지 않는다.** 앱 배포가 확인되면 폐지한다 →
    그래서 `devcontext.conf` 의 recipe 프록시를 `chs_gikka` 로 **전환하는 작업은 필요 없다**.
-   대신 아래 4단계에서 `location ^~ /api/recipe/llm/` 블록을 **지운다**.
-3. TWA 셸(Bubblewrap) 작업은 사용자가 앱 개발 첫 경험이라 **3단계에서 함께 결정**한다
-   (키스토어를 어디서 만들고 어디에 백업할지가 같이 걸린다).
+   대신 3단계에서 `location ^~ /api/recipe/llm/` 블록을 **지운다**.
+3. **TWA 셸(Bubblewrap) 빌드 자리는 개발 PC 한 곳.** mac-mini 에는 설치하지 않는다.
+   근거와 절차는 gikka 저장소 `android/README.md` 가 단일 원본.
+4. **nginx 설정은 git 으로 배포되지 않는다.** 이 저장소의 `.gitignore` 가 `/chs/` 를 제외하므로
+   `chs/server/nginx/*.conf` 는 로컬·서버 각자의 파일이다. 변경은 **서버에서 직접**
+   (`/opt/homebrew/etc/nginx/servers/`) 하고, 이 체크아웃의 사본에도 같은 내용을 반영해 둔다 —
+   사본이 낡으면 다음 사람이 서버 상태를 처음부터 다시 조사한다(이번 세션이 그 비용을 치렀다).
 
 ### 병행 기간 규칙 — 지금 사본이 둘이다
-1. **recipe 프론트 수정은 gikka 저장소에서만.** `frontend/src/domain/recipe/**` 는 곧 지울 사본이다.
+1. **recipe 프론트 수정은 gikka 저장소에서만.** lab 의 `frontend/src/domain/recipe/**` 는 곧 지울 사본이다.
 2. **recipe 백엔드 수정도 gikka 저장소에서만.** `springboot/domain/recipe/**` 도 같다.
 3. **gikka DB 마이그레이션(V16 이후) 추가 금지.** 두 앱이 같은 `gikka` DB 에 각자의 Flyway 로
    붙어 있어서, 새 파일을 gikka 저장소에만 넣으면 DB 이력에는 적용되고 이쪽 locations 에는 없다
    → **다음 백엔드 배포 때 springboot 앱이 "applied migration not resolved locally" 로 기동 실패**
    (validateOnMigrate 기본 true). 꼭 필요하면 같은 파일을 양쪽에 동시에 넣는다.
 
-### 1단계: gikka 프론트를 서버에 올린다 (다음 작업)
-- gikka 저장소에 정적 배포 스크립트 — lab `frontend/deploy-front-only.sh` 패턴(releases 디렉터리 +
-  심링크 교체, 롤백이 심링크 하나) 을 gikka 용으로 작성.
-  **경로 확정**: `docker-volumes/nginx/gikka/{releases,dist,previous}`
-  (lab 은 `docker-volumes/nginx/{releases,dist}` — 한 단계 아래로 넣어 섞이지 않게 한다)
-- gikka `Jenkinsfile` 에 프론트 stage 추가.
-- `gikka.conf` 의 `location /` root 를 새 dist 로 교체. 이걸 바꾸기 전까지 앱 도메인은
-  lab dist(cesium 포함)를 계속 준다.
-  **주의: nginx 설정은 git 으로 배포되지 않는다** — 이 저장소의 `.gitignore` 가 `/chs/` 를
-  제외하므로 `chs/server/nginx/*.conf` 는 로컬·서버 각자의 파일이다. 변경은 **서버에서 직접**
-  하고, 이 체크아웃의 사본에도 같은 내용을 반영해 둔다(사본이 낡으면 다음 사람이 서버 상태를
-  다시 조사해야 한다). 명령은 gikka 저장소 `serverAgent.md` 7절.
-
-### 2단계: 실기 확인
+### 1단계: 앱 화면 실기 확인 (다음 작업)
 `gikka.devcontext.net` 에서 로그인·보관함·냉장고·추천·등록 1건·사전·X다운로드.
-글꼴(Pretendard)·여백·하단 탭 안전영역을 **iOS 실기기로** 확인 — 리셋 CSS 를 lab 의 tailwind
-preflight 에서 `src/base.css` 로 갈아탔으므로 여백이 어긋날 수 있는 지점이 여기다.
+**iOS 실기기로** 여백·글꼴(Pretendard)·하단 탭 안전영역을 볼 것 — 리셋 CSS 를 lab 의 tailwind
+preflight 에서 gikka 의 `frontend/src/base.css` 로 갈아탔으므로, 어긋날 수 있는 곳이 여기뿐이다.
+증상 예: 제목이 커진다 / 문단마다 여백이 생긴다 / 목록에 번호·들여쓰기가 보인다
+→ `base.css` 에 그 요소의 교정이 빠진 것이다(원본은 `tailwindcss/preflight.css`).
+문제가 있으면 `rollback-gikka.sh` → 2) 또는 nginx conf 원복으로 즉시 되돌아간다.
 
-### 3단계: 앱 패키징 (TWA)
-절차·문답 값·릴리스 규칙은 **gikka 저장소의 `android/README.md`** 가 단일 원본.
-빌드 자리는 **개발 PC 한 곳**으로 확정(2026-07-26) — 버전코드가 커밋돼야 하고, mac-mini 의
-체크아웃은 Jenkins 가 `git pull` 하는 폴더라 거기서 커밋하면 배포가 갈린다. 서버에는 설치하지 않는다.
-
-키스토어 생성·백업(파일과 비밀번호를 서로 다른 곳에) → AAB → Play Console 비공개 테스트 업로드 →
-**Play 앱 서명 키 SHA-256** 확보 → `assetlinks.json` 을 그 지문으로 채워
-`https://gikka.devcontext.net/.well-known/assetlinks.json` 로 서빙 → 앱에서 주소창이 안 보이는지 확인.
+### 2단계: 앱 패키징 (TWA)
+절차·문답 값·릴리스 규칙은 **gikka 저장소 `android/README.md`** 가 단일 원본.
+키스토어 생성·백업(파일과 비밀번호를 서로 다른 곳에) → AAB → Play Console 비공개 테스트 →
+**Play 앱 서명 키 SHA-256** 확보 → `frontend/public/.well-known/assetlinks.json` 에 지문을 넣고
+push(프론트 배포 파이프라인이 서빙한다) → 앱에서 주소창이 안 보이는지 확인.
 (지문은 업로드 키가 아니다. 틀리면 앱이 죽지 않고 브라우저 모드로 조용히 떨어진다.)
 남은 콘솔 작업: Google OAuth 승인된 오리진에 `https://gikka.devcontext.net` 추가.
+동의 화면이 "테스트" 상태면 테스트 사용자 목록에 넣은 계정만 로그인된다(최대 100명).
 
-### 4단계: lab 청소 (3단계가 실사용으로 확인된 뒤에만)
+### 3단계: lab 청소 (2단계가 실사용으로 확인된 뒤에만)
 - `frontend/src/domain/recipe/**`(55개) · `frontend/public/recipe/**` 삭제
 - recipe 참조 3곳 정리 — `app/router/MainRouter.jsx`(라우트·`GikkaHostGuard`·챗봇 숨김 접두어),
   `cssLayoutGuard.test.ts`(recipe 규칙 부분), `shared/ui/samples/visualSamples.js`(카탈로그 주석)
 - `springboot/src/**/domain/recipe/**`(+test, 합 88개) 삭제, `application*.properties` 의 `gikka.*` 삭제,
   `RecipeIsolationArchTest` 삭제, recipe 전용 의존성 정리
   (`flyway-database-postgresql` 은 챗봇 pgvector 도 쓰는지 확인 후 판단)
-- `devcontext.conf`(서버에서 직접 — 위 1단계의 주의 참고) — `upstream chs_gikka` 는 `gikka.conf` 가
+- `devcontext.conf`(서버에서 직접 — 위 결정 4 참고) — `upstream chs_gikka` 는 `gikka.conf` 가
   쓰므로 **남기고**, `location ^~ /api/recipe/llm/` 블록만 삭제
 - **권고: 옛 주소 리다이렉트를 남긴다.** `devcontext.net/recipe` 로 공유해둔 링크·북마크가 죽는다.
   ```nginx
@@ -82,6 +76,12 @@ preflight 에서 `src/base.css` 로 갈아탔으므로 여백이 어긋날 수 �
   단 **이미 설치된 iOS 홈화면 앱은 이걸로 살아나지 않는다** — PWA 는 오리진 단위로 저장소가
   갈려서 옛 오리진의 앱은 재설치 + 재로그인이 필요하다. 대상이 본인과 소수 테스터뿐이라
   한 번 안내하면 끝난다(안내를 빠뜨리면 "앱이 안 열린다" 로 돌아온다).
-- 문서: `docs/recipe/CONTEXT.md` 18절(프론트 격리·lazy 서술 → 별도 빌드로 갱신) · 19절(격리 규율의
-  "프론트는 src/domain/recipe" 서술), `frontend/AGENTS.md` 의 recipe 서술,
-  `springboot/AGENTS.md` 의 recipe 패턴 표, `frontend/.../backendPatterns.js` 의 `[gikka 저장소]` 표기
+- **문서 봉인** (gikka 쪽 사슬은 2026-07-26 에 이미 끊었다 — gikka 문서 5개는 lab 을 참조하지 않는다):
+  - `docs/recipe/{CONTEXT,PLAYBOOK,DECISIONS-LOG}.md` · `progress.html` 은 **여기 남긴다.**
+    각 파일 맨 위에 한 줄 — "이 도메인은 `honeychest/gikka` 로 갔다. 이 파일은 2026-07-26
+    까지의 이력 보관소이며 갱신하지 않는다." 옮기지 않는 이유: 새 저장소가 매 세션 끌고
+    다닐 내용이 아니다. 1년에 한 번 "왜 이렇게 정했나"를 찾을 때만 열면 된다.
+  - `AGENTS.md`(recipe 안내 3줄) · `frontend/AGENTS.md`(recipe 표·도메인별 절) ·
+    `springboot/AGENTS.md`(recipe 패턴 표) 에서 recipe 서술 삭제
+  - `frontend/.../backendPatterns.js` 의 `[gikka 저장소]` 표기 정리
+  - 이 파일(HANDOFF.md)은 위 항목이 끝나면 **비운다**
