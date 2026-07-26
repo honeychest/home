@@ -6,11 +6,12 @@
 지시할 때 키 이름으로 부를 수 있다 (예: "재고 알림은 pattern-queue-worker + pattern-failover-notify 로").
 모범 실물은 살아있는 프로덕션 코드다 — 별도 예제 코드를 만들지 말고 실물을 열어 모방한다.
 
-**recipe 실물의 현재 위치**: 2026-07-26 에 `gikka/`(패키지 `com.chs.gikka`)로 이관됐다.
-아래 표의 recipe 경로는 **곧 지울 사본**을 가리킨다 — 실물을 열어 모방할 때는 `gikka/` 쪽을 본다
-(`gikka/AGENTS.md` 가 같은 키를 쓴다). recipe 코드 수정도 `gikka/` 에서만 한다.
+**recipe 실물의 현재 위치**: 2026-07-26 에 **`honeychest/gikka` 별도 저장소**로 분리됐다
+(패키지 `com.chs.gikka`). 아래 표의 recipe 경로는 이 저장소에 남은 **곧 지울 사본**을 가리킨다 —
+실물을 열어 모방할 때는 gikka 저장소를 본다(그쪽 `AGENTS.md` 가 같은 키를 쓴다).
+recipe 코드 수정도 gikka 저장소에서만 한다.
 
-| 키 | 의도 (언제 쓰나) | 모범 실물 (recipe 는 `gikka/` 로 이관 — 위 주의 참고) |
+| 키 | 의도 (언제 쓰나) | 모범 실물 (recipe 는 gikka 저장소로 분리 — 위 주의 참고) |
 |---|---|---|
 | pattern-pure-rules | 임계값·분류·매칭 등 순수 판정. 컨트롤러/저장소에 인라인 금지 — static 순수 함수 + 단위 테스트 | `registration/RegistrationRules.java`, `fridge/FridgeRepository.rankFrequent`, `registration/ExtractionResultJson.java` |
 | pattern-rest-seam | 외부 HTTP 호출 — `RestClient.Builder` 주입으로 MockRestServiceServer 테스트 시임 확보 | `external/GeminiJsonClient.java`(Gemini 호출 봉투·일시적 실패 매핑 공유 seam — 추출기·감사기 두 호출자가 사용), `registration/LocalRecipeExtractor.java` |

@@ -67,42 +67,6 @@ services:
           memory: 1024M
 
 
-  # gikka(기까) — recipe 전용 독립 앱 (2026-07-26 분리, docs/recipe/CONTEXT.md 18절).
-  # app1/app2 와 같은 파일에 둔 이유는 배포 편의뿐이다 — 이미지·컨테이너·재기동이 완전히 별개라
-  # 한쪽을 배포해도 다른 쪽은 안 내려간다(그게 분리한 목적).
-  #
-  # <<: *common 을 안 쓴다: 저 앵커는 chsproject-docker 이미지와 MySQL·Rabbit·Kafka·Redis
-  # 환경변수를 함께 달고 오는데, gikka 는 그중 무엇도 쓰지 않는다(DB 는 PG 의 gikka 하나뿐).
-  # env_file 로 .env 를 통째로 주입하지 않는 이유도 같다 — 안 쓰는 시크릿까지 컨테이너에
-  # 들어간다. 필요한 값만 아래 environment 에 명시하고, 값 자체는 compose 가 같은 폴더의
-  # .env 에서 보간한다(app1/app2 의 RABBIT_* 와 같은 방식).
-  gikka1:
-    image: localhost:5010/chs-gikka:latest
-    container_name: chs-gikka-1
-    ports:
-      - "127.0.0.1:8082:8080"
-    networks:
-      - chs-network
-    restart: always
-    logging: *default-logging
-    environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      JAVA_OPTS: -Xms128m -Xmx512m -XX:+UseSerialGC
-      # PG(chs-pgvector)의 gikka DB 전용 계정 — 이 DB 밖은 접근 권한이 없다.
-      GIKKA_DB_USERNAME: ${GIKKA_DB_USERNAME}
-      GIKKA_DB_PASSWORD: ${GIKKA_DB_PASSWORD}
-      # 비면 조용히 쉰다 — gemini 없으면 분석 워커 휴면, youtube 없으면 메타 조회 생략.
-      GIKKA_GEMINI_API_KEY: ${GIKKA_GEMINI_API_KEY}
-      GIKKA_YOUTUBE_API_KEY: ${GIKKA_YOUTUBE_API_KEY}
-      # 페일오버 알림 (비면 알림만 생략되고 기능은 돈다).
-      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
-      TELEGRAM_CHATID: ${TELEGRAM_CHATID}
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1024M
-
   nexus:
     image: localhost:5010/chs-nexus:latest
     container_name: chs-nexus

@@ -9,8 +9,7 @@ pipeline {
         booleanParam(name: 'BACKEND_ONLY',  defaultValue: false, description: 'Backend 강제 배포')
         booleanParam(name: 'FRONTEND_ONLY', defaultValue: false, description: 'Frontend 강제 배포')
         booleanParam(name: 'NEXUS_ONLY',    defaultValue: false, description: 'Nexus 강제 배포')
-        booleanParam(name: 'GIKKA_ONLY',    defaultValue: false, description: 'gikka 로컬 추출기(mac-mini launchd) 강제 재기동')
-        booleanParam(name: 'GIKKA_APP_ONLY', defaultValue: false, description: 'gikka 앱(chs-gikka-1 컨테이너) 강제 배포')
+        booleanParam(name: 'GIKKA_ONLY',    defaultValue: false, description: 'gikka 로컬 추출기 강제 재기동')
     }
 
     stages {
@@ -44,11 +43,10 @@ pipeline {
                     env.DEPLOY_BACK  = changed.contains('springboot/') ? 'true' : 'false'
                     env.DEPLOY_FRONT = changed.contains('frontend/')   ? 'true' : 'false'
                     env.DEPLOY_NEXUS = changed.contains('nexus/')      ? 'true' : 'false'
-                    // 이름 주의: DEPLOY_GIKKA 는 mac-mini 호스트 추출기(launchd), DEPLOY_GIKKA_APP 은
-                    // recipe 백엔드 앱(도커 컨테이너)이다. 둘은 완전히 다른 것이고 폴더도 다르다.
-                    // 'gikka/' 는 'gikka-extractor/' 와 겹치지 않는다(슬래시 위치가 다름).
+                    // DEPLOY_GIKKA 는 mac-mini 호스트 추출기(launchd)다 — recipe 백엔드 앱이 아니다.
+                    // 백엔드 앱(기까)은 2026-07-26 에 honeychest/gikka 저장소로 분리돼 나갔고
+                    // 자기 Jenkinsfile 로 배포한다. 이 파이프라인은 그것을 알지 못한다.
                     env.DEPLOY_GIKKA = changed.contains('gikka-extractor/') ? 'true' : 'false'
-                    env.DEPLOY_GIKKA_APP = changed.contains('gikka/') ? 'true' : 'false'
                     env.GIT_SHORT    = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                 }
             }
@@ -161,47 +159,6 @@ pipeline {
             }
             steps {
                 sh 'cd /Users/honey/devcontext/project/lab/springboot && docker compose pull nexus && docker compose up -d nexus'
-            }
-        }
-
-        // gikka 앱 — recipe 전용 독립 Spring Boot 서비스 (2026-07-26 분리).
-        // springboot 와 완전히 별개 이미지(chs-gikka)·별개 컨테이너(chs-gikka-1)라
-        // 한쪽 배포가 다른 쪽을 건드리지 않는다. 그게 분리한 목적이다.
-        // 인스턴스가 1개라 롤링이 없다 — 배포 중 수십 초 끊긴다(서버 메모리 여유상 감수).
-        stage('Build & Push Gikka App') {
-            when {
-                allOf {
-                    branch 'main'
-                    anyOf {
-                        environment name: 'DEPLOY_GIKKA_APP', value: 'true'
-                        expression { return params.GIKKA_APP_ONLY }
-                    }
-                }
-            }
-            steps {
-                sh '''
-                    cd $WORKSPACE/gikka
-                    ./gradlew bootJar --no-daemon
-                    docker build -t ${REGISTRY}/chs-gikka:${GIT_SHORT} .
-                    docker tag ${REGISTRY}/chs-gikka:${GIT_SHORT} ${REGISTRY}/chs-gikka:latest
-                    docker push ${REGISTRY}/chs-gikka:${GIT_SHORT}
-                    docker push ${REGISTRY}/chs-gikka:latest
-                '''
-            }
-        }
-
-        stage('Deploy Gikka App') {
-            when {
-                allOf {
-                    branch 'main'
-                    anyOf {
-                        environment name: 'DEPLOY_GIKKA_APP', value: 'true'
-                        expression { return params.GIKKA_APP_ONLY }
-                    }
-                }
-            }
-            steps {
-                sh '/Users/honey/devcontext/project/lab/gikka/deploy-gikka.sh'
             }
         }
 

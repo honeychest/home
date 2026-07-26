@@ -4,74 +4,68 @@
 > 새 세션(Claude·Codex 무관)은 이 파일이 비어 있지 않으면 먼저 읽고 이어서 작업한다.
 > **끝난 항목은 남기지 않고 지운다** (경위는 git 이력에 있다).
 
-## recipe(기까) 앱 분리 — 백엔드 완전 분리
-배경·확정 사항은 `docs/recipe/CONTEXT.md` "2단계 착수 준비 — 앱 분리" 절이 단일 원본.
-컷오버 방식은 **병행 후 전환**으로 확정 (2026-07-26 사용자 결정): 새 앱을 먼저 띄워
-양쪽이 같은 gikka DB 를 보게 두고, nginx 를 돌린 뒤 확인되면 옛 코드를 지운다.
-각 단계가 되돌릴 수 있는 것이 이 순서를 고른 이유다.
+## recipe(기까) 백엔드 분리 — 전환만 남음
+배경·확정 사항은 `docs/recipe/CONTEXT.md` 18절이 단일 원본.
 
-### 완료 — 1단계: `gikka/` 신설 + 코드 이관 (2026-07-26)
-독립 Gradle 프로젝트 `gikka/`, 패키지 `com.chs.gikka`, 메인 `GikkaApplication`.
-recipe 메인 61 + 테스트 26 + Flyway 15개 이관, `./gradlew test` 187개 통과,
-local 프로파일 실기동으로 Flyway 검증(schema v15 일치)·엔드포인트 4개 200 확인.
-**`springboot/` 는 아직 무수정** — recipe 코드가 양쪽에 있고, 서비스는 여전히 app1/app2 가 한다.
-규칙·환경 구분은 `gikka/AGENTS.md` 에 정리했다.
+### 완료 (2026-07-26)
+recipe 백엔드가 **`honeychest/gikka` 별도 저장소**로 나갔다. 패키지 `com.chs.gikka`,
+메인 61 + 테스트 26 + Flyway 15개, `./gradlew test` 187개 통과, local 실기동으로
+Flyway schema v15 일치·엔드포인트 4개 200 확인. 자체 Jenkinsfile · docker-compose(gikka1,
+`chs-gikka` 이미지, 포트 8082) · deploy-gikka.sh 를 갖췄고, lab 에서는 gikka 관련
+배포 설정을 전부 걷어냈다(Jenkinsfile stage · compose gikka1).
 
-#### 병행 기간(1~4단계 사이)의 규칙 — 두 가지를 반드시 지킬 것
-1. **recipe 코드 수정은 `gikka/` 에만.** `springboot/domain/recipe/**` 는 곧 지울 사본이다.
-   양쪽에 반영하면 4단계 삭제 때 어느 쪽이 최신인지 알 수 없어진다.
-2. **gikka DB 마이그레이션을 추가하지 말 것** (V16 이후는 4단계 이후로 미룬다).
-   두 앱이 같은 `gikka` DB 에 각자의 Flyway 로 붙어 있는데, 새 파일을 `gikka/` 에만 넣으면
-   DB 이력에는 V16 이 적용되고 `springboot/` 의 locations 에는 그 파일이 없다 →
-   **다음 백엔드 배포 때 springboot 앱이 "applied migration not resolved locally" 로 기동 실패**한다
-   (Flyway 기본 validateOnMigrate=true). 꼭 필요하면 **같은 파일을 양쪽 폴더에 동시에** 넣는다.
-   기존 V1~V15 는 양쪽 내용이 같아 안전하다(2026-07-26 실기동으로 schema v15 일치 확인).
+**로컬 체크아웃**: `C:\Users\Tissue\IdeaProjects\gikka` (lab 과 같은 레벨)
 
-### 완료 — 2단계: 배포 파이프라인 (2026-07-26)
-- `gikka/Dockerfile` (`gikka.jar`) · `gikka/deploy-gikka.sh` (stop→up→헬스체크 50회×3초)
-- `springboot/docker-compose.yml` 에 `gikka1` — 이미지 `chs-gikka`, 컨테이너 `chs-gikka-1`,
-  포트 `127.0.0.1:8082:8080`, 힙 `-Xmx512m` / 컨테이너 1024M.
-  `<<: *common` 도 `env_file` 도 안 쓴다 — 저 앵커는 MySQL·Rabbit·Kafka·Redis 를 달고 오는데
-  gikka 는 그중 무엇도 쓰지 않고, `.env` 통째 주입은 안 쓰는 시크릿까지 컨테이너에 넣는다.
-  필요한 7개만 `environment` 에 명시하고 값은 compose 가 같은 폴더 `.env` 에서 보간한다.
-- `Jenkinsfile` — `DEPLOY_GIKKA_APP`(`gikka/`) + Build/Deploy Gikka App stage,
-  파라미터 `GIKKA_APP_ONLY`. 기존 `DEPLOY_GIKKA` 는 mac-mini launchd 추출기용이라 이름을 갈랐다.
+### 지금 상태 — 왜 아직 안 끝났나
+```
+사용자 → nginx → app1/app2 (springboot/domain/recipe)   ← 여전히 이쪽이 서비스 중
+                 chs-gikka-1 (8082)                      ← 아직 서버에 안 뜸
+```
+recipe 코드가 **양쪽에 다 있다.** 이건 의도된 상태다 — 새 것을 띄워 충분히 확인한 뒤
+nginx 주소만 바꾸고, 그 다음에 옛 것을 지운다. 롤백이 conf 원복 하나로 끝나는 구조.
 
-> **이번 푸시에서 gikka stage 는 안 돈다.** Jenkins 는 push 웹훅을 받으면 *그 시점 브랜치의*
-> Jenkinsfile 로 파이프라인을 정의한 뒤 Sync Local(git pull)을 돈다 — stage 정의가 처음 들어오는
-> 커밋은 옛 정의로 실행된다(2026-07-16 `Deploy Gikka Local` 신설 때 실측). 그래서 **첫 배포는
-> `GIKKA_APP_ONLY=true` 로 수동 재기동**해야 한다. 이후 `gikka/` 변경부터는 자동으로 잡힌다.
-> 참고: 이번 커밋은 `springboot/` 도 건드리므로(compose·AGENTS.md) 백엔드 재배포는 돈다 —
-> springboot 코드는 무수정이라 같은 코드가 롤링으로 다시 뜰 뿐이다.
+### 병행 기간 규칙 — 두 가지를 반드시 지킬 것
+1. **recipe 백엔드 수정은 gikka 저장소에만.** `springboot/domain/recipe/**` 는 곧 지울 사본이다.
+   양쪽에 반영하면 삭제 때 어느 쪽이 최신인지 알 수 없어진다.
+2. **gikka DB 마이그레이션을 추가하지 말 것** (V16 이후는 아래 3단계 이후로 미룬다).
+   두 앱이 같은 `gikka` DB 에 각자의 Flyway 로 붙어 있어서, 새 파일을 gikka 저장소에만 넣으면
+   DB 이력에는 적용되고 이쪽 locations 에는 없다 → **다음 백엔드 배포 때 springboot 앱이
+   "applied migration not resolved locally" 로 기동 실패**한다(validateOnMigrate 기본 true).
+   꼭 필요하면 **같은 파일을 양쪽에 동시에** 넣는다. 기존 V1~V15 는 내용이 같아 안전하다.
 
-서버 쪽에서 할 일(전제조건 확인·배포·진단·nginx 전환·분리 시 변경점)은 `gikka/serverAgent.md`
-한 곳에 모았다 — 저장소가 갈라져도 그 파일이 gikka 를 따라가도록 `gikka/` 안에 뒀다.
+### 1단계: gikka 저장소 최초 배포 (서버 작업)
+절차는 **gikka 저장소의 `serverAgent.md` §2** 에 있다(체크아웃·`.env`·Jenkins job·웹훅).
+이 시점에도 nginx 는 app1/app2 를 가리키므로 트래픽이 안 간다 — 마음껏 확인해도 무영향.
 
-### 다음 — 3단계: 배포 확인 → nginx 전환
-1. **먼저 gikka1 이 떠 있는지 확인**(위 수동 재기동 후). 이 시점엔 nginx 가 아직 app 으로 보내므로
-   트래픽은 안 간다 — 양쪽이 같은 DB 를 봐도 워커 중복은 `claimNext` 의 SKIP LOCKED 가 막는다.
-2. 확인되면 `chs/server/nginx/devcontext.conf` 를 고친다. **아직 안 고쳐 뒀다** — 미리 커밋해 두면
-   서버가 pull·reload 하는 순간 gikka1 이 없는 상태에서 recipe 가 502 가 되기 때문이다.
-   고칠 곳 (upstream 은 단일이라 `$sticky_backend`·`SRV_ID` 쿠키가 필요 없다):
-   - `upstream chs_gikka { server 127.0.0.1:8082 max_fails=2 fail_timeout=3s; }` 추가
-   - 기존 `location ^~ /api/recipe/llm/` 의 `proxy_pass` 를 `http://chs_gikka` 로
-     (read_timeout 120s·`proxy_next_upstream off` 는 그대로 — 사고 계기가 여전히 유효하다)
-   - 새 `location ^~ /api/recipe/` 블록 추가, `proxy_pass http://chs_gikka`.
-     **`location /api` 보다 먼저 매칭돼야 한다**(`^~` 라 접두 매칭 우선). read_timeout 은 지금과
-     같은 15s 로 시작한다 — X다운로드 resolve 가 그 아래에서 이미 돌고 있다.
-3. `nginx -t` → `nginx -s reload` → 기까 앱에서 보관함·냉장고·추천·등록 1건 확인.
-   **롤백 = conf 원복 후 reload.** 앱은 건드리지 않는다(옛 코드가 app1/app2 에 아직 살아 있다).
+### 2단계: 검증
+기까 앱에서 보관함·냉장고·추천·등록 1건·사전·X다운로드. 8082 로 직접 호출해도 된다.
 
-### 4단계: `springboot/` 에서 recipe 제거
-3단계가 실사용으로 확인된 뒤에만. `springboot/src/**/domain/recipe/**`(+test) 삭제,
-`application.properties`·`application-{local,prod}.properties` 의 `gikka.*` 삭제,
-`RecipeIsolationArchTest` 삭제(안쪽 규칙 둘은 `gikka/GikkaArchitectureTest` 로 이미 옮겨졌다),
-recipe 전용이던 의존성 정리(flyway-database-postgresql 은 챗봇 pgvector 도 쓰는지 확인 후 판단),
-`springboot/AGENTS.md` 의 recipe 관련 서술 정리.
+### 3단계: nginx 전환 ← 유일한 스위치
+`chs/server/nginx/devcontext.conf` (**이 저장소 소유** — 서버 전체 라우팅이라 gikka 로 안 넘겼다):
+- `upstream chs_gikka { server 127.0.0.1:8082 max_fails=2 fail_timeout=3s; }` 추가
+  (upstream 단일이라 `$sticky_backend`·`SRV_ID` 쿠키 불필요)
+- 기존 `location ^~ /api/recipe/llm/` 의 `proxy_pass` → `http://chs_gikka`
+  (read_timeout 120s·`proxy_next_upstream off` 유지 — 재시도하면 같은 Gemini 호출이 한 번 더
+  나가 무료 한도를 두 배로 태운다. 이 블록이 생긴 계기가 그것이다)
+- 새 `location ^~ /api/recipe/` 추가 → `proxy_pass http://chs_gikka`.
+  `location /api` 보다 먼저 매칭돼야 한다(`^~` 접두 우선). read_timeout 은 지금과 같은 15s
 
-### 5단계 (병행 가능): 프론트 격리
-호스트네임이 `gikka.devcontext.net` 이면 `MainRouter.jsx` 가 `RecipeApp` 만 루트에 마운트하고
-다른 라우트는 등록하지 않는다. 별도 빌드 파이프라인은 만들지 않는다.
+`nginx -t` → `nginx -s reload`. **롤백 = conf 원복 후 reload.**
+
+### 4단계: lab 에서 recipe 삭제 (3단계가 실사용으로 확인된 뒤에만)
+- `springboot/src/**/domain/recipe/**`(+test) 삭제
+- `application.properties`·`application-{local,prod}.properties` 의 `gikka.*` 삭제
+- `RecipeIsolationArchTest` 삭제 (안쪽 규칙 둘은 gikka 저장소 `GikkaArchitectureTest` 로 옮겨짐)
+- recipe 전용 의존성 정리 — `flyway-database-postgresql` 은 챗봇 pgvector 도 쓰는지 확인 후 판단
+- `springboot/AGENTS.md` 의 recipe 서술·패턴 표 정리, `frontend/.../backendPatterns.js` 의
+  `[gikka 저장소]` 경로 표기 확인
+- `docs/recipe/CONTEXT.md` 19절(격리 규율)에서 "백엔드는 domain/recipe 안에서만" 갱신
+
+### 5단계 (병행 가능): 프론트 번들 격리
+`MainRouter.jsx` 는 이미 `gikka.devcontext.net` 이면 `/recipe` 외 경로를 리다이렉트한다
+(64~71행 — CONTEXT 18절의 "미구현" 서술은 낡았다). 다만 **정적 import 23개가 그대로
+번들에 실려** gikka 도메인 사용자도 `index-*.js` 1.8M 을 받는다(RecipeApp 청크는 89K).
+lazy 화로 가르는 것이 남은 일. TWA 착수 전에 하는 것이 좋다.
 
 ### 사용자가 직접 해야 하는 것 (서버·콘솔)
 - DNS `gikka.devcontext.net` 레코드 / mac-mini nginx 서브도메인 서버 블록(정적 + `/api/recipe` 프록시)
