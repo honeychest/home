@@ -39,14 +39,17 @@ pipeline {
                     }
                     echo "변경 감지 범위: ${range}"
 
-                    def changed = sh(script: "git diff --name-only ${range}", returnStdout: true).trim()
-                    env.DEPLOY_BACK  = changed.contains('springboot/') ? 'true' : 'false'
-                    env.DEPLOY_FRONT = changed.contains('frontend/')   ? 'true' : 'false'
-                    env.DEPLOY_NEXUS = changed.contains('nexus/')      ? 'true' : 'false'
+                    def files = sh(script: "git diff --name-only ${range}", returnStdout: true)
+                        .trim().split('\n').findAll { it }
+                    // .md 등 문서만 바뀐 경우는 배포 대상에서 제외 — 문서 한 줄 고쳐서
+                    // 컨테이너 재기동/재배포가 걸리는 일을 만들지 않으려는 것이다.
+                    env.DEPLOY_BACK  = files.any { it.startsWith('springboot/')       && !it.endsWith('.md') } ? 'true' : 'false'
+                    env.DEPLOY_FRONT = files.any { it.startsWith('frontend/')         && !it.endsWith('.md') } ? 'true' : 'false'
+                    env.DEPLOY_NEXUS = files.any { it.startsWith('nexus/')            && !it.endsWith('.md') } ? 'true' : 'false'
                     // DEPLOY_GIKKA 는 mac-mini 호스트 추출기(launchd)다 — recipe 백엔드 앱이 아니다.
                     // 백엔드 앱(기까)은 2026-07-26 에 honeychest/gikka 저장소로 분리돼 나갔고
                     // 자기 Jenkinsfile 로 배포한다. 이 파이프라인은 그것을 알지 못한다.
-                    env.DEPLOY_GIKKA = changed.contains('gikka-extractor/') ? 'true' : 'false'
+                    env.DEPLOY_GIKKA = files.any { it.startsWith('gikka-extractor/') && !it.endsWith('.md') } ? 'true' : 'false'
                     env.GIT_SHORT    = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                 }
             }
