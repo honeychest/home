@@ -27,7 +27,7 @@
    같은 앱이라 같이 배포되는 편이 정상이고, 저장소를 가르면 API 계약 변경이 두 커밋으로 쪼개진다.
 2. **웹 `devcontext.net/recipe` 는 유지하지 않는다.** 앱 배포가 확인되면 폐지한다 →
    그래서 `devcontext.conf` 의 recipe 프록시를 `chs_gikka` 로 **전환하는 작업은 필요 없다**.
-   대신 3단계에서 `location ^~ /api/recipe/llm/` 블록을 **지운다**.
+   대신 아래 "lab 청소" 에서 `location ^~ /api/recipe/llm/` 블록을 **지운다**.
 3. **TWA 셸(Bubblewrap) 빌드 자리는 개발 PC 한 곳.** mac-mini 에는 설치하지 않는다.
    근거와 절차는 gikka 저장소 `android/README.md` 가 단일 원본.
 4. **nginx 설정은 git 으로 배포되지 않는다.** 이 저장소의 `.gitignore` 가 `/chs/` 를 제외하므로
@@ -43,24 +43,28 @@
    → **다음 백엔드 배포 때 springboot 앱이 "applied migration not resolved locally" 로 기동 실패**
    (validateOnMigrate 기본 true). 꼭 필요하면 같은 파일을 양쪽에 동시에 넣는다.
 
-### 1단계: 앱 화면 실기 확인 (다음 작업)
-`gikka.devcontext.net` 에서 로그인·보관함·냉장고·추천·등록 1건·사전·X다운로드.
-**iOS 실기기로** 여백·글꼴(Pretendard)·하단 탭 안전영역을 볼 것 — 리셋 CSS 를 lab 의 tailwind
-preflight 에서 gikka 의 `frontend/src/base.css` 로 갈아탔으므로, 어긋날 수 있는 곳이 여기뿐이다.
-증상 예: 제목이 커진다 / 문단마다 여백이 생긴다 / 목록에 번호·들여쓰기가 보인다
-→ `base.css` 에 그 요소의 교정이 빠진 것이다(원본은 `tailwindcss/preflight.css`).
-문제가 있으면 `rollback-gikka.sh` → 2) 또는 nginx conf 원복으로 즉시 되돌아간다.
+### 앱 패키징 1차 완료 (2026-07-27)
+- URL 을 `/recipe` 에서 **루트로** 옮겼다(도메인이 앱 전용이라 경로에 이름을 또 붙일 이유가 없다).
+  TWA 셸에 start_url 이 박히므로 스토어에 올리기 전에 해야 했던 작업이다.
+- TWA 셸 첫 빌드 완료 — applicationId `gikka.app` · fallback `customtabs` · 알림 위임 on ·
+  결제·위치 off · portrait. 설정 원본은 gikka 저장소 `android/twa-manifest.json`(커밋됨).
+- `assetlinks.json` 을 `frontend/public/.well-known/` 에 두어 프론트 배포 파이프라인이 서빙한다.
+- **APK 를 실기기에 설치해 주소창 없이 뜨는 것과 기능 전부를 확인했다.**
 
-### 2단계: 앱 패키징 (TWA)
-절차·문답 값·릴리스 규칙은 **gikka 저장소 `android/README.md`** 가 단일 원본.
-키스토어 생성·백업(파일과 비밀번호를 서로 다른 곳에) → AAB → Play Console 비공개 테스트 →
-**Play 앱 서명 키 SHA-256** 확보 → `frontend/public/.well-known/assetlinks.json` 에 지문을 넣고
-push(프론트 배포 파이프라인이 서빙한다) → 앱에서 주소창이 안 보이는지 확인.
-(지문은 업로드 키가 아니다. 틀리면 앱이 죽지 않고 브라우저 모드로 조용히 떨어진다.)
-남은 콘솔 작업: Google OAuth 승인된 오리진에 `https://gikka.devcontext.net` 추가.
-동의 화면이 "테스트" 상태면 테스트 사용자 목록에 넣은 계정만 로그인된다(최대 100명).
+### 남은 것: Play Console (다음 작업)
+1. 개발자 계정 등록(25달러 1회) → 비공개 테스트 트랙 → `app-release-bundle.aab` 업로드
+2. **Play 앱 서명 키 SHA-256** 확보 → `assetlinks.json` 의 `sha256_cert_fingerprints` 배열에
+   **추가**(로컬 업로드 키 지문과 나란히 둔다 — 그래야 내 APK 와 스토어 앱 양쪽 다 주소창이 없다)
+   → push 하면 파이프라인이 배포한다
+3. 릴리스마다 `twa-manifest.json` 커밋 — `appVersionCode` 가 거기 있고, 빠뜨리면 다음 빌드가
+   옛 번호로 되돌아가 Play 가 업로드를 거부한다
+4. 콘솔: Google OAuth 승인된 오리진에 `https://gikka.devcontext.net` 추가.
+   동의 화면이 "테스트" 상태면 테스트 사용자 목록에 넣은 계정만 로그인된다(최대 100명)
+5. 개인 계정은 프로덕션 승격에 "테스터 12명 · 14일 연속 설치 유지" 요건이 있다
 
-### 3단계: lab 청소 (2단계가 실사용으로 확인된 뒤에만)
+절차·함정(윈도우 JDK 경로 공백 등)은 gikka 저장소 `android/README.md` 가 단일 원본.
+
+### 그 뒤: lab 청소 (앱이 안정화된 뒤에만)
 - `frontend/src/domain/recipe/**`(55개) · `frontend/public/recipe/**` 삭제
 - recipe 참조 3곳 정리 — `app/router/MainRouter.jsx`(라우트·`GikkaHostGuard`·챗봇 숨김 접두어),
   `cssLayoutGuard.test.ts`(recipe 규칙 부분), `shared/ui/samples/visualSamples.js`(카탈로그 주석)
