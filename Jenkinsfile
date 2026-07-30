@@ -9,7 +9,6 @@ pipeline {
         booleanParam(name: 'BACKEND_ONLY',  defaultValue: false, description: 'Backend 강제 배포')
         booleanParam(name: 'FRONTEND_ONLY', defaultValue: false, description: 'Frontend 강제 배포')
         booleanParam(name: 'NEXUS_ONLY',    defaultValue: false, description: 'Nexus 강제 배포')
-        booleanParam(name: 'GIKKA_ONLY',    defaultValue: false, description: 'gikka 로컬 추출기 강제 재기동')
     }
 
     stages {
@@ -46,10 +45,6 @@ pipeline {
                     env.DEPLOY_BACK  = files.any { it.startsWith('springboot/')       && !it.endsWith('.md') } ? 'true' : 'false'
                     env.DEPLOY_FRONT = files.any { it.startsWith('frontend/')         && !it.endsWith('.md') } ? 'true' : 'false'
                     env.DEPLOY_NEXUS = files.any { it.startsWith('nexus/')            && !it.endsWith('.md') } ? 'true' : 'false'
-                    // DEPLOY_GIKKA 는 mac-mini 호스트 추출기(launchd)다 — recipe 백엔드 앱이 아니다.
-                    // 백엔드 앱(기까)은 2026-07-26 에 honeychest/gikka 저장소로 분리돼 나갔고
-                    // 자기 Jenkinsfile 로 배포한다. 이 파이프라인은 그것을 알지 못한다.
-                    env.DEPLOY_GIKKA = files.any { it.startsWith('gikka-extractor/') && !it.endsWith('.md') } ? 'true' : 'false'
                     env.GIT_SHORT    = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                 }
             }
@@ -162,32 +157,6 @@ pipeline {
             }
             steps {
                 sh 'cd /Users/honey/devcontext/project/lab/springboot && docker compose pull nexus && docker compose up -d nexus'
-            }
-        }
-
-        // gikka 로컬 추출기(mac-mini 호스트 상시 프로세스)는 도커가 아니라 launchd 가 띄운다.
-        // launchd 가 체크아웃의 server.py 를 직접 돌리므로(사본 없음 — plist 주석 참고)
-        // Sync Local 의 git pull 이면 파일은 이미 최신이고, 재기동만 하면 반영된다.
-        // 이 stage 가 없던 동안 gikka-extractor/ 변경은 아무리 푸시해도 반영되지 않았다 (2026-07-16 발견).
-        // (폴더명 gikka/ → gikka-extractor/ 로 변경 — recipe 백엔드 분리로 gikka/ 는 새 Spring Boot
-        // 서비스 자리가 됨. mac-mini 의 plist 실행 경로도 이 이름으로 함께 갱신 필요.)
-        //
-        // 주의 (2026-07-16 실측): Jenkins 는 push 웹훅을 받으면 그 시점 브랜치의 Jenkinsfile 로
-        // 파이프라인을 정의한 뒤 Sync Local(git pull)을 돈다. 그래서 stage 정의 자체가 처음
-        // 들어오는 커밋(예: 이 stage 를 신설한 recipe - 24)은 옛 정의로 실행돼 한 박자 늦는다 —
-        // 그 커밋만 수동 재기동이 필요하고, 이후 gikka-extractor/ 변경부터는 자동으로 잡힌다.
-        stage('Deploy Gikka Local') {
-            when {
-                allOf {
-                    branch 'main'
-                    anyOf {
-                        environment name: 'DEPLOY_GIKKA', value: 'true'
-                        expression { return params.GIKKA_ONLY }
-                    }
-                }
-            }
-            steps {
-                sh 'launchctl kickstart -k gui/$(id -u)/com.gikka.local-extractor'
             }
         }
     }
