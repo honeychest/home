@@ -2,8 +2,8 @@
 // [AGENT] 앱 라우팅 — BrowserRouter 기반
 // / → /binance 리다이렉트, /trade(TradePage), /binance(BinancePage), /analysis(AnalysisPage)
 // 연관: TradePage.jsx, BinancePage.jsx, AnalysisPage.jsx, ErrorPage.tsx
-import { Suspense, lazy, useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Suspense, useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import FloatingChatbot from '@/components/chatbot/FloatingChatbot.jsx';
 
 import ErrorPage     from '../../page/error/ErrorPage.tsx';
@@ -23,7 +23,6 @@ import AdminTestDomainPlaceholder from '../../page/admin/test/AdminTestDomainPla
 import RawWriterTestPage from '../../page/admin/test/RawWriterTestPage.jsx';
 import ChatbotTestPage from '../../page/admin/test/ChatbotTestPage.jsx';
 import RandomPage    from '../../page/random/RandomPage.jsx';
-const RecipeApp = lazy(() => import('../../domain/recipe/page/RecipeApp.tsx'));
 import RandomLayoutEditorPage from '../../page/random/RandomLayoutEditorPage.jsx';
 import ForbiddenPage from '../../page/forbidden/ForbiddenPage.jsx';
 import { SignalPage } from './lazyPages.js';
@@ -50,33 +49,13 @@ function RouteFallback() {
     );
 }
 
-// 전역 챗봇 — 자체 UI를 가진 전체화면 경로에서는 숨김 (recipe: 모바일 전용 하단 탭과 겹침)
-const CHATBOT_HIDDEN_PREFIXES = ['/recipe'];
-
 function GlobalChatbot() {
-    const { pathname } = useLocation();
-    if (CHATBOT_HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
-        return null;
-    }
     return <FloatingChatbot />;
-}
-
-// gikka.devcontext.net 은 recipe 전용 도메인 — 트레이딩/관리자 등 다른 라우트가
-// 뜨면 안 됨(예: BinancePage 의 실시간 WS). /recipe 이외 경로는 전부 /recipe 로 되돌린다.
-const GIKKA_HOSTNAME = 'gikka.devcontext.net';
-
-function GikkaHostGuard({ children }) {
-    const { pathname } = useLocation();
-    if (window.location.hostname === GIKKA_HOSTNAME && !pathname.startsWith('/recipe')) {
-        return <Navigate to="/recipe" replace />;
-    }
-    return children;
 }
 
 function MainRouter() {
     return (
         <Router>
-            <GikkaHostGuard>
             <Routes>
                 {/* 초기 접속: /binance로 리다이렉트 */}
                 <Route path="/" element={<Navigate to="/binance" replace />} />
@@ -126,16 +105,6 @@ function MainRouter() {
                 {/* Logistics 페이지 (전체화면, Layout 미사용) */}
                 <Route path="/logistics" element={<LogisticsPage />} />
 
-                {/* Recipe(기까) 페이지 — 모바일 전용, 전체화면, domain/recipe 격리 */}
-                <Route
-                    path="/recipe/*"
-                    element={(
-                        <Suspense fallback={<RouteFallback />}>
-                            <RecipeApp />
-                        </Suspense>
-                    )}
-                />
-
                 {/*Random Picker 페이지*/}
                 <Route path="/winner" element={<RandomPage />} />
                 <Route path="/winner/editor" element={<RandomLayoutEditorPage />} />
@@ -154,7 +123,6 @@ function MainRouter() {
 
                 <Route path="*" element={<ErrorPage code="404" />} />
             </Routes>
-            </GikkaHostGuard>
             <GlobalChatbot />
         </Router>
     );
