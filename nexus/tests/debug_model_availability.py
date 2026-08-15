@@ -100,6 +100,8 @@ async def detect_lmstudio_model(client: AsyncOpenAI) -> str | None:
     try:
         models = await client.models.list()
         ids = [m.id for m in models.data]
+        if settings.LMSTUDIO_MODEL:
+            return settings.LMSTUDIO_MODEL if settings.LMSTUDIO_MODEL in ids else None
         return ids[0] if ids else None
     except Exception as e:
         print(f"  ✘  LM Studio /v1/models 호출 실패: {e}")

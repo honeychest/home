@@ -233,7 +233,7 @@ class LLMCaller:
         self.lm_model: str | None = None
 
     async def init(self):
-        self.lm_model = await detect_lmstudio_model(self.lm_client)
+        self.lm_model = settings.LMSTUDIO_MODEL or await detect_lmstudio_model(self.lm_client)
         if self.lm_model:
             print(f"  [LM Studio] {self.lm_model}")
         elif self.lmstudio_only:
