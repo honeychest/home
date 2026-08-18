@@ -4,7 +4,7 @@
 > 소스 위치: `springboot/src/main/java/com/chs/springboot/global/monitor/health/` (27개 클래스). 설계 원본은 `docs/health-check-board.md`.
 
 ## 한 줄 요약
-시스템의 인프라·피드·파이프라인·데이터·스케줄러·외부연동·리소스 7계층을 **34개 체크로 상시 점검**하고, "전부 OK"를 한 화면에서 확인하는 운영자용 헬스 보드의 백엔드다. 정상은 저장하지 않고 **실패(FAIL) 전환·복구만** `health_check_event` 테이블에 적립하며, DOWN 발생/복구 시 텔레그램으로 알린다. API는 `/api/admin/health/**`.
+시스템의 인프라·피드·파이프라인·데이터·스케줄러·외부연동·리소스 7계층을 **33개 체크로 상시 점검**하고, "전부 OK"를 한 화면에서 확인하는 운영자용 헬스 보드의 백엔드다. 정상은 저장하지 않고 **실패(FAIL) 전환·복구만** `health_check_event` 테이블에 적립하며, DOWN 발생/복구 시 텔레그램으로 알린다. API는 `/api/admin/health/**`.
 
 ## 이런 걸 물을 때 찾으면 된다 (검색 키워드)
 - "헬스 체크 보드 / admin health / 시스템 상태 점검 / 전부 정상 확인"
@@ -16,7 +16,7 @@
 - "리더 노드에서만 점검 / 비리더 대기 UNKNOWN / 클러스터 스냅샷"
 
 ## 핵심 개념·용어
-- **체크(check)**: 점검 항목 1개. `HealthCheckCatalog` enum에 34개가 코드로 고정돼 있고, 각 항목이 자기 계층·우선순위·상태 소스·판정 임계를 한 줄로 선언한다.
+- **체크(check)**: 점검 항목 1개. `HealthCheckCatalog` enum에 33개가 코드로 고정돼 있고, 각 항목이 자기 계층·우선순위·상태 소스·판정 임계를 한 줄로 선언한다.
 - **checkKey**: 체크의 문자열 식별자(예: `infra-mysql`, `pipe-rollup-1m`). `health_check_event.check_key`로 이력과 연결된다.
 - **계층(HealthLayer)**: 보드 그룹 단위. S1 인프라 → S2 피드 → S3 파이프라인 → S4 데이터 무결성 → S5 리더/스케줄러 → S6 외부연동 → S7 리소스 (enum 이름은 `L1_INFRA`~`L7_RESOURCE`, 화면 라벨은 `S1`~`S7`).
 - **우선순위(HealthPriority)**: `CRITICAL`(치명)·`HIGH`(중요)·`LOW`(여유). 치명=끊기면 수집·저장·차트가 즉시 망가짐.
@@ -40,22 +40,22 @@
  각 잡의 beat/fail ─▶ HealthHeartbeat ───┘                              ▼
                                      (상태 전환 시) ──▶ HealthAlertNotifier ──▶ 텔레그램
                                                                         │
- GET /api/admin/health/checks ─▶ HealthCheckService.getChecks() ─▶ 34개 체크 live 판정 + 최근 실패 3건
+ GET /api/admin/health/checks ─▶ HealthCheckService.getChecks() ─▶ 33개 체크 live 판정 + 최근 실패 3건
 ```
 핵심: **보드 요청 경로에는 실접속 프로브가 없다.** 화면은 이미 적립된 이벤트/하트비트/스냅샷을 읽어 판정만 하므로 빠르고, 정상 지속 시 DB write는 0이다.
 
 ### API — `HealthCheckController` (`@RequestMapping("/api/admin/health")`)
-- `GET /checks` — 34개 체크 전체 + 상태 요약. 응답: `{ generatedAt, summary{ total, up, degraded, down, unknown, allOk }, checks[] }`. `allOk`는 DOWN·DEGRADED가 모두 0일 때 true.
+- `GET /checks` — 33개 체크 전체 + 상태 요약. 응답: `{ generatedAt, summary{ total, up, degraded, down, unknown, allOk }, checks[] }`. `allOk`는 DOWN·DEGRADED가 모두 0일 때 true.
 - `GET /events` — 최근 실패 이력 100건(최신순, `HealthEventView`).
 - 보호: `SecurityConfig`가 `/api/admin/**`를 `ADMIN_ACCESS` 권한으로 자동 보호(별도 어노테이션 없음).
 
 ### 집계 — `HealthCheckService.getChecks()`
-- `HealthCheckCatalog.all()`(34개)을 순회하며 각 체크의 상태를 `c.source().judge(c, ports)` **한 줄로만** 판정한다(서비스는 소스별로 분기하지 않음 — 판정은 소스가 소유).
+- `HealthCheckCatalog.all()`(33개)을 순회하며 각 체크의 상태를 `c.source().judge(c, ports)` **한 줄로만** 판정한다(서비스는 소스별로 분기하지 않음 — 판정은 소스가 소유).
 - `Ports`(요청마다 구성)로 협력자를 넘긴다: `FeedHealthRegistry` 스냅샷 · `HealthHeartbeat` · `MetricCollectorService` · `HealthCheckEventRepository` · 리더 발행 `ClusterView`.
 - 각 체크에 최근 실패 3건(`findTop3ByCheckKeyOrderByLastFailedAtDesc`)을 붙이고, **현재 UP인데 최근 창(`recent-window-hours`, 기본 24h) 안에 복구된 장애**가 있으면 `recentlyRecovered=true`로 "최근이상" 흔적을 표시한다.
 - 반환 DTO는 `HealthCheckView`(key/label/description/layer/layerCode/priority/status/detail/thresholdText/최근실패 등).
 
-### 카탈로그 — `HealthCheckCatalog` (34개 enum, 마스터 체크리스트)
+### 카탈로그 — `HealthCheckCatalog` (33개 enum, 마스터 체크리스트)
 각 항목이 `(key, layer, priority, source, [feedId | 하트비트 임계], label, description)`를 한 줄로 선언. 정적 초기화 블록이 "FEED 소스↔feedId", "HEARTBEAT 소스↔임계 선언"의 일치를 **클래스 로딩 시점에 강제**(fail-fast).
 
 | 계층 | checkKey (우선순위) | 상태 소스 |
@@ -63,7 +63,7 @@
 | **S1 인프라** | infra-mysql·infra-redis·infra-kafka·infra-postgres (전부 치명) | INFRA |
 | **S2 피드** | feed-binance-ticker(치명)·feed-binance-aggtrade(치명)·feed-upbit(중요) | FEED |
 |  | feed-ws-reconnect(중요) | EVENT |
-| **S3 파이프라인** | pipe-kafka-consumer(치명 60/180)·pipe-aggtrade-flush(치명 60/180)·pipe-rollup-1s(치명 10/30)·pipe-rollup-1m(치명 180/360)·pipe-rollup-5m(중요 720/1200)·pipe-empty-candle-fix(중요 720/1200)·pipe-s3-archive(중요 1500/2100) | HEARTBEAT |
+| **S3 파이프라인** | pipe-kafka-consumer(치명 60/180)·pipe-aggtrade-flush(치명 60/180)·pipe-rollup-1s(치명 10/30)·pipe-rollup-1m(치명 180/360)·pipe-rollup-5m(중요 720/1200)·pipe-empty-candle-fix(중요 720/1200) | HEARTBEAT |
 | **S4 데이터** | data-candle-gap(중요)·data-quality(중요) | EVENT |
 | **S5 스케줄러** | sched-leader-election(치명 15/30)·sched-weather(중요 1500/2100)·sched-news(중요 720/1200)·sched-telegram-poll(중요 150/300)·sched-openinterest-poll(중요 150/300)·sched-analysis(중요 180/360) | HEARTBEAT |
 | **S6 외부연동** | ext-telegram-send(중요)·ext-llm(중요)·ext-weather-api(여유)·ext-news-rss(여유)·ext-virustotal(여유)·ext-safebrowsing(여유) | EVENT |

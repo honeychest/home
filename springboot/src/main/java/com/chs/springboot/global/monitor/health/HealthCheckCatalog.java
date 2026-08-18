@@ -1,4 +1,4 @@
-// [AGENT] 크리티컬 헬스 체크 카탈로그 — 마스터 체크리스트(34개)를 코드로 고정
+// [AGENT] 크리티컬 헬스 체크 카탈로그 — 마스터 체크리스트(33개)를 코드로 고정
 // 각 항목은 자기 상태 소스(HealthSource)와 판정 기준(임계 문구·HEARTBEAT 임계 초)을 선언한다.
 // 새 체크 추가 = 여기 한 줄(HEARTBEAT 는 경고/다운 초 포함 — 대상 주기의 약 2.5×/5× grace).
 // agentRunner(Codex runner) 체크는 제외 — lab(home) 기준. 문서: docs/health-check-board.md
@@ -29,7 +29,6 @@ public enum HealthCheckCatalog {
     PIPE_ROLLUP_1M("pipe-rollup-1m", HealthLayer.L3_PIPELINE, HealthPriority.CRITICAL, HealthSource.HEARTBEAT, 180, 360, "1분 롤업 최근 성공", "1분봉 롤업이 최근 정상 수행됐는지"),                             // 1분 주기
     PIPE_ROLLUP_5M("pipe-rollup-5m", HealthLayer.L3_PIPELINE, HealthPriority.HIGH, HealthSource.HEARTBEAT, 720, 1200, "5분 롤업 최근 성공", "5분봉 롤업이 최근 정상 수행됐는지"),                                // 5분 주기
     PIPE_EMPTY_CANDLE_FIX("pipe-empty-candle-fix", HealthLayer.L3_PIPELINE, HealthPriority.HIGH, HealthSource.HEARTBEAT, 720, 1200, "빈캔들 교정(5분) 성공", "WS 공백 구간 빈 캔들 교정(5분)이 최근 수행됐는지"), // 5분 주기
-    PIPE_S3_ARCHIVE("pipe-s3-archive", HealthLayer.L3_PIPELINE, HealthPriority.HIGH, HealthSource.HEARTBEAT, 1500, 2100, "raw→S3 아카이브(10분) 성공", "raw→S3 아카이브(10분)가 최근 성공했는지"),               // 10분 주기
 
     // ── L4 데이터 무결성 ──────────────────────────────────────────────
     DATA_CANDLE_GAP("data-candle-gap", HealthLayer.L4_DATA, HealthPriority.HIGH, HealthSource.EVENT, "캔들 gap 없음", "캔들 데이터에 누락 구간(gap)이 없는지"),

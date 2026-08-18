@@ -4,12 +4,9 @@
 package com.chs.springboot.domain.binance.service;
 
 import com.chs.springboot.domain.binance.repository.RawAggTradeRepository;
-import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
-import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.monitor.service.MetricCollectorService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -21,12 +18,10 @@ import java.time.ZoneOffset;
 public class RawAggTradeArchiveScheduler {
 
     private static final int MAX_CONSECUTIVE_FAILURES = 3;
-    private static final String HEALTH_KEY = HealthCheckCatalog.PIPE_S3_ARCHIVE.key();
 
     private final RawAggTradeRepository rawAggTradeRepository;
     private final S3ArchiveService s3ArchiveService;
     private final MetricCollectorService metricCollectorService;
-    private final HealthHeartbeat healthHeartbeat;
 
     @Value("${spring.task.scheduling.enabled:true}")
     private boolean schedulingEnabled;
@@ -43,36 +38,29 @@ public class RawAggTradeArchiveScheduler {
 
     public RawAggTradeArchiveScheduler(RawAggTradeRepository rawAggTradeRepository,
                                        S3ArchiveService s3ArchiveService,
-                                       MetricCollectorService metricCollectorService,
-                                       HealthHeartbeat healthHeartbeat) {
+                                       MetricCollectorService metricCollectorService) {
         this.rawAggTradeRepository = rawAggTradeRepository;
         this.s3ArchiveService = s3ArchiveService;
         this.metricCollectorService = metricCollectorService;
-        this.healthHeartbeat = healthHeartbeat;
     }
 
     /**
-     * 10분마다 실행. 아래 조건 충족 시 하루치 데이터 아카이빙 수행.
+     * 현재 자동 스케줄 등록 없음. S3 재연결 시 자동 등록을 복구하면 아래 조건으로 하루치 데이터 아카이빙 수행.
      * - CPU < cpuMaxPercent (70%)
      * - 보존 기간(retentionDays) 이전 데이터 존재
-     *
-     * initialDelay: 서버 기동 안정화 후 1분 뒤 첫 실행
      */
-    @Scheduled(fixedDelay = 600_000L, initialDelay = 60_000L)
     public void run() {
         if (!schedulingEnabled) return;
 
         if (disabled) {
             log.warn("[Archive] S3 연속 {}회 실패로 비활성화 상태 — 스킵 (마지막 에러: {})",
                     MAX_CONSECUTIVE_FAILURES, lastFailureMessage);
-            healthHeartbeat.fail(HEALTH_KEY, "연속 " + MAX_CONSECUTIVE_FAILURES + "회 실패로 비활성화: " + lastFailureMessage);
             return;
         }
 
         double cpu = metricCollectorService.getLastCpu();
         if (cpu >= 0 && cpu >= cpuMaxPercent) {
             log.warn("[Archive] CPU={}% 초과 — 스킵 (임계값={}%)", String.format("%.1f", cpu), cpuMaxPercent);
-            healthHeartbeat.beat(HEALTH_KEY); // 의도된 throttle — 정상
             return;
         }
 
@@ -82,7 +70,6 @@ public class RawAggTradeArchiveScheduler {
         Long minTradedAt = rawAggTradeRepository.findMinTradedAtBefore(cutoffMs);
         if (minTradedAt == null) {
             log.warn("[Archive] 아카이빙 대상 없음 (보존기간 {}일)", retentionDays);
-            healthHeartbeat.beat(HEALTH_KEY); // 대상 없음 — 정상
             return;
         }
 
@@ -98,11 +85,9 @@ public class RawAggTradeArchiveScheduler {
 
         if (result.success()) {
             consecutiveFailures = 0;
-            healthHeartbeat.beat(HEALTH_KEY);
         } else {
             consecutiveFailures++;
             lastFailureMessage = result.errorMessage();
-            healthHeartbeat.fail(HEALTH_KEY, lastFailureMessage);
             log.error("[Archive] 실패 ({}/{}): {}", consecutiveFailures, MAX_CONSECUTIVE_FAILURES, lastFailureMessage);
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
                 disabled = true;

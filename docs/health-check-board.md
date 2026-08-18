@@ -46,7 +46,6 @@
 | pipe-rollup-1m | L3 파이프라인 | P0 | 1분 롤업 최근 성공 | ✕ |
 | pipe-rollup-5m | L3 파이프라인 | P1 | 5분 롤업 최근 성공 | ✕ |
 | pipe-empty-candle-fix | L3 파이프라인 | P1 | 빈캔들 교정(5분) 성공 | ✕ |
-| pipe-s3-archive | L3 파이프라인 | P1 | raw→S3 아카이브(10분) 성공 | ✕ |
 | data-candle-gap | L4 무결성 | P1 | 캔들 gap 없음 | ○ DataGapCard |
 | data-quality | L4 무결성 | P1 | 데이터 품질 | ○ DataQualityCard |
 | sched-leader-election | L5 스케줄러 | P0 | Redis 리더 선출(5s) | △ |

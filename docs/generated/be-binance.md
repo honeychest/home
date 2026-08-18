@@ -41,7 +41,7 @@
 - 백필/보정: `AggTradeBackfillService`(REST aggTrades), `OiBackfillService`(OI), `ManualBackfillService`(수동: `collectRawAggTrade`, `fillMissing1mWithKlines`, `deleteFlatData`, `correctFlatCandles`, `correctOutlierCandles` 등). `OpenInterestPollingService`(OI 폴링).
 
 ### 3) 아카이빙·데이터 점검 (S3 & Data Gap)
-- `RawAggTradeArchiveScheduler`: CPU·보존기간 고려 스케줄 아카이빙.
+- `RawAggTradeArchiveScheduler`: CPU·보존기간을 고려한 S3 아카이빙 로직. 현재 자동 스케줄은 등록하지 않으며, S3 재연결 시 복구할 수 있다.
 - `S3ArchiveService`: CSV 작성(`writeToCsvTempFile`) → S3 업로드(`uploadAndLog`) → DB 배치 삭제(`deleteInBatches`). 이력은 `S3ArchiveLog`(`s3_archive_log`).
 - `ArchiveScanService`: S3의 `.csv`를 스캔해 DB 미기록 파일을 보정.
 - `DataGapAdminService`: 데이터 공백 탐지(`rawAggTradeGap`/`candleGap`/`oiGap`). 컨트롤러 `ArchiveAdminController`, `DataGapAdminController`, `ManualBackfillController`, `AggTradeAdminController`.

@@ -12,7 +12,7 @@
 - `be-analysis.md` — 조건 트리(거래량/가격/델타/시간) 템플릿 저장·평가, 1분 주기 리더 노드 자동 탐지(SSE), 수동 탐색.
 - `be-chatbot.md` — 코드베이스 RAG 챗봇. pageId 가중검색·맥락보강·로그적재·3종 재색인(전체/문서/도메인).
 - `be-binance.md` — 체결·틱·청산·OI 수집 → 1s/1m/5m 롤업·백필 → S3 아카이빙 → 시그널 SSE/WS 브로드캐스트.
-- `be-health.md` — 시스템 헬스 체크 보드 백엔드. 7계층 34체크 상시 점검, FAIL/복구만 `health_check_event` 적립, DOWN 텔레그램 알림. `/api/admin/health/**`.
+- `be-health.md` — 시스템 헬스 체크 보드 백엔드. 7계층 33체크 상시 점검, FAIL/복구만 `health_check_event` 적립, DOWN 텔레그램 알림. `/api/admin/health/**`.
 
 ### 공통
 - `domain-glossary.md` — 프로젝트 공통 용어집. 용어 뜻을 물을 때 1차 참조.
@@ -57,7 +57,7 @@
  logistics  →  (프론트 시뮬레이션 중심)
  random     →  (프론트 전용)
  admin      →  be-chatbot(로그/테스트) + 운영 API들
- health     →  be-health (/api/admin/health/** — 34체크 판정·이력·알림)
+ health     →  be-health (/api/admin/health/** — 33체크 판정·이력·알림)
 ```
 
 데이터 의존 방향(백엔드):
