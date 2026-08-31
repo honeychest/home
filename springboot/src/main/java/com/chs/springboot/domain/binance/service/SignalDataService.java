@@ -1,13 +1,10 @@
 // [AGENT] T4-STEALTH: Signal Dashboard 핵심 비즈니스 로직 — init/history/patterns/params/divergence/candles API 데이터 조립
 // [AGENT] signal futures 캔들 조회를 최신 limit 기준에서 time range 기준으로 전환
-// 연관파일: SignalController.java, RawAggTradeRepository.java, OpenInterestRepository.java, ForceOrderRepository.java, AggTrade1mRepository.java, AggTrade5mRepository.java, SignalParamsRepository.java
+// 연관파일: SignalController.java, OpenInterestRepository.java, ForceOrderRepository.java, SignalCandleSource.java, SignalParamsRepository.java
 // 주요메서드: getInitData, getHistoryData, findPatterns, calcLargeTradeThreshold, calcMovingAverage, getParams, saveParams, getDivergence, getCandles(volume추가), getCandlesByDate, getCandleDates
 package com.chs.springboot.domain.binance.service;
 
-import com.chs.springboot.domain.binance.model.AggTrade5m;
 import com.chs.springboot.domain.binance.model.SignalParams;
-import com.chs.springboot.domain.binance.repository.AggTrade1mRepository;
-import com.chs.springboot.domain.binance.repository.AggTrade5mRepository;
 import com.chs.springboot.domain.binance.repository.ForceOrderRepository;
 import com.chs.springboot.domain.binance.repository.OpenInterestRepository;
 import com.chs.springboot.domain.binance.repository.SignalParamsRepository;
@@ -20,7 +17,6 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +28,7 @@ public class SignalDataService {
 
     private final OpenInterestRepository openInterestRepository;
     private final ForceOrderRepository       forceOrderRepository;
-    private final AggTrade1mRepository       agg1mRepository;
-    private final AggTrade5mRepository       agg5mRepository;
+    private final SignalCandleSource         candleSource;
     private final SignalParamsRepository     signalParamsRepository;
 
     public Map<String, Object> getInitData(String symbol) {
@@ -64,19 +59,15 @@ public class SignalDataService {
         log.info("[SignalEnergy] ▶ symbol={} range={} fromMs={} nowMs={}", symbol, range, fromMs, nowMs);
 
         // 10m·50m 이하 → 1분봉 롤업 / 그 이상 → 5분봉 롤업
-        String energyTable = switch (range) {
-            case "1m", "5m", "10m", "30m", "50m" -> "agg_trade_1m";
-            default -> "agg_trade_5m";
+        SignalCandleSource.Interval interval = switch (range) {
+            case "1m", "5m", "10m", "30m", "50m" -> SignalCandleSource.Interval.ONE_MINUTE;
+            default -> SignalCandleSource.Interval.FIVE_MINUTES;
         };
-        Map<String, Object> energyRow = switch (range) {
-            case "1m", "5m", "10m", "30m", "50m" -> agg1mRepository.sumEnergyBySymbolAndTimeRange(symbol, fromMs, nowMs);
-            default                               -> agg5mRepository.sumEnergyBySymbolAndTimeRange(symbol, fromMs, nowMs);
-        };
-        log.info("[SignalEnergy] table={} energyRow={}", energyTable, energyRow);
-
-        BigDecimal longEnergy  = toBd(energyRow.get("long_energy"));
-        BigDecimal shortEnergy = toBd(energyRow.get("short_energy"));
-        log.info("[SignalEnergy] raw longEnergy={} shortEnergy={}", longEnergy, shortEnergy);
+        SignalCandleSource.Energy energy = candleSource.sumEnergy(
+                symbol, interval, fromMs, nowMs, SignalCandleSource.QueryMode.COMPLETED);
+        BigDecimal longEnergy = energy.longEnergy();
+        BigDecimal shortEnergy = energy.shortEnergy();
+        log.info("[SignalEnergy] interval={} longEnergy={} shortEnergy={}", interval.value(), longEnergy, shortEnergy);
 
         // 누계: SUM 집계 쿼리 (전체 범위, 목록 조회 없음)
         BigDecimal longLiqTotal  = BigDecimal.ZERO;
@@ -173,13 +164,15 @@ public class SignalDataService {
         BigDecimal minVol = volume.multiply(new BigDecimal("0.5"));
         BigDecimal maxVol = volume.multiply(new BigDecimal("1.5"));
 
-        var candles = agg5mRepository.findBySymbolAndVolumeBetween(symbol, minVol, maxVol);
+        var candles = candleSource.findByQuoteVolume(
+                symbol, SignalCandleSource.Interval.FIVE_MINUTES, minVol, maxVol,
+                SignalCandleSource.QueryMode.COMPLETED);
 
         return candles.stream()
                 .limit(5)
                 .map(c -> {
                     Map<String, Object> pattern = new HashMap<>();
-                    pattern.put("candleTime",  String.valueOf(c.getCandleTimeMs()));
+                    pattern.put("candleTime",  String.valueOf(c.timeMs()));
                     pattern.put("priceChange", 0.0);
                     return pattern;
                 })
@@ -190,15 +183,16 @@ public class SignalDataService {
         return new BigDecimal("10000");
     }
 
-    public BigDecimal calcMovingAverage(String symbol, String marketType, int count) {
+    public BigDecimal calcMovingAverage(String symbol, int count) {
         long afterMs = System.currentTimeMillis() - (count * 5L * 60_000L);
-        var candles  = agg5mRepository
-                .findBySymbolAndMarketTypeAndCandleTimeMsAfterOrderByCandleTimeMsDesc(symbol, marketType, afterMs);
+        var candles = candleSource.find(
+                symbol, SignalCandleSource.Interval.FIVE_MINUTES, afterMs, System.currentTimeMillis(),
+                SignalCandleSource.QueryMode.COMPLETED);
 
         if (candles.isEmpty()) return BigDecimal.ZERO;
 
         BigDecimal sum = candles.stream()
-                .map(c -> c.getBuyVolume().add(c.getSellVolume()))
+                .map(SignalCandleSource.SignalCandle::quoteVolume)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return sum.divide(new BigDecimal(candles.size()), 8, RoundingMode.HALF_UP);
@@ -230,17 +224,19 @@ public class SignalDataService {
 
         // 보조 데이터: 현재 타임라인(candleTimeMs 기준 최근 50분)에서 delta 분석
         long fromMs = candleTimeMs - 50 * 60_000L;
-        List<AggTrade5m> forAux = agg5mRepository
-                .findBySymbolAndMarketTypeAndCandleTimeMsAfterOrderByCandleTimeMsDesc(symbol, "FUTURES", fromMs);
+        List<SignalCandleSource.SignalCandle> forAux = new ArrayList<>(candleSource.find(
+                symbol, SignalCandleSource.Interval.FIVE_MINUTES, fromMs, candleTimeMs,
+                SignalCandleSource.QueryMode.COMPLETED));
+        forAux.sort(java.util.Comparator.comparingLong(SignalCandleSource.SignalCandle::timeMs).reversed());
 
         // delta 추세 방향 전환 시점
         List<Long> turningPoints = new ArrayList<>();
         if (forAux.size() > 1) {
-            boolean prevPositive = forAux.get(0).getDelta().compareTo(BigDecimal.ZERO) >= 0;
+            boolean prevPositive = forAux.get(0).delta().compareTo(BigDecimal.ZERO) >= 0;
             for (int i = 1; i < forAux.size(); i++) {
-                boolean currPositive = forAux.get(i).getDelta().compareTo(BigDecimal.ZERO) >= 0;
+                boolean currPositive = forAux.get(i).delta().compareTo(BigDecimal.ZERO) >= 0;
                 if (currPositive != prevPositive) {
-                    turningPoints.add(forAux.get(i).getCandleTimeMs());
+                    turningPoints.add(forAux.get(i).timeMs());
                 }
                 prevPositive = currPositive;
             }
@@ -249,19 +245,19 @@ public class SignalDataService {
         // Delta POC: 최대 delta 발생 가격대
         BigDecimal pocPrice = null;
         BigDecimal maxDeltaAbs = BigDecimal.ZERO;
-        for (AggTrade5m c : forAux) {
-            BigDecimal abs = c.getDelta().abs();
+        for (SignalCandleSource.SignalCandle c : forAux) {
+            BigDecimal abs = c.delta().abs();
             if (abs.compareTo(maxDeltaAbs) > 0) {
                 maxDeltaAbs = abs;
-                pocPrice    = c.getClosePrice();
+                pocPrice    = c.closePrice();
             }
         }
 
         // Delta Velocity: 단위시간당 delta 변화량
         double deltaVelocity = 0.0;
         if (forAux.size() >= 2) {
-            BigDecimal first = forAux.get(forAux.size() - 1).getDelta();
-            BigDecimal last  = forAux.get(0).getDelta();
+            BigDecimal first = forAux.get(forAux.size() - 1).delta();
+            BigDecimal last  = forAux.get(0).delta();
             double minutes   = forAux.size() * 5.0;
             deltaVelocity    = last.subtract(first).abs().doubleValue() / minutes;
         }
@@ -296,10 +292,14 @@ public class SignalDataService {
             default    -> nowMs - 50 * 60_000L;
         };
 
-        Map<String, Object> row = agg5mRepository.sumDivergenceBySymbolAndTimeRange(symbol, fromMs, nowMs);
-        BigDecimal firstOpen  = toBd(row.get("first_open"));
-        BigDecimal lastClose  = toBd(row.get("last_close"));
-        BigDecimal totalDelta = toBd(row.get("total_delta"));
+        List<SignalCandleSource.SignalCandle> candles = candleSource.find(
+                symbol, SignalCandleSource.Interval.FIVE_MINUTES, fromMs, nowMs,
+                SignalCandleSource.QueryMode.COMPLETED);
+        BigDecimal firstOpen = candles.isEmpty() ? BigDecimal.ZERO : candles.get(0).openPrice();
+        BigDecimal lastClose = candles.isEmpty() ? BigDecimal.ZERO : candles.get(candles.size() - 1).closePrice();
+        BigDecimal totalDelta = candles.stream()
+                .map(SignalCandleSource.SignalCandle::delta)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         if (firstOpen.compareTo(BigDecimal.ZERO) == 0 && lastClose.compareTo(BigDecimal.ZERO) == 0) {
             return Map.of("divergence", false);
@@ -366,19 +366,17 @@ public class SignalDataService {
     public List<Map<String, Object>> getCandles(String symbol, String type, int limit, String range) {
         long nowMs = System.currentTimeMillis();
         long fromMs = resolveCandleFromMs(type, limit, range, nowMs);
-        List<Map<String, Object>> rows = "1m".equals(type)
-            ? agg1mRepository.findByTimeRangeWithCombinedDelta(symbol, fromMs, nowMs)
-            : agg5mRepository.findByTimeRangeWithCombinedDelta(symbol, fromMs, nowMs);
-
-        return rows.stream().map(r -> {
+        SignalCandleSource.Interval interval = SignalCandleSource.Interval.from(type);
+        return candleSource.find(symbol, interval, fromMs, nowMs, SignalCandleSource.QueryMode.COMPLETED)
+            .stream().map(c -> {
             Map<String, Object> m = new HashMap<>();
-            m.put("time",   toBd(r.get("candle_time_ms")).longValue());
-            m.put("open",   toBd(r.get("open_price")).doubleValue());
-            m.put("high",   toBd(r.get("high_price")).doubleValue());
-            m.put("low",    toBd(r.get("low_price")).doubleValue());
-            m.put("close",  toBd(r.get("close_price")).doubleValue());
-            m.put("volume", toBd(r.get("total_volume")).doubleValue());
-            m.put("delta",  toBd(r.get("delta")).doubleValue());
+            m.put("time",   c.timeMs());
+            m.put("open",   c.openPrice().doubleValue());
+            m.put("high",   c.highPrice().doubleValue());
+            m.put("low",    c.lowPrice().doubleValue());
+            m.put("close",  c.closePrice().doubleValue());
+            m.put("volume", c.quoteVolume().doubleValue());
+            m.put("delta",  c.delta().doubleValue());
             return m;
         }).toList();
     }
@@ -386,38 +384,36 @@ public class SignalDataService {
     public List<Map<String, Object>> getCandlesByDate(String symbol, String type, String date, int overlap) {
         long dayStart = LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
         long dayEnd   = dayStart + 86_400_000L;
-
-        List<Map<String, Object>> dayRows = agg5mRepository.findByDateRange(symbol, dayStart, dayEnd);
-
-        List<Map<String, Object>> overlapRows = new ArrayList<>(
-            agg5mRepository.findLastNBefore(symbol, dayStart, overlap)
-        );
-        Collections.reverse(overlapRows);
+        SignalCandleSource.Interval interval = SignalCandleSource.Interval.from(type);
+        List<SignalCandleSource.SignalCandle> dayRows = candleSource.find(
+                symbol, interval, dayStart, dayEnd, SignalCandleSource.QueryMode.COMPLETED);
+        List<SignalCandleSource.SignalCandle> overlapRows = candleSource.findBefore(
+                symbol, interval, dayStart, overlap, SignalCandleSource.QueryMode.COMPLETED);
 
         List<Map<String, Object>> result = new ArrayList<>();
 
-        for (Map<String, Object> r : overlapRows) {
+        for (SignalCandleSource.SignalCandle c : overlapRows) {
             Map<String, Object> m = new HashMap<>();
-            m.put("time",      toBd(r.get("candle_time_ms")).longValue());
-            m.put("open",      toBd(r.get("open_price")).doubleValue());
-            m.put("high",      toBd(r.get("high_price")).doubleValue());
-            m.put("low",       toBd(r.get("low_price")).doubleValue());
-            m.put("close",     toBd(r.get("close_price")).doubleValue());
-            m.put("volume",    toBd(r.get("total_volume")).doubleValue());
-            m.put("delta",     toBd(r.get("delta")).doubleValue());
+            m.put("time",      c.timeMs());
+            m.put("open",      c.openPrice().doubleValue());
+            m.put("high",      c.highPrice().doubleValue());
+            m.put("low",       c.lowPrice().doubleValue());
+            m.put("close",     c.closePrice().doubleValue());
+            m.put("volume",    c.quoteVolume().doubleValue());
+            m.put("delta",     c.delta().doubleValue());
             m.put("isOverlap", true);
             result.add(m);
         }
 
-        for (Map<String, Object> r : dayRows) {
+        for (SignalCandleSource.SignalCandle c : dayRows) {
             Map<String, Object> m = new HashMap<>();
-            m.put("time",      toBd(r.get("candle_time_ms")).longValue());
-            m.put("open",      toBd(r.get("open_price")).doubleValue());
-            m.put("high",      toBd(r.get("high_price")).doubleValue());
-            m.put("low",       toBd(r.get("low_price")).doubleValue());
-            m.put("close",     toBd(r.get("close_price")).doubleValue());
-            m.put("volume",    toBd(r.get("total_volume")).doubleValue());
-            m.put("delta",     toBd(r.get("delta")).doubleValue());
+            m.put("time",      c.timeMs());
+            m.put("open",      c.openPrice().doubleValue());
+            m.put("high",      c.highPrice().doubleValue());
+            m.put("low",       c.lowPrice().doubleValue());
+            m.put("close",     c.closePrice().doubleValue());
+            m.put("volume",    c.quoteVolume().doubleValue());
+            m.put("delta",     c.delta().doubleValue());
             m.put("isOverlap", false);
             result.add(m);
         }
@@ -426,14 +422,14 @@ public class SignalDataService {
     }
 
     public List<String> getCandleDates(String symbol) {
-        return agg5mRepository.findDistinctKstDates(symbol);
+        return candleSource.findCandleDates(symbol);
     }
 
     private long resolveCandleFromMs(String type, int limit, String range, long nowMs) {
         if (range != null && !range.isBlank()) {
             return nowMs - parseRangeToMs(range);
         }
-        long candleUnitMs = "1m".equals(type) ? 60_000L : 300_000L;
+        long candleUnitMs = SignalCandleSource.Interval.from(type).durationMs();
         return nowMs - (limit * candleUnitMs);
     }
 

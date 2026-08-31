@@ -112,13 +112,14 @@ public interface AggTrade5mRepository extends JpaRepository<AggTrade5m, Long> {
         SELECT f.candle_time_ms,
                f.open_price, f.high_price, f.low_price, f.close_price,
                f.total_volume,
+               f.buy_quantity + f.sell_quantity AS base_volume,
                COALESCE(SUM(a.delta), 0) AS delta
         FROM agg_trade_5m f
         JOIN agg_trade_5m a ON a.symbol = f.symbol AND a.candle_time_ms = f.candle_time_ms
         WHERE f.symbol = :symbol
           AND f.market_type = 'FUTURES'
         GROUP BY f.candle_time_ms, f.open_price, f.high_price, f.low_price, f.close_price,
-                 f.total_volume
+                 f.total_volume, f.buy_quantity + f.sell_quantity
         ORDER BY f.candle_time_ms DESC
         LIMIT :limitCount
         """, nativeQuery = true)
@@ -130,6 +131,7 @@ public interface AggTrade5mRepository extends JpaRepository<AggTrade5m, Long> {
         SELECT f.candle_time_ms,
                f.open_price, f.high_price, f.low_price, f.close_price,
                f.total_volume,
+               f.buy_quantity + f.sell_quantity AS base_volume,
                COALESCE(SUM(a.delta), 0) AS delta
         FROM agg_trade_5m f
         JOIN agg_trade_5m a ON a.symbol = f.symbol AND a.candle_time_ms = f.candle_time_ms
@@ -137,7 +139,8 @@ public interface AggTrade5mRepository extends JpaRepository<AggTrade5m, Long> {
           AND f.market_type = 'FUTURES'
           AND f.candle_time_ms >= :fromMs
           AND f.candle_time_ms < :toMs
-        GROUP BY f.candle_time_ms, f.open_price, f.high_price, f.low_price, f.close_price, f.total_volume
+        GROUP BY f.candle_time_ms, f.open_price, f.high_price, f.low_price, f.close_price,
+                 f.total_volume, f.buy_quantity + f.sell_quantity
         ORDER BY f.candle_time_ms ASC
         """, nativeQuery = true)
     List<Map<String, Object>> findByTimeRangeWithCombinedDelta(

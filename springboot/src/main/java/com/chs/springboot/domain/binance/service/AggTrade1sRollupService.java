@@ -9,12 +9,11 @@ import com.chs.springboot.domain.binance.model.AggTradeCollectStatus;
 import com.chs.springboot.domain.binance.repository.AggTrade1sRepository;
 import com.chs.springboot.domain.binance.repository.AggTradeCollectStatusRepository;
 import com.chs.springboot.global.chs;
-import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
-import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -40,15 +39,14 @@ public class AggTrade1sRollupService {
 
     private static final String CATCHUP_LOCK_KEY = "aggtrade:1s:rollup:catchup:lock";
 
-    private static final String HK_ROLLUP_1S = HealthCheckCatalog.PIPE_ROLLUP_1S.key();
-    private static final String HK_EMPTY_FIX = HealthCheckCatalog.PIPE_EMPTY_CANDLE_FIX.key();
-
     private final LeaderElectionService leaderElectionService;
     private final AggTrade1sRepository agg1sRepository;
     private final AggTradeCollectStatusRepository statusRepository;
     private final StringRedisTemplate redisTemplate;
     private final JdbcTemplate batchJdbcTemplate;
-    private final HealthHeartbeat healthHeartbeat;
+
+    @Value("${binance.agg-trade.save.enabled:false}")
+    private boolean aggTradeSaveEnabled;
 
     private volatile CompletableFuture<Void> catchUpFuture;
 
@@ -60,7 +58,7 @@ public class AggTrade1sRollupService {
 
     @Scheduled(fixedRate = 1000)
     public void rollup1s() {
-        if (!leaderElectionService.isLeader()) return;
+        if (!aggTradeSaveEnabled || !leaderElectionService.isLeader()) return;
 
         long endMs   = (System.currentTimeMillis() / 1000) * 1000 - 1000;
         long startMs = endMs - 1000;
@@ -84,7 +82,6 @@ public class AggTrade1sRollupService {
                 // close 없으면 skip
             }
         }
-        healthHeartbeat.beat(HK_ROLLUP_1S);
     }
 
     // ─── 주기적 빈 캔들 교정 (@Scheduled fixedRate=5분) ──────────────────
@@ -92,7 +89,7 @@ public class AggTrade1sRollupService {
 
     @Scheduled(fixedRate = 300_000)
     public void correctRecentEmptyCandles() {
-        if (!leaderElectionService.isLeader()) return;
+        if (!aggTradeSaveEnabled || !leaderElectionService.isLeader()) return;
 
         long nowMs  = (System.currentTimeMillis() / 1000) * 1000;
         long fromMs = nowMs - 15 * 60 * 1000L; // 최근 15분
@@ -113,17 +110,21 @@ public class AggTrade1sRollupService {
             log.info("[AggTrade1sCorrect] {} {} {}건 교정",
                 t.getSymbol(), t.getMarketType(), toCorrect.size());
         }
-        healthHeartbeat.beat(HK_EMPTY_FIX);
     }
 
     // ─── 백필 (@PostConstruct 비동기) ─────────────────────────────────────
 
     @PostConstruct
     public void catchUp() {
+        if (!aggTradeSaveEnabled) {
+            catchUpFuture = CompletableFuture.completedFuture(null);
+            return;
+        }
         catchUpFuture = CompletableFuture.runAsync(this::runCatchUp);
     }
 
     private void runCatchUp() {
+        if (!aggTradeSaveEnabled) return;
         boolean locked = Boolean.TRUE.equals(
             redisTemplate.opsForValue().setIfAbsent(CATCHUP_LOCK_KEY, "locked", Duration.ofMinutes(30))
         );
@@ -159,6 +160,7 @@ public class AggTrade1sRollupService {
     }
 
     private void runCatchUpForSymbol(String symbol, String marketType) {
+        if (!aggTradeSaveEnabled) return;
         // a. 마지막 1초봉 시각 조회
         Long lastMs = agg1sRepository
             .findMaxCandleTimeMsBySymbolAndMarketType(symbol, marketType)
@@ -358,6 +360,9 @@ public class AggTrade1sRollupService {
     // ─── 배치 INSERT ──────────────────────────────────────────────────────
 
     private void batchInsert(List<AggTrade1s> candles) {
+        if (!aggTradeSaveEnabled) {
+            return;
+        }
         List<AggTrade1s> validCandles = candles.stream()
             .filter(c -> {
                 boolean invalid = hasVolumeAndTradesWithoutDeltaSource(c);

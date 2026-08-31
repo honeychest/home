@@ -28,7 +28,9 @@
 
 ## 마스터 체크리스트
 
-현재 카탈로그는 30개 체크(하트비트 10개)로 운영한다.
+현재 카탈로그는 26개 체크(하트비트 6개)로 운영한다.
+
+> Phase 4에서 `PIPE_KAFKA_CONSUMER`(`pipe-kafka-consumer`), `PIPE_AGGTRADE_FLUSH`(`pipe-aggtrade-flush`), `RES_RAWTABLE_GROWTH`(`res-rawtable-growth`)를 제거했고, Part A에서 `PIPE_ROLLUP_1S`(`pipe-rollup-1s`), `PIPE_ROLLUP_1M`(`pipe-rollup-1m`), `PIPE_ROLLUP_5M`(`pipe-rollup-5m`), `PIPE_EMPTY_CANDLE_FIX`(`pipe-empty-candle-fix`)를 제거했다. 이 7개는 `HealthCheckCatalog`에 등록되지 않는다.
 
 표기: ○이미 신호 있음 · △부분 · ✕없음(신규 계측 필요) / P0=치명 P1=중요 P2=여유
 
@@ -42,10 +44,6 @@
 | feed-binance-aggtrade | L2 피드 | P0 | binance-aggTrade freshness | ○ |
 | feed-upbit | L2 피드 | P1 | upbit freshness | ○ |
 | feed-ws-reconnect | L2 피드 | P1 | WS 재연결 루프 상태 | △ |
-| pipe-rollup-1s | L3 파이프라인 | P0 | 1초 롤업 최근 성공 | ✕ |
-| pipe-rollup-1m | L3 파이프라인 | P0 | 1분 롤업 최근 성공 | ✕ |
-| pipe-rollup-5m | L3 파이프라인 | P1 | 5분 롤업 최근 성공 | ✕ |
-| pipe-empty-candle-fix | L3 파이프라인 | P1 | 빈캔들 교정(5분) 성공 | ✕ |
 | data-candle-gap | L4 무결성 | P1 | 캔들 gap 없음 | ○ DataGapCard |
 | data-quality | L4 무결성 | P1 | 데이터 품질 | ○ DataQualityCard |
 | sched-leader-election | L5 스케줄러 | P0 | Redis 리더 선출(5s) | △ |
@@ -89,6 +87,6 @@
 
 ## 계측 규약 (2차 이후)
 
-각 서비스에 heartbeat 한 줄을 심는다.
-- 성공: `healthCheckRecorder.markOk("pipe-rollup-1m")`
-- 실패: `healthCheckRecorder.markFail("pipe-rollup-1m", cause)` → `health_check_event` 적립
+활성 서비스에 heartbeat 한 줄을 심는다.
+- 성공: `healthCheckRecorder.markOk(KEY)`
+- 실패: `healthCheckRecorder.markFail(KEY, cause)` → `health_check_event` 적립

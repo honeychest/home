@@ -1,4 +1,4 @@
-// [AGENT] 크리티컬 헬스 체크 카탈로그 — 마스터 체크리스트(33개)를 코드로 고정
+// [AGENT] 크리티컬 헬스 체크 카탈로그 — 마스터 체크리스트(26개)를 코드로 고정
 // 각 항목은 자기 상태 소스(HealthSource)와 판정 기준(임계 문구·HEARTBEAT 임계 초)을 선언한다.
 // 새 체크 추가 = 여기 한 줄(HEARTBEAT 는 경고/다운 초 포함 — 대상 주기의 약 2.5×/5× grace).
 // agentRunner(Codex runner) 체크는 제외 — lab(home) 기준. 문서: docs/health-check-board.md
@@ -23,11 +23,6 @@ public enum HealthCheckCatalog {
     FEED_WS_RECONNECT("feed-ws-reconnect", HealthLayer.L2_FEED, HealthPriority.HIGH, HealthSource.EVENT, "WS 재연결 루프 상태", "WebSocket 재연결 루프가 정상 동작하는지"),
 
     // ── L3 파이프라인 처리 ────────────────────────────────────────────
-    PIPE_ROLLUP_1S("pipe-rollup-1s", HealthLayer.L3_PIPELINE, HealthPriority.CRITICAL, HealthSource.HEARTBEAT, 10, 30, "1초 롤업 최근 성공", "1초봉 롤업이 최근 정상 수행됐는지"),                                // 1초 주기
-    PIPE_ROLLUP_1M("pipe-rollup-1m", HealthLayer.L3_PIPELINE, HealthPriority.CRITICAL, HealthSource.HEARTBEAT, 180, 360, "1분 롤업 최근 성공", "1분봉 롤업이 최근 정상 수행됐는지"),                             // 1분 주기
-    PIPE_ROLLUP_5M("pipe-rollup-5m", HealthLayer.L3_PIPELINE, HealthPriority.HIGH, HealthSource.HEARTBEAT, 720, 1200, "5분 롤업 최근 성공", "5분봉 롤업이 최근 정상 수행됐는지"),                                // 5분 주기
-    PIPE_EMPTY_CANDLE_FIX("pipe-empty-candle-fix", HealthLayer.L3_PIPELINE, HealthPriority.HIGH, HealthSource.HEARTBEAT, 720, 1200, "빈캔들 교정(5분) 성공", "WS 공백 구간 빈 캔들 교정(5분)이 최근 수행됐는지"), // 5분 주기
-
     // ── L4 데이터 무결성 ──────────────────────────────────────────────
     DATA_CANDLE_GAP("data-candle-gap", HealthLayer.L4_DATA, HealthPriority.HIGH, HealthSource.EVENT, "캔들 gap 없음", "캔들 데이터에 누락 구간(gap)이 없는지"),
     DATA_QUALITY("data-quality", HealthLayer.L4_DATA, HealthPriority.HIGH, HealthSource.EVENT, "데이터 품질", "데이터 품질(이상치·플랫 등)이 정상인지"),

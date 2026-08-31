@@ -6,7 +6,7 @@ package com.chs.springboot.domain.analysis.service;
 import com.chs.springboot.domain.analysis.dto.ConditionTreeDto;
 import com.chs.springboot.domain.analysis.model.AnalysisTemplate;
 import com.chs.springboot.domain.analysis.repository.AnalysisTemplateRepository;
-import com.chs.springboot.domain.binance.repository.AggTrade1mRepository;
+import com.chs.springboot.domain.binance.service.SignalCandleSource;
 import com.chs.springboot.domain.binance.service.SignalSseService;
 import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
 import com.chs.springboot.global.monitor.health.HealthHeartbeat;
@@ -17,9 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +33,7 @@ public class AnalysisDetectionScheduler {
     private final AnalysisDetectionEngine     detectionEngine;
     private final SignalSseService            signalSseService;
     private final LeaderElectionService       leaderElectionService;
-    private final AggTrade1mRepository        agg1mRepository;
+    private final SignalCandleSource          candleSource;
     private final ObjectMapper                objectMapper;
     private final HealthHeartbeat             healthHeartbeat;
 
@@ -52,15 +49,23 @@ public class AnalysisDetectionScheduler {
             return;
         }
 
+        long endMs = Math.floorDiv(System.currentTimeMillis(), SignalCandleSource.Interval.ONE_MINUTE.durationMs())
+                * SignalCandleSource.Interval.ONE_MINUTE.durationMs();
+        long fromMs = endMs - LIMIT_COUNT * SignalCandleSource.Interval.ONE_MINUTE.durationMs();
         for (String symbol : SYMBOLS) {
-            List<Map<String, Object>> rows = agg1mRepository.findTopNWithCombinedDelta(symbol, LIMIT_COUNT);
-            if (rows == null || rows.isEmpty()) continue;
+            List<SignalCandleSource.SignalCandle> candles = candleSource.find(
+                    symbol, SignalCandleSource.Interval.ONE_MINUTE, fromMs, endMs,
+                    SignalCandleSource.QueryMode.COMPLETED);
+            if (candles.isEmpty()) continue;
+            if (!isContinuousWindow(candles, fromMs, endMs)) {
+                log.warn("[AnalysisDetectionScheduler] {} 최근 {}개 1분봉이 결측 또는 불연속이라 탐지를 건너뜁니다",
+                        symbol, LIMIT_COUNT);
+                continue;
+            }
 
-            // findTopNWithCombinedDelta는 내림차순 — 오름차순으로 역정렬
-            List<Map<String, Object>> sorted = new ArrayList<>(rows);
-            Collections.reverse(sorted);
-
-            List<AnalysisDetectionEngine.CandleData> klineData = toCandles(sorted);
+            List<AnalysisDetectionEngine.CandleData> klineData = candles.stream()
+                    .map(SignalCandleAnalysisConverter::toCandleData)
+                    .toList();
 
             for (AnalysisTemplate template : templates) {
                 try {
@@ -84,31 +89,19 @@ public class AnalysisDetectionScheduler {
         healthHeartbeat.beat(HEALTH_KEY);
     }
 
-    private List<AnalysisDetectionEngine.CandleData> toCandles(List<Map<String, Object>> rows) {
-        List<AnalysisDetectionEngine.CandleData> list = new ArrayList<>(rows.size());
-        for (Map<String, Object> r : rows) {
-            list.add(new AnalysisDetectionEngine.CandleData(
-                    toLong(r.get("candle_time_ms")),
-                    toDouble(r.get("open_price")),
-                    toDouble(r.get("high_price")),
-                    toDouble(r.get("low_price")),
-                    toDouble(r.get("close_price")),
-                    0.0,                              // volume: 해당 쿼리 미포함
-                    toDouble(r.get("delta"))
-            ));
+    private boolean isContinuousWindow(List<SignalCandleSource.SignalCandle> candles,
+                                       long fromMs, long toMsExclusive) {
+        if (candles.size() != LIMIT_COUNT) {
+            return false;
         }
-        return list;
+        long expectedTimeMs = fromMs;
+        for (SignalCandleSource.SignalCandle candle : candles) {
+            if (candle.timeMs() != expectedTimeMs || expectedTimeMs >= toMsExclusive) {
+                return false;
+            }
+            expectedTimeMs += SignalCandleSource.Interval.ONE_MINUTE.durationMs();
+        }
+        return expectedTimeMs == toMsExclusive;
     }
 
-    private long toLong(Object v) {
-        if (v == null) return 0L;
-        if (v instanceof Long l) return l;
-        return new BigDecimal(v.toString()).longValue();
-    }
-
-    private double toDouble(Object v) {
-        if (v == null) return 0.0;
-        if (v instanceof Double d) return d;
-        return new BigDecimal(v.toString()).doubleValue();
-    }
 }
