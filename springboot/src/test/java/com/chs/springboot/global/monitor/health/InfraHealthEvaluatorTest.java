@@ -24,7 +24,6 @@ class InfraHealthEvaluatorTest {
     private void stubAllUp() {
         when(probe.mysql()).thenReturn(UP);
         when(probe.redis()).thenReturn(UP);
-        when(probe.kafka()).thenReturn(UP);
         when(probe.postgres()).thenReturn(UP);
     }
 
@@ -38,7 +37,7 @@ class InfraHealthEvaluatorTest {
     }
 
     @Test
-    void allUp_recordsUpForAllFour() {
+    void allUp_recordsUpForAllThree() {
         when(leaderElection.isLeader()).thenReturn(true);
         stubAllUp();
 
@@ -46,21 +45,7 @@ class InfraHealthEvaluatorTest {
 
         verify(recorder).record(eq(HealthCheckCatalog.INFRA_MYSQL.key()), eq(HealthStatus.UP), anyString());
         verify(recorder).record(eq(HealthCheckCatalog.INFRA_REDIS.key()), eq(HealthStatus.UP), anyString());
-        verify(recorder).record(eq(HealthCheckCatalog.INFRA_KAFKA.key()), eq(HealthStatus.UP), anyString());
         verify(recorder).record(eq(HealthCheckCatalog.INFRA_POSTGRES.key()), eq(HealthStatus.UP), anyString());
-    }
-
-    @Test
-    void down_recordsDownWithDetail() {
-        when(leaderElection.isLeader()).thenReturn(true);
-        stubAllUp();
-        when(probe.kafka()).thenReturn(new InfraHealthProbe.Probe(HealthStatus.DOWN, "브로커 노드 0개"));
-
-        evaluator.evaluate();
-
-        verify(recorder).record(HealthCheckCatalog.INFRA_KAFKA.key(),
-                HealthStatus.DOWN, "브로커 노드 0개");
-        verify(recorder).record(eq(HealthCheckCatalog.INFRA_MYSQL.key()), eq(HealthStatus.UP), anyString());
     }
 
     @Test
@@ -74,7 +59,6 @@ class InfraHealthEvaluatorTest {
         evaluator.evaluate();
 
         verify(recorder).record(eq(HealthCheckCatalog.INFRA_REDIS.key()), eq(HealthStatus.UP), anyString());
-        verify(recorder).record(eq(HealthCheckCatalog.INFRA_KAFKA.key()), eq(HealthStatus.UP), anyString());
         verify(recorder).record(eq(HealthCheckCatalog.INFRA_POSTGRES.key()), eq(HealthStatus.UP), anyString());
     }
 }

@@ -28,7 +28,7 @@
 
 ## 마스터 체크리스트
 
-현재 카탈로그는 26개 체크(하트비트 6개)로 운영한다.
+현재 카탈로그는 25개 체크(하트비트 6개)로 운영한다.
 
 > Phase 4에서 `PIPE_KAFKA_CONSUMER`(`pipe-kafka-consumer`), `PIPE_AGGTRADE_FLUSH`(`pipe-aggtrade-flush`), `RES_RAWTABLE_GROWTH`(`res-rawtable-growth`)를 제거했고, Part A에서 `PIPE_ROLLUP_1S`(`pipe-rollup-1s`), `PIPE_ROLLUP_1M`(`pipe-rollup-1m`), `PIPE_ROLLUP_5M`(`pipe-rollup-5m`), `PIPE_EMPTY_CANDLE_FIX`(`pipe-empty-candle-fix`)를 제거했다. 이 7개는 `HealthCheckCatalog`에 등록되지 않는다.
 
@@ -38,7 +38,6 @@
 |-----|------|---|------|------|
 | infra-mysql | L1 인프라 | P0 | MySQL 연결·응답 | △ actuator |
 | infra-redis | L1 인프라 | P0 | Redis 연결·응답 | △ actuator |
-| infra-kafka | L1 인프라 | P0 | Kafka 브로커 연결 | ✕ |
 | infra-postgres | L1 인프라 | P0 | Postgres(pgvector) 연결 | ✕ |
 | feed-binance-ticker | L2 피드 | P0 | binance-ticker freshness | ○ FeedHealthRegistry |
 | feed-binance-aggtrade | L2 피드 | P0 | binance-aggTrade freshness | ○ |

@@ -19,7 +19,7 @@ class InfraHealthProbeTest {
     private final RedisConnectionFactory redisConnectionFactory = mock(RedisConnectionFactory.class);
 
     private InfraHealthProbe probe() {
-        return new InfraHealthProbe(primaryDataSource, pgVectorDataSource, redisConnectionFactory, "kafka:9092");
+        return new InfraHealthProbe(primaryDataSource, pgVectorDataSource, redisConnectionFactory);
     }
 
     @Test

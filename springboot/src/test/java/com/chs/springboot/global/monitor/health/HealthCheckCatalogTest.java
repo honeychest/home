@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class HealthCheckCatalogTest {
 
     // 임계 문구 정책: EVENT(사용 시점 push, 임계 없음)만 null, 나머지 소스는 전부 기준 문구 제공.
-    // 카탈로그 인터페이스 하나로 33개 항목의 표시 기준을 일괄 검증한다.
+    // 카탈로그 인터페이스 하나로 25개 항목의 표시 기준을 일괄 검증한다.
     @Test
     void thresholdTextPolicyCoversAllChecks() {
         for (HealthCheckCatalog c : HealthCheckCatalog.all()) {

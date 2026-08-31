@@ -78,19 +78,6 @@ class HealthCheckServiceTest {
     }
 
     @Test
-    void infraOpenEventDownIsDown() {
-        HealthCheckEvent open = new HealthCheckEvent();
-        open.setStatus(HealthEventStatus.DOWN);
-        open.setCause("브로커 노드 0개");
-        when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
-                HealthCheckCatalog.INFRA_KAFKA.key())).thenReturn(open);
-
-        HealthStatus status = statusOf(HealthCheckCatalog.INFRA_KAFKA.key());
-
-        assertThat(status).isEqualTo(HealthStatus.DOWN);
-    }
-
-    @Test
     void wsConnUnderDegradedThresholdIsUp() {
         when(metricCollectorService.getLastWsConnections()).thenReturn(120);
 
