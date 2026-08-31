@@ -1,7 +1,7 @@
 package com.chs.springboot.global.feature;
 
+import com.chs.springboot.global.config.service.AppConfigService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -13,7 +13,7 @@ public class FeatureFlagService {
     public static final String KEY_TRADE_THRESHOLD_EDIT = "feature:trade:threshold-edit";
     public static final String KEY_MONITOR_ALLOWED_IP_MANAGE = "feature:monitor:allowed-ip-manage";
 
-    private final StringRedisTemplate redisTemplate;
+    private final AppConfigService appConfigService;
 
     public Map<String, Boolean> getAll() {
         return Map.of(
@@ -42,16 +42,18 @@ public class FeatureFlagService {
 
     private boolean isEnabled(String key, boolean defaultValue) {
         try {
-            String v = redisTemplate.opsForValue().get(key);
+            String v = appConfigService.get(key);
             if (v == null) return defaultValue;
-            return "ON".equalsIgnoreCase(v) || "TRUE".equalsIgnoreCase(v) || "1".equals(v);
+            return "ON".equalsIgnoreCase(v.trim())
+                    || "TRUE".equalsIgnoreCase(v.trim())
+                    || "1".equals(v.trim());
         } catch (Exception e) {
             return defaultValue;
         }
     }
 
     private void set(String key, boolean enabled) {
-        redisTemplate.opsForValue().set(key, enabled ? "ON" : "OFF");
+        appConfigService.set(key, enabled ? "ON" : "OFF");
     }
 }
 

@@ -1,5 +1,5 @@
 // [AGENT] 역할: 수동 수집/보정 서비스 — 비동기 Job 관리, 타입별 Binance REST 호출, FUTURES flat/outlier 캔들 보정 | 연관파일: ManualBackfillController.java
-// 지원 타입: RAW_AGG_TRADE(fromId~toId), AGG_1M/5M(fromMs~toMs rollup), OI(REST 호출), flat-correction(1m klines + 5m 재롤업), outlier-correction(raw 기준 1m/5m 재생성)
+// 지원 타입: RAW_AGG_TRADE(fromId~toId), AGG_1M/5M(fromMs~toMs rollup), KLINE_1M(임시 1m add-only), OI(REST 호출), flat-correction(1m klines + 5m 재롤업), outlier-correction(raw 기준 1m/5m 재생성)
 // 재발방지: raw 존재 1분은 kline fallback 저장 제외, id-zero/kline-like 1m/5m 기존 row는 raw/1s 기반 rollup으로 교체
 // Job 상태: RUNNING → DONE | ERROR / ConcurrentHashMap 저장 (앱 재시작 시 초기화)
 package com.chs.springboot.domain.binance.service;
@@ -51,6 +51,7 @@ public class ManualBackfillService {
         """;
 
     private final JdbcTemplate batchJdbcTemplate;
+    private final BinanceKlineTempSyncService klineTempSyncService;
     private final ExecutorService executor = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "manual-backfill");
         t.setDaemon(true);
@@ -65,8 +66,11 @@ public class ManualBackfillService {
     private String futuresBaseUrl;
 
     // JdbcTemplate 중에서 이름이 batchJdbcTemplate인 Bean을 주입해달라는 요청
-    public ManualBackfillService(JdbcTemplate batchJdbcTemplate) {
+    public ManualBackfillService(
+            JdbcTemplate batchJdbcTemplate,
+            BinanceKlineTempSyncService klineTempSyncService) {
         this.batchJdbcTemplate = batchJdbcTemplate;
+        this.klineTempSyncService = klineTempSyncService;
     }
 
     // ─── Job Record ──────────────────────────────────────────────────────────
@@ -97,6 +101,7 @@ public class ManualBackfillService {
                     case "RAW_AGG_TRADE" -> collectRawAggTrade(symbol, marketType, fromId, toId);
                     case "AGG_1M"        -> collectRollup1m(symbol, marketType, fromMs, toMs);
                     case "AGG_5M"        -> collectRollup5m(symbol, marketType, fromMs, toMs);
+                    case "KLINE_1M"      -> collectKline1m(symbol, marketType, fromMs, toMs);
                     case "OI"            -> collectOi(symbol, fromMs, toMs);
                     default -> throw new IllegalArgumentException("Unknown type: " + type);
                 };
@@ -113,6 +118,26 @@ public class ManualBackfillService {
         }, executor);
 
         return jobId;
+    }
+
+    private int collectKline1m(String symbol, String marketType, Long fromMs, Long toMs) {
+        if (fromMs == null || toMs == null) {
+            throw new IllegalArgumentException("KLINE_1M은 fromMs와 toMs가 필수입니다");
+        }
+        BinanceKlineRangeFetcher.validateBoundedRange(fromMs, toMs);
+        long safeEnd = BinanceKlineWindow.safeEnd(System.currentTimeMillis());
+        if (toMs > safeEnd) {
+            throw new IllegalArgumentException("KLINE_1M 종료 시각은 현재 시각보다 2분 이전이어야 합니다");
+        }
+        BinanceKlineTempSyncService.RangeSyncResult result = klineTempSyncService
+                .rangeSync(symbol, marketType, fromMs, toMs);
+        if (result.skippedInFlight()) {
+            throw new IllegalStateException("같은 심볼/마켓의 KLINE_1M 동기화가 이미 실행 중입니다");
+        }
+        if (result.firstPageEmpty()) {
+            throw new IllegalStateException("KLINE_1M Binance 응답이 비어 있어 백필하지 못했습니다");
+        }
+        return result.inserted();
     }
 
     public JobStatus getStatus(String jobId) {

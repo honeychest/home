@@ -29,13 +29,15 @@ public class DataGapAdminController {
         return ResponseEntity.ok(Map.of("canAccess", true));
     }
 
-    /** 누락 구간 조회 — type: RAW_AGG_TRADE | AGG_1M | AGG_5M | FORCE_ORDER | OI, days: 생략 시 전체 */
+    /** 누락 구간 조회 — type: RAW_AGG_TRADE | AGG_1M | AGG_5M | KLINE_1M | FORCE_ORDER | OI */
     @GetMapping("/check")
     public ResponseEntity<?> check(
             @RequestParam String type,
-            @RequestParam(required = false) Integer days) {
+            @RequestParam(required = false) Integer days,
+            @RequestParam(required = false) Long fromMs,
+            @RequestParam(required = false) Long toMs) {
         try {
-            List<Map<String, Object>> result = service.checkGap(type, days);
+            List<Map<String, Object>> result = service.checkGap(type, days, fromMs, toMs);
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

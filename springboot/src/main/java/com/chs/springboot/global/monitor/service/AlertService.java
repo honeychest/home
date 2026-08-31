@@ -1,6 +1,7 @@
 // [AGENT] 임계 지속 초과 알림 + 쿨다운 + AlertHistory 저장
 package com.chs.springboot.global.monitor.service;
 
+import com.chs.springboot.global.config.service.AppConfigService;
 import com.chs.springboot.global.monitor.dto.MetricSnapshot;
 import com.chs.springboot.global.monitor.entity.AlertHistory;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
@@ -25,9 +26,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RequiredArgsConstructor
 public class AlertService {
 
+    public static final String KEY_MONITOR_SILENCE = "monitor:silence";
+
     private final StringRedisTemplate redisTemplate;
     private final TelegramProvider telegramProvider;
     private final AlertHistoryRepository alertHistoryRepository;
+    private final AppConfigService appConfigService;
 
     @Value("${monitor.alert-history.source-env:${spring.profiles.active:local}}")
     private String sourceEnv;
@@ -103,11 +107,15 @@ public class AlertService {
 
     private boolean isSilenced() {
         try {
-            String v = redisTemplate.opsForValue().get("monitor:silence");
-            return "ON".equalsIgnoreCase(v);
+            String v = appConfigService.get(KEY_MONITOR_SILENCE);
+            return "ON".equalsIgnoreCase(v == null ? null : v.trim());
         } catch (Exception e) {
             return false;
         }
+    }
+
+    public void setSilenced(boolean silenced) {
+        appConfigService.set(KEY_MONITOR_SILENCE, silenced ? "ON" : "OFF");
     }
 
     private void evaluateFeedAlerts(java.util.List<FeedHealthRegistry.FeedHealth> feeds) {

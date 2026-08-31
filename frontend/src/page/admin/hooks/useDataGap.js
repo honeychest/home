@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import * as adminApi from '../api/adminApi';
 import { CHECKS, ID_BASED } from '../constants';
+import { mergeGapRanges } from '../utils';
 
 // Data Gap 조회 + 선택 수집.
 // 선택 수집 후 jobs 목록을 갱신해야 하므로 manualCollect 훅의 setJobs 를 받는다.
@@ -14,15 +15,20 @@ export default function useDataGap({ setJobs, defaultSymbol }) {
 
     const activeCheck = CHECKS.find(c => `${c.type}_${c.days ?? 'all'}` === activeKey);
     const visibleColumns = columns.filter(c => !c.endsWith('_ms'));
-    // 체크박스 표시 여부: start/end 범위 컬럼이 있어야 수집 가능
-    const showCheckbox = !!(rows && rows.length > 0 && activeCheck &&
+    const isRowSelectable = row => !!(activeCheck &&
         (ID_BASED.has(activeCheck.type)
-            ? rows[0].gap_start_id != null
-            : rows[0].gap_start_ms != null));
-    const allChecked = showCheckbox && selectedRows.size === rows.length;
+            ? row.gap_start_id != null && row.gap_end_id != null
+            : row.gap_start_ms != null && row.gap_end_ms != null));
+    const selectableRows = rows?.reduce((indices, row, index) => {
+        if (isRowSelectable(row)) indices.push(index);
+        return indices;
+    }, []) ?? [];
+    // 체크박스 표시 여부: start/end 범위가 있는 행이 하나라도 있어야 수집 가능
+    const showCheckbox = selectableRows.length > 0;
+    const allChecked = showCheckbox && selectedRows.size === selectableRows.length;
 
     const toggleAll = () =>
-        setSelectedRows(allChecked ? new Set() : new Set(rows.map((_, i) => i)));
+        setSelectedRows(allChecked ? new Set() : new Set(selectableRows));
 
     const toggleRow = (i) =>
         setSelectedRows(prev => {
@@ -52,7 +58,7 @@ export default function useDataGap({ setJobs, defaultSymbol }) {
 
     const handleBulkCollect = async () => {
         if (selectedRows.size === 0 || !activeCheck) return;
-        const selected = [...selectedRows].map(i => rows[i]);
+        const selected = [...selectedRows].map(i => rows[i]).filter(isRowSelectable);
         const isIdBasedType = ID_BASED.has(activeCheck.type);
 
         // symbol+market_type 그룹핑
@@ -73,8 +79,14 @@ export default function useDataGap({ setJobs, defaultSymbol }) {
                     body.fromId = Math.min(...g.rows.map(r => Number(r.gap_start_id)));
                     body.toId   = Math.max(...g.rows.map(r => Number(r.gap_end_id)));
                 } else {
-                    body.fromMs = Math.min(...g.rows.map(r => Number(r.gap_start_ms)));
-                    body.toMs   = Math.max(...g.rows.map(r => Number(r.gap_end_ms)));
+                    for (const range of mergeGapRanges(g.rows)) {
+                        await adminApi.postBackfillCollect({
+                            ...body,
+                            fromMs: range.start,
+                            toMs: range.end,
+                        });
+                    }
+                    continue;
                 }
                 await adminApi.postBackfillCollect(body);
             }
@@ -98,7 +110,7 @@ export default function useDataGap({ setJobs, defaultSymbol }) {
 
     return {
         activeKey, rows, columns, loading, error, selectedRows,
-        activeCheck, visibleColumns, showCheckbox, allChecked,
+        activeCheck, visibleColumns, showCheckbox, allChecked, isRowSelectable,
         toggleAll, toggleRow,
         handleCheck, handleBulkCollect,
         resetGapView,

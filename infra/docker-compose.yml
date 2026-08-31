@@ -86,20 +86,16 @@ services:
     logging: *default-logging
     command:
       - redis-server
+      - --save
+      - ""
       - --appendonly
-      - yes
-      - --auto-aof-rewrite-percentage
-      - "100"
-      - --auto-aof-rewrite-min-size
-      - 64mb
+      - "no"
     # 확인:
-    # Redis AOF 영속화 사용 여부 확인
+    # Redis RDB 저장 비활성화 확인
+    # docker exec -it chs-redis redis-cli CONFIG GET save
+    # Redis AOF 영속화 비활성화 확인
     # docker exec -it chs-redis redis-cli CONFIG GET appendonly
-    # AOF 자동 재작성 비율 기준 확인
-    # docker exec -it chs-redis redis-cli CONFIG GET auto-aof-rewrite-percentage
-    # AOF 자동 재작성 최소 크기 기준 확인
-    # docker exec -it chs-redis redis-cli CONFIG GET auto-aof-rewrite-min-size
-    # 현재 AOF rewrite 진행 상태와 persistence 상태값 확인
+    # 현재 persistence 상태값 확인
     # docker exec -it chs-redis redis-cli INFO persistence
     # 실제 Redis 데이터/AOF 파일들이 차지하는 디스크 사용량과 파일 목록 확인
     # docker exec -it chs-redis sh -lc 'du -sh /data && find /data -maxdepth 2 -type f | sort'

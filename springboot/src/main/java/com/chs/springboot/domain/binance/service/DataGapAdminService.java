@@ -1,6 +1,6 @@
 // [AGENT] 역할: 수집 데이터 누락 구간 탐지 서비스 | 연관파일: DataGapAdminController.java
-// 지원 타입: RAW_AGG_TRADE, AGG_1M, AGG_5M, OI
-// 각 쿼리는 최대 200개 갭을 missing_count/gap_minutes 내림차순으로 반환
+// 지원 타입: RAW_AGG_TRADE, AGG_1M, AGG_5M, KLINE_1M, OI
+// 기존 SQL 갭 쿼리는 최대 200개를 missing_count/gap_minutes 내림차순으로 반환하며 KLINE_1M은 범위 전체를 반환
 package com.chs.springboot.domain.binance.service;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,17 +15,25 @@ public class DataGapAdminService {
     private static final int GAP_RESULT_LIMIT = 200;
 
     private final JdbcTemplate batchJdbcTemplate;
+    private final BinanceKlineGapService klineGapService;
 
-    public DataGapAdminService(JdbcTemplate batchJdbcTemplate) {
+    public DataGapAdminService(JdbcTemplate batchJdbcTemplate, BinanceKlineGapService klineGapService) {
         this.batchJdbcTemplate = batchJdbcTemplate;
+        this.klineGapService = klineGapService;
     }
 
     /** days: null이면 전체, 숫자면 최근 N일 */
     public List<Map<String, Object>> checkGap(String type, Integer days) {
+        return checkGap(type, days, null, null);
+    }
+
+    public List<Map<String, Object>> checkGap(
+            String type, Integer days, Long fromMs, Long toMsExclusive) {
         return switch (type.toUpperCase()) {
             case "RAW_AGG_TRADE" -> rawAggTradeGap(days);
             case "AGG_1M"        -> candleGap("agg_trade_1m", 60_000L);
             case "AGG_5M"        -> candleGap("agg_trade_5m", 300_000L);
+            case "KLINE_1M"      -> klineGapService.findGaps(days, fromMs, toMsExclusive);
             case "OI"            -> oiGap();
             default -> throw new IllegalArgumentException("Unknown type: " + type);
         };

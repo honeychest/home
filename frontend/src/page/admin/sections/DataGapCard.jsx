@@ -7,15 +7,20 @@ export default function DataGapCard({ dataGap, collectLoading, collectError }) {
     const {
         activeKey, rows, loading, error, selectedRows,
         activeCheck, visibleColumns, showCheckbox, allChecked,
+        isRowSelectable,
         toggleAll, toggleRow,
         handleCheck, handleBulkCollect,
     } = dataGap;
+
+    const displayLimit = activeCheck?.type === 'KLINE_1M'
+        ? 'KLINE_1M 행 개수 제한 없음, 범위는 최대 48시간'
+        : `기존 갭 최대 ${GAP_ROW_DISPLAY_LIMIT}건 표시`;
 
     return (
         <div className={styles.card}>
             <div className={styles.titleRow}>
                 <div className={styles.title}>갭 조회</div>
-                <div className={styles.subtitle}>최대 {GAP_ROW_DISPLAY_LIMIT}건 표시</div>
+                <div className={styles.subtitle}>{displayLimit}</div>
             </div>
             <div className={styles.btnRow}>
                 {CHECKS.filter(c => !c.danger).map(({ type, label, desc, days }) => {
@@ -35,7 +40,7 @@ export default function DataGapCard({ dataGap, collectLoading, collectError }) {
                     );
                 })}
             </div>
-            {activeKey && <p className={styles.desc}>{activeCheck?.desc}{' · '}최대 {GAP_ROW_DISPLAY_LIMIT}건 표시</p>}
+            {activeKey && <p className={styles.desc}>{activeCheck?.desc}{' · '}{displayLimit}</p>}
 
             {loading && <div className={styles.muted}>조회 중...</div>}
             {!loading && error && <div className={`${styles.muted} ${styles.error}`}>{error}</div>}
@@ -60,7 +65,7 @@ export default function DataGapCard({ dataGap, collectLoading, collectError }) {
                         <tbody>
                             {rows.map((row, i) => (
                                 <tr key={i} className={i % 2 === 1 ? styles.trOdd : ''}>
-                                    {showCheckbox && (
+                                    {showCheckbox && isRowSelectable(row) ? (
                                         <td className={`${styles.td} ${styles.colCheckbox}`}>
                                             <input
                                                 type="checkbox"
@@ -68,7 +73,7 @@ export default function DataGapCard({ dataGap, collectLoading, collectError }) {
                                                 onChange={() => toggleRow(i)}
                                             />
                                         </td>
-                                    )}
+                                    ) : showCheckbox ? <td className={`${styles.td} ${styles.colCheckbox}`} /> : null}
                                     {visibleColumns.map(col => (
                                         <td key={col} className={`${styles.td} ${styles.mono}`}>
                                             {row[col] != null ? String(row[col]) : '—'}
