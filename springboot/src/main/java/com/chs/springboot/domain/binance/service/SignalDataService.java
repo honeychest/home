@@ -13,7 +13,6 @@ import com.chs.springboot.domain.binance.repository.OpenInterestRepository;
 import com.chs.springboot.domain.binance.repository.SignalParamsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -31,7 +30,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SignalDataService {
 
-    private final JdbcTemplate jdbcTemplate;
     private final OpenInterestRepository openInterestRepository;
     private final ForceOrderRepository       forceOrderRepository;
     private final AggTrade1mRepository       agg1mRepository;
@@ -189,29 +187,7 @@ public class SignalDataService {
     }
 
     public BigDecimal calcLargeTradeThreshold(String symbol) {
-        long oneHourAgoMs = System.currentTimeMillis() - 3_600_000L;
-        long nowMs        = System.currentTimeMillis();
-
-        String sql = """
-            SELECT
-                SUM(quantity * price) as total_value,
-                COUNT(*) as trade_count
-            FROM raw_agg_trade
-            WHERE symbol = ? AND traded_at >= ? AND traded_at < ?
-            """;
-
-        List<Map<String, Object>> result = jdbcTemplate.queryForList(sql, symbol, oneHourAgoMs, nowMs);
-        if (result.isEmpty()) return new BigDecimal("10000");
-
-        Map<String, Object> row = result.get(0);
-        BigDecimal totalValue = toBd(row.getOrDefault("total_value", BigDecimal.ZERO));
-        long tradeCount       = ((Number) row.getOrDefault("trade_count", 1L)).longValue();
-
-        if (tradeCount == 0) return new BigDecimal("10000");
-
-        return totalValue
-                .divide(new BigDecimal(tradeCount), 8, RoundingMode.HALF_UP)
-                .multiply(new BigDecimal("10"));
+        return new BigDecimal("10000");
     }
 
     public BigDecimal calcMovingAverage(String symbol, String marketType, int count) {
