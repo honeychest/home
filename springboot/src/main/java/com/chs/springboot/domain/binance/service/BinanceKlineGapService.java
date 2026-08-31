@@ -3,6 +3,7 @@ package com.chs.springboot.domain.binance.service;
 import com.chs.springboot.domain.binance.model.AggTradeCollectStatus;
 import com.chs.springboot.domain.binance.repository.AggTradeCollectStatusRepository;
 import com.chs.springboot.domain.binance.repository.BinanceKlineTempCandleRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.sql.Timestamp;
@@ -30,6 +31,7 @@ public class BinanceKlineGapService {
     private final BinanceKlineRangeFetcher rangeFetcher;
     private final Clock clock;
 
+    @Autowired
     public BinanceKlineGapService(
             AggTradeCollectStatusRepository statusRepository,
             BinanceKlineTempCandleRepository tempCandleRepository,
