@@ -16,6 +16,7 @@ export default function useManualCollect() {
     const pollRef = useRef(null);
 
     const isIdBased = ID_BASED.has(cType);
+    const isKline = cType === 'KLINE_1M';
     const noMarket = NO_MARKET.has(cType);
 
     const handleCollect = async () => {
@@ -27,6 +28,9 @@ export default function useManualCollect() {
                 if (cFrom) body.fromId = Number(cFrom);
                 if (cTo)   body.toId   = Number(cTo);
             } else {
+                if (isKline && !cTo) {
+                    throw new Error('KLINE_1M은 From과 To가 모두 필요합니다');
+                }
                 if (cFrom) body.fromMs = datetimeLocalToMs(cFrom);
                 if (cTo)   body.toMs   = datetimeLocalToMs(cTo);
             }
@@ -67,6 +71,6 @@ export default function useManualCollect() {
         collectLoading, collectError,
         jobs, setJobs,
         handleCollect,
-        isIdBased, noMarket,
+        isIdBased, isKline, noMarket,
     };
 }

@@ -7,7 +7,7 @@ export default function ManualCollectCard({ manualCollect }) {
         cType, setCType, cSymbol, setCSymbol, cMarket, setCMarket,
         cFrom, setCFrom, cTo, setCTo,
         collectLoading, collectError, jobs,
-        handleCollect, isIdBased, noMarket,
+        handleCollect, isIdBased, isKline, noMarket,
     } = manualCollect;
 
     return (
@@ -21,7 +21,8 @@ export default function ManualCollectCard({ manualCollect }) {
                 <div className={styles.field}>
                     <div className={styles.label}>Type</div>
                     <select className={styles.select} value={cType} onChange={e => setCType(e.target.value)}>
-                        <option value="RAW_AGG_TRADE">Raw AggTrade</option>
+                        <option value="RAW_AGG_TRADE">Raw AggTrade (레거시)</option>
+                        <option value="KLINE_1M">Kline 1분봉 (임시)</option>
                         <option value="AGG_1M">1분봉</option>
                         <option value="AGG_5M">5분봉</option>
                         <option value="OI">Open Interest</option>
@@ -48,7 +49,7 @@ export default function ManualCollectCard({ manualCollect }) {
 
             <div className={`${styles.inputRow} ${styles.rowGap}`}>
                 <div className={styles.field}>
-                    <div className={styles.label}>{isIdBased ? 'From ID' : 'From'}</div>
+                    <div className={styles.label}>{isIdBased ? 'From ID' : isKline ? 'From (최대 48시간)' : 'From'}</div>
                     {isIdBased
                         ? <input className={styles.input} type="number" value={cFrom} onChange={e => setCFrom(e.target.value)} placeholder="시작 ID" />
                         : <input className={styles.input} type="datetime-local" value={cFrom} onChange={e => setCFrom(e.target.value)} />
@@ -67,7 +68,7 @@ export default function ManualCollectCard({ manualCollect }) {
                         type="button"
                         className={`${styles.btn} ${styles.btnActive} ${styles.btnBlock}`}
                         onClick={handleCollect}
-                        disabled={collectLoading || !cFrom}
+                        disabled={collectLoading || !cFrom || (isKline && !cTo)}
                     >
                         {collectLoading ? '요청 중...' : '수집 시작'}
                     </button>
