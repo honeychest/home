@@ -30,7 +30,7 @@ services:
       - --max_execution_time=300000 # 5분이상 걸리는 쿼리 강제 킬 (배치작업시 주의)
       - --wait_timeout=600 # 10분간 idle 인 커넥션 종료
       - --interactive_timeout=600
-      - --innodb_buffer_pool_size=256MB # 96MB (기본 128MB에서 축소)
+      - --innodb_buffer_pool_size=512MB # 512MB (기본 128MB에서 확대, 컨테이너 한도 1024M 내)
       - --performance_schema=OFF # 50~100MB 절약, information_schema는 정상 동작
       - --slow_query_log=ON # 느린 쿼리 로깅
       - --long_query_time=5 # 5초 이상 쿼리 기록
