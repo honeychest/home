@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -14,6 +15,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @Service
+@ConditionalOnProperty(value = "binance.agg-trade.kafka.enabled", havingValue = "true")
 public class AggTradeKafkaProducer {
 
     private static final Logger log = LoggerFactory.getLogger(AggTradeKafkaProducer.class);

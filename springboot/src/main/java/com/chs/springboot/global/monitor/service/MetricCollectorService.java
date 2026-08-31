@@ -92,7 +92,7 @@ public class MetricCollectorService {
         return lastDisk;
     }
 
-    /** 헬스보드 res-rawtable-growth 재사용 — raw_agg_trade 물리크기(data+index 바이트). leader에서만 갱신, -1=미수집 */
+    /** 모니터링 스냅샷용 raw_agg_trade 물리크기(data+index 바이트). leader에서만 갱신, -1=미수집 */
     public long getLastRawAggTradeBytes() {
         return lastRawAggTradeBytes;
     }

@@ -1,5 +1,5 @@
 // [AGENT] 역할: 수동 수집/보정 서비스 — 비동기 Job 관리, 타입별 Binance REST 호출, FUTURES flat/outlier 캔들 보정 | 연관파일: ManualBackfillController.java
-// 지원 타입: RAW_AGG_TRADE(fromId~toId), AGG_1M/5M(fromMs~toMs rollup), KLINE_1M(임시 1m add-only), OI(REST 호출), flat-correction(1m klines + 5m 재롤업), outlier-correction(raw 기준 1m/5m 재생성)
+// 지원 타입: AGG_1M/5M(fromMs~toMs rollup), KLINE_1M(임시 1m add-only), OI(REST 호출), flat-correction(1m klines + 5m 재롤업), outlier-correction(raw 기준 1m/5m 재생성)
 // 재발방지: raw 존재 1분은 kline fallback 저장 제외, id-zero/kline-like 1m/5m 기존 row는 raw/1s 기반 rollup으로 교체
 // Job 상태: RUNNING → DONE | ERROR / ConcurrentHashMap 저장 (앱 재시작 시 초기화)
 package com.chs.springboot.domain.binance.service;
@@ -91,6 +91,9 @@ public class ManualBackfillService {
 
     public String startCollect(String type, String symbol, String marketType,
                                Long fromId, Long toId, Long fromMs, Long toMs) {
+        if ("RAW_AGG_TRADE".equalsIgnoreCase(type)) {
+            throw new IllegalArgumentException("raw_agg_trade 백필은 중단되었습니다. KLINE_1M 백필을 사용하세요");
+        }
         String jobId = UUID.randomUUID().toString().substring(0, 8);
         long now = System.currentTimeMillis();
         jobs.put(jobId, new JobStatus(jobId, type, symbol, marketType, "RUNNING", null, now, null, 0));
@@ -98,7 +101,6 @@ public class ManualBackfillService {
         CompletableFuture.runAsync(() -> {
             try {
                 int inserted = switch (type.toUpperCase()) {
-                    case "RAW_AGG_TRADE" -> collectRawAggTrade(symbol, marketType, fromId, toId);
                     case "AGG_1M"        -> collectRollup1m(symbol, marketType, fromMs, toMs);
                     case "AGG_5M"        -> collectRollup5m(symbol, marketType, fromMs, toMs);
                     case "KLINE_1M"      -> collectKline1m(symbol, marketType, fromMs, toMs);
@@ -148,73 +150,6 @@ public class ManualBackfillService {
         return jobs.values().stream()
             .sorted(Comparator.comparingLong(JobStatus::startedAt).reversed())
             .toList();
-    }
-
-    // ─── RAW_AGG_TRADE ───────────────────────────────────────────────────────
-
-    private int collectRawAggTrade(String symbol, String marketType, Long fromId, Long toId) throws Exception {
-        HttpClient client = HttpClient.newHttpClient();
-        String base = "SPOT".equals(marketType) ? spotBaseUrl : futuresBaseUrl;
-        String path = "SPOT".equals(marketType) ? "/api/v3/aggTrades" : "/fapi/v1/aggTrades";
-
-        long currentFromId = fromId != null ? fromId : 0L;
-        int total = 0;
-
-        while (true) {
-            String url = base + path + "?symbol=" + symbol + "&fromId=" + currentFromId + "&limit=1000";
-            HttpResponse<String> response = httpGet(client, url);
-
-            String usedWeightStr = response.headers().firstValue("X-MBX-USED-WEIGHT-1M").orElse("0");
-            int usedWeight = Integer.parseInt(usedWeightStr);
-            log.info("[ManualBackfill] RAW {} {} fromId={} status={} weight={}", symbol, marketType, currentFromId, response.statusCode(), usedWeight);
-
-            if (usedWeight >= 1800) { // 90% of 2000
-                log.warn("[ManualBackfill] weight 90% 초과, 60초 대기");
-                Thread.sleep(60_000);
-                continue;
-            }
-
-            if (response.statusCode() != 200) {
-                throw new IllegalStateException("HTTP " + response.statusCode() + ": " + response.body());
-            }
-
-            JsonNode array = mapper.readTree(response.body());
-            if (!array.isArray() || array.isEmpty()) break;
-
-            List<Object[]> batch = new ArrayList<>();
-            long batchMaxId = currentFromId;
-
-            for (JsonNode node : array) {
-                long aggId = node.get("a").asLong();
-                if (toId != null && aggId > toId) break;
-                batch.add(new Object[]{
-                    symbol, marketType, aggId,
-                    new BigDecimal(node.get("p").asText()),
-                    new BigDecimal(node.get("q").asText()),
-                    node.get("f").asLong(),
-                    node.get("l").asLong(),
-                    node.get("m").asBoolean(),
-                    node.get("T").asLong()
-                });
-                if (aggId > batchMaxId) batchMaxId = aggId;
-            }
-
-            if (!batch.isEmpty()) {
-                String sql = """
-                    INSERT IGNORE INTO raw_agg_trade
-                    (symbol, market_type, agg_trade_id, price, quantity, first_trade_id, last_trade_id, is_buyer_maker, traded_at, saved_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(6))
-                    """;
-                batchJdbcTemplate.batchUpdate(sql, batch);
-                total += batch.size();
-            }
-
-            if (toId != null && batchMaxId >= toId) break;
-            if (array.size() < 1000) break;
-            currentFromId = batchMaxId + 1;
-        }
-
-        return total;
     }
 
     // ─── AGG_1M rollup ───────────────────────────────────────────────────────

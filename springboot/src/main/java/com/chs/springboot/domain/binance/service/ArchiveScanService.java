@@ -33,6 +33,9 @@ public class ArchiveScanService {
     @Value("${cloud.aws.s3.bucket}")
     private String bucket; // S3 버킷명 (application.properties 에서 주입)
 
+    @Value("${archive.raw-agg-trade.enabled:false}")
+    private boolean archiveEnabled;
+
     public ArchiveScanService(S3Client s3Client,
                               S3ArchiveLogRepository s3ArchiveLogRepository) {
         this.s3Client = s3Client;
@@ -46,6 +49,9 @@ public class ArchiveScanService {
      * @return S3 파일 메타 목록
      */
     public List<S3FileInfo> listS3Files() {
+        if (!archiveEnabled) {
+            return List.of();
+        }
         List<S3FileInfo> result = new ArrayList<>();
 
         ListObjectsV2Request request = ListObjectsV2Request.builder()
@@ -97,6 +103,9 @@ public class ArchiveScanService {
      * @return 삽입된 건수
      */
     public ScanResult scan() {
+        if (!archiveEnabled) {
+            return new ScanResult(0, 0);
+        }
         List<S3FileInfo> files = listS3Files();
 
         int inserted = 0;

@@ -64,7 +64,7 @@ public class AggTradeBackfillService {
     @Value("${binance.rest.futures.base-url:https://fapi.binance.com}")
     private String binanceFuturesBaseUrl;
 
-    @Value("${binance.agg-trade.save.enabled:true}")
+    @Value("${binance.agg-trade.save.enabled:false}")
     private boolean aggTradeSaveEnabled;
 
     public AggTradeBackfillService(StringRedisTemplate redisTemplate,
@@ -81,14 +81,24 @@ public class AggTradeBackfillService {
 
     @PostConstruct
     public void init() {
+        if (!aggTradeSaveEnabled) {
+            log.info("[AggTradeBackfill] raw_agg_trade 백필 비활성화 상태, 스케줄 등록 생략");
+            return;
+        }
         scheduleBackfillSeconds(0);
     }
 
     public synchronized void rescheduleMinutes(int minutes) {
+        if (!aggTradeSaveEnabled) {
+            return;
+        }
         scheduleBackfillSeconds(minutes * 60L);
     }
 
     private synchronized void scheduleBackfillSeconds(long delaySec) {
+        if (!aggTradeSaveEnabled) {
+            return;
+        }
         if (scheduledFuture != null) {
             scheduledFuture.cancel(false);
         }

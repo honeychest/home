@@ -21,7 +21,6 @@ export default function ManualCollectCard({ manualCollect }) {
                 <div className={styles.field}>
                     <div className={styles.label}>Type</div>
                     <select className={styles.select} value={cType} onChange={e => setCType(e.target.value)}>
-                        <option value="RAW_AGG_TRADE">Raw AggTrade (레거시)</option>
                         <option value="KLINE_1M">Kline 1분봉 (임시)</option>
                         <option value="AGG_1M">1분봉</option>
                         <option value="AGG_5M">5분봉</option>

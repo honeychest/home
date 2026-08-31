@@ -6,20 +6,24 @@ export default function ArchiveForm({ actions }) {
         archiveCount, setArchiveCount,
         busy, runningAction,
         handleArchiveCount, handleArchiveRun, handleArchiveUpload,
+        archiveDisabled: configuredArchiveDisabled,
     } = actions;
 
+    const archiveDisabled = configuredArchiveDisabled ?? true;
     const rangeReady = archiveFrom && archiveTo && archiveFrom < archiveTo;
     const runDimmed = archiveCount == null || archiveCount === 0;
 
     return (
         <>
-            <div className={styles.label}>S3 아카이빙 테스트</div>
+            <div className={styles.label}>S3 아카이빙 테스트 (비활성화)</div>
+            <div className={styles.desc}>raw_agg_trade 아카이빙은 현재 중단되어 실행되지 않습니다.</div>
             <div className={styles.fieldGroup}>
                 <div className={styles.subLabel}>시작 (from)</div>
                 <input
                     className={styles.input}
                     type="datetime-local"
                     value={archiveFrom}
+                    disabled={archiveDisabled}
                     onChange={e => { setArchiveFrom(e.target.value); setArchiveCount(null); }}
                 />
             </div>
@@ -29,10 +33,11 @@ export default function ArchiveForm({ actions }) {
                     className={styles.input}
                     type="datetime-local"
                     value={archiveTo}
+                    disabled={archiveDisabled}
                     onChange={e => { setArchiveTo(e.target.value); setArchiveCount(null); }}
                 />
             </div>
-            <button className={styles.primaryBtn} onClick={handleArchiveCount} disabled={busy || !rangeReady}>
+            <button className={styles.primaryBtn} onClick={handleArchiveCount} disabled={archiveDisabled || busy || !rangeReady}>
                 {runningAction === 'archiveCount' ? '조회 중…' : '건수 조회'}
             </button>
             {archiveCount != null && (
@@ -43,14 +48,14 @@ export default function ArchiveForm({ actions }) {
             <button
                 className={`${styles.primaryBtn} ${runDimmed ? styles.primaryBtnDimmed : ''}`}
                 onClick={handleArchiveRun}
-                disabled={busy || runDimmed}
+                disabled={archiveDisabled || busy || runDimmed}
             >
                 {runningAction === 'archiveRun' ? '실행 중…' : '실행 (업로드+삭제)'}
             </button>
             <button
                 className={`${styles.primaryBtn} ${runDimmed ? styles.primaryBtnDimmed : ''}`}
                 onClick={handleArchiveUpload}
-                disabled={busy || runDimmed}
+                disabled={archiveDisabled || busy || runDimmed}
             >
                 {runningAction === 'archiveUpload' ? '실행 중…' : '업로드만 (삭제 없음)'}
             </button>
