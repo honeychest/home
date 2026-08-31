@@ -1,4 +1,4 @@
-// [AGENT] 크리티컬 헬스 체크 카탈로그 — 마스터 체크리스트(26개)를 코드로 고정
+// [AGENT] 크리티컬 헬스 체크 카탈로그 — 마스터 체크리스트(25개)를 코드로 고정
 // 각 항목은 자기 상태 소스(HealthSource)와 판정 기준(임계 문구·HEARTBEAT 임계 초)을 선언한다.
 // 새 체크 추가 = 여기 한 줄(HEARTBEAT 는 경고/다운 초 포함 — 대상 주기의 약 2.5×/5× grace).
 // agentRunner(Codex runner) 체크는 제외 — lab(home) 기준. 문서: docs/health-check-board.md
@@ -13,7 +13,6 @@ public enum HealthCheckCatalog {
     // ── L1 인프라 연결 ────────────────────────────────────────────────
     INFRA_MYSQL("infra-mysql", HealthLayer.L1_INFRA, HealthPriority.CRITICAL, HealthSource.INFRA, "MySQL 연결·응답", "주 DB(MySQL) 연결·응답 여부"),
     INFRA_REDIS("infra-redis", HealthLayer.L1_INFRA, HealthPriority.CRITICAL, HealthSource.INFRA, "Redis 연결·응답", "Redis 연결·응답 여부(리더선출·캐시·큐 기반)"),
-    INFRA_KAFKA("infra-kafka", HealthLayer.L1_INFRA, HealthPriority.CRITICAL, HealthSource.INFRA, "Kafka 브로커 연결", "Kafka 브로커 연결 여부(파이프라인 버스)"),
     INFRA_POSTGRES("infra-postgres", HealthLayer.L1_INFRA, HealthPriority.CRITICAL, HealthSource.INFRA, "Postgres(pgvector) 연결", "챗봇 RAG용 Postgres(pgvector) 연결 여부"),
 
     // ── L2 데이터 유입(피드) ──────────────────────────────────────────

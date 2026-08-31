@@ -1,4 +1,4 @@
-// [AGENT] L1 인프라 계측 완성 — 능동 프로브(mysql/redis/kafka/postgres) 상태 전환을 health_check_event 로 적립.
+// [AGENT] L1 인프라 계측 완성 — 능동 프로브(mysql/redis/postgres) 상태 전환을 health_check_event 로 적립.
 // 20초 주기, leader 노드에서만 실행(한 노드의 일시 네트워크 문제로 공유 이력 오염 방지). 정상 지속 시 DB 쓰기 없음.
 // 보드 표시(HealthCheckService)도 여기가 적립한 이벤트를 읽는다 — 보드 요청 경로에는 실접속 프로브가 없다.
 // 한계: MySQL 자체 다운은 이벤트 저장소가 MySQL 이라 저장·알림 불가(로그로만 남음).
@@ -28,7 +28,6 @@ public class InfraHealthEvaluator {
         }
         record(HealthCheckCatalog.INFRA_MYSQL.key(), probe::mysql);
         record(HealthCheckCatalog.INFRA_REDIS.key(), probe::redis);
-        record(HealthCheckCatalog.INFRA_KAFKA.key(), probe::kafka);
         record(HealthCheckCatalog.INFRA_POSTGRES.key(), probe::postgres);
     }
 

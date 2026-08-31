@@ -6,14 +6,9 @@
 // 같은 빈 이름을 두고 충돌 → 타입(HealthContributor vs ReactiveHealthIndicator)이 기동 시점 조건에 따라
 // 달라지며 BeanNotOfRequiredTypeException이 발생했다. 우리가 직접 만든 안정적인 타입(빈 이름까지 확정)인
 // DataSource/RedisConnectionFactory를 그대로 주입받아 Actuator 내부 배선에 대한 의존을 제거한다.
-// Kafka는 Actuator 기본 인디케이터가 없어(Spring Boot 3.4 기준 미제공) AdminClient로 짧은 타임아웃 프로브.
 package com.chs.springboot.global.monitor.health;
 
-import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.admin.AdminClientConfig;
-import org.apache.kafka.clients.admin.DescribeClusterOptions;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.stereotype.Component;
@@ -21,10 +16,6 @@ import org.springframework.stereotype.Component;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 @Component
 public class InfraHealthProbe {
@@ -36,18 +27,14 @@ public class InfraHealthProbe {
     private final DataSource primaryDataSource;
     private final DataSource pgVectorDataSource;
     private final RedisConnectionFactory redisConnectionFactory;
-    private final String kafkaBootstrapServers;
-
     public InfraHealthProbe(
             @Qualifier("primaryDataSource") DataSource primaryDataSource,
             @Qualifier("pgVectorDataSource") DataSource pgVectorDataSource,
-            RedisConnectionFactory redisConnectionFactory,
-            @Value("${spring.kafka.bootstrap-servers:kafka:9092}") String kafkaBootstrapServers
+            RedisConnectionFactory redisConnectionFactory
     ) {
         this.primaryDataSource = primaryDataSource;
         this.pgVectorDataSource = pgVectorDataSource;
         this.redisConnectionFactory = redisConnectionFactory;
-        this.kafkaBootstrapServers = kafkaBootstrapServers;
     }
 
     public Probe mysql() {
@@ -64,21 +51,6 @@ public class InfraHealthProbe {
             return "PONG".equalsIgnoreCase(pong)
                     ? new Probe(HealthStatus.UP, "정상 응답")
                     : new Probe(HealthStatus.DOWN, "예상치 못한 응답: " + pong);
-        } catch (Exception e) {
-            return new Probe(HealthStatus.DOWN, e.getMessage());
-        }
-    }
-
-    public Probe kafka() {
-        Map<String, Object> config = new HashMap<>();
-        config.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrapServers);
-        config.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, (int) Duration.ofSeconds(3).toMillis());
-        try (AdminClient adminClient = AdminClient.create(config)) {
-            int nodeCount = adminClient.describeCluster(new DescribeClusterOptions().timeoutMs(3000))
-                    .nodes().get(3, TimeUnit.SECONDS).size();
-            return nodeCount > 0
-                    ? new Probe(HealthStatus.UP, nodeCount + "개 브로커 노드 응답")
-                    : new Probe(HealthStatus.DOWN, "브로커 노드 0개");
         } catch (Exception e) {
             return new Probe(HealthStatus.DOWN, e.getMessage());
         }
