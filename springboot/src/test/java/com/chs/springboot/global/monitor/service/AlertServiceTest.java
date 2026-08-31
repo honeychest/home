@@ -1,5 +1,6 @@
 package com.chs.springboot.global.monitor.service;
 
+import com.chs.springboot.global.config.service.AppConfigService;
 import com.chs.springboot.global.monitor.dto.MetricSnapshot;
 import com.chs.springboot.global.monitor.entity.AlertHistory;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
@@ -29,10 +30,11 @@ class AlertServiceTest {
         ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
         TelegramProvider telegramProvider = mock(TelegramProvider.class);
         AlertHistoryRepository alertHistoryRepository = mock(AlertHistoryRepository.class);
-        AlertService alertService = new AlertService(redisTemplate, telegramProvider, alertHistoryRepository);
+        AppConfigService appConfigService = mock(AppConfigService.class);
+        AlertService alertService = new AlertService(redisTemplate, telegramProvider, alertHistoryRepository, appConfigService);
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.get("monitor:silence")).thenReturn(null);
+        when(appConfigService.get(AlertService.KEY_MONITOR_SILENCE)).thenReturn(null);
         when(valueOperations.get("monitor:alert:cooldown:FEED:binance-ticker:DEGRADED")).thenReturn(null);
 
         MetricSnapshot snapshot = new MetricSnapshot(
@@ -68,10 +70,11 @@ class AlertServiceTest {
         ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
         TelegramProvider telegramProvider = mock(TelegramProvider.class);
         AlertHistoryRepository alertHistoryRepository = mock(AlertHistoryRepository.class);
-        AlertService alertService = new AlertService(redisTemplate, telegramProvider, alertHistoryRepository);
+        AppConfigService appConfigService = mock(AppConfigService.class);
+        AlertService alertService = new AlertService(redisTemplate, telegramProvider, alertHistoryRepository, appConfigService);
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.get("monitor:silence")).thenReturn(null);
+        when(appConfigService.get(AlertService.KEY_MONITOR_SILENCE)).thenReturn(null);
         when(valueOperations.get("monitor:alert:cooldown:FEED:binance-ticker:DEGRADED")).thenReturn("1");
 
         MetricSnapshot snapshot = new MetricSnapshot(
@@ -88,5 +91,38 @@ class AlertServiceTest {
         verify(alertHistoryRepository, never()).save(any());
         verify(valueOperations, never()).set(eq("monitor:alert:cooldown:FEED:binance-ticker:DEGRADED"), any(), anyLong(), any());
         verifyNoInteractions(telegramProvider);
+    }
+
+    @Test
+    void silencedEvaluationUsesAppConfigValue() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        TelegramProvider telegramProvider = mock(TelegramProvider.class);
+        AlertHistoryRepository alertHistoryRepository = mock(AlertHistoryRepository.class);
+        AppConfigService appConfigService = mock(AppConfigService.class);
+        AlertService alertService = new AlertService(redisTemplate, telegramProvider, alertHistoryRepository, appConfigService);
+
+        when(appConfigService.get(AlertService.KEY_MONITOR_SILENCE)).thenReturn(" ON ");
+
+        alertService.evaluate(new MetricSnapshot(
+                null, null, null, null, null, null, null, null, null, null,
+                List.of(), null, null, null, null, null, null,
+                List.of(), List.of(), LocalDateTime.of(2026, 5, 30, 12, 0, 0), "monitor-1"));
+
+        verifyNoInteractions(redisTemplate, telegramProvider, alertHistoryRepository);
+    }
+
+    @Test
+    void setSilencedDelegatesToAppConfigService() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        TelegramProvider telegramProvider = mock(TelegramProvider.class);
+        AlertHistoryRepository alertHistoryRepository = mock(AlertHistoryRepository.class);
+        AppConfigService appConfigService = mock(AppConfigService.class);
+        AlertService alertService = new AlertService(redisTemplate, telegramProvider, alertHistoryRepository, appConfigService);
+
+        alertService.setSilenced(true);
+        alertService.setSilenced(false);
+
+        verify(appConfigService).set(AlertService.KEY_MONITOR_SILENCE, "ON");
+        verify(appConfigService).set(AlertService.KEY_MONITOR_SILENCE, "OFF");
     }
 }

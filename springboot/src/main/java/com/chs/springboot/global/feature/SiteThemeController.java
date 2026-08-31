@@ -19,11 +19,15 @@ public class SiteThemeController {
         return ResponseEntity.ok(siteThemeService.getAll());
     }
 
-    /** 페이지별 테마 변경 — TODO: admin 인증 완성 후 /api/admin/site-theme 로 복귀 */
-    @PatchMapping("/site-theme")
+    /** 페이지별 테마 변경 — /api/admin/** 보안 규칙으로 관리자만 허용 */
+    @PatchMapping("/admin/site-theme")
     public ResponseEntity<Map<String, String>> patchThemes(@RequestBody Map<String, String> req) {
-        for (Map.Entry<String, String> entry : req.entrySet()) {
-            siteThemeService.setTheme(entry.getKey(), entry.getValue());
+        try {
+            for (Map.Entry<String, String> entry : req.entrySet()) {
+                siteThemeService.setTheme(entry.getKey(), entry.getValue());
+            }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
         }
         return ResponseEntity.ok(siteThemeService.getAll());
     }
