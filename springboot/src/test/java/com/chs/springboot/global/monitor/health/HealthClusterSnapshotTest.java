@@ -37,8 +37,8 @@ class HealthClusterSnapshotTest {
     @Test
     void publishThenReadRoundTrips() {
         when(redis.opsForValue()).thenReturn(ops);
-        heartbeat.register("pipe-rollup-1s", new HealthHeartbeat.Spec(10, 30));
-        heartbeat.beat("pipe-rollup-1s");
+        heartbeat.register("sched-leader-election", new HealthHeartbeat.Spec(15, 30));
+        heartbeat.beat("sched-leader-election");
         feeds.register("binance-aggTrade", StatusLadder.FEED_SECONDS);
         feeds.markReceived("binance-aggTrade");
         when(metrics.getLastRam()).thenReturn(55d);
@@ -59,7 +59,7 @@ class HealthClusterSnapshotTest {
         assertThat(dto.get().rawTableBytes()).isNull();
         assertThat(dto.get().wsConnections()).isEqualTo(42);
         assertThat(dto.get().heartbeats()).hasSize(1);
-        assertThat(dto.get().heartbeats().get(0).checkKey()).isEqualTo("pipe-rollup-1s");
+        assertThat(dto.get().heartbeats().get(0).checkKey()).isEqualTo("sched-leader-election");
         assertThat(dto.get().heartbeats().get(0).lastBeatEpochMs()).isNotNull();
         assertThat(dto.get().feeds()).hasSize(1);
         assertThat(dto.get().feeds().get(0).feedId()).isEqualTo("binance-aggTrade");

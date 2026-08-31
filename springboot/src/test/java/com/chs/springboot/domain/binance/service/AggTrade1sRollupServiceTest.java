@@ -3,7 +3,6 @@ package com.chs.springboot.domain.binance.service;
 import com.chs.springboot.domain.binance.model.AggTrade1s;
 import com.chs.springboot.domain.binance.repository.AggTrade1sRepository;
 import com.chs.springboot.domain.binance.repository.AggTradeCollectStatusRepository;
-import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,9 +20,30 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AggTrade1sRollupServiceTest {
+
+    @Test
+    @DisplayName("raw 저장이 꺼지면 1s 실시간 롤업·빈 캔들 교정·catch-up이 모두 저장 없이 종료된다")
+    void disabledSaveSkipsRollupAndCatchUp() {
+        LeaderElectionService leaderElectionService = mock(LeaderElectionService.class);
+        AggTrade1sRepository agg1sRepository = mock(AggTrade1sRepository.class);
+        AggTradeCollectStatusRepository statusRepository = mock(AggTradeCollectStatusRepository.class);
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        AggTrade1sRollupService service = new AggTrade1sRollupService(
+                leaderElectionService, agg1sRepository, statusRepository, redisTemplate, jdbcTemplate);
+        ReflectionTestUtils.setField(service, "aggTradeSaveEnabled", false);
+
+        service.rollup1s();
+        service.correctRecentEmptyCandles();
+        service.catchUp();
+
+        assertThat(service.getCatchUpFuture().isDone()).isTrue();
+        verifyNoInteractions(leaderElectionService, agg1sRepository, statusRepository, redisTemplate, jdbcTemplate);
+    }
 
     @Test
     @DisplayName("batchInsert는 거래량과 거래수는 있지만 buy/sell quantity가 없는 1s 오염 row를 저장하지 않는다")
@@ -42,9 +62,9 @@ class AggTrade1sRollupServiceTest {
                 mock(AggTrade1sRepository.class),
                 mock(AggTradeCollectStatusRepository.class),
                 mock(StringRedisTemplate.class),
-                jdbcTemplate,
-                mock(HealthHeartbeat.class)
+                jdbcTemplate
         );
+        ReflectionTestUtils.setField(service, "aggTradeSaveEnabled", true);
 
         ReflectionTestUtils.invokeMethod(service, "batchInsert", List.of(
                 invalidDeltaSourceCandle(),

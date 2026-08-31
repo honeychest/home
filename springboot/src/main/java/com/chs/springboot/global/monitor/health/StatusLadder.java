@@ -5,7 +5,7 @@ package com.chs.springboot.global.monitor.health;
 
 public record StatusLadder(double degradedAt, double downAt) {
 
-    // ── 사다리 상수 집결 (하트비트 13종의 stale/down 초는 HealthHeartbeatConfig 가 단일 소스) ──
+    // ── 사다리 상수 집결 (하트비트 6종의 stale/down 초는 HealthHeartbeatConfig 가 단일 소스) ──
     /** 피드 freshness: 마지막 수신 후 경과 초 */
     public static final StatusLadder FEED_SECONDS = new StatusLadder(10, 30);
     /** 자원 사용률(CPU/RAM/DISK) % — 다운선(downAt)이 AlertService 의 CRITICAL 알림 임계의 단일 소스(AlertService 가 읽음) */

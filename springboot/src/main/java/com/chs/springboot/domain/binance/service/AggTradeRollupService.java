@@ -13,12 +13,11 @@ import com.chs.springboot.domain.binance.repository.AggTrade1mRepository;
 import com.chs.springboot.domain.binance.repository.AggTrade5mRepository;
 import com.chs.springboot.domain.binance.repository.AggTradeCollectStatusRepository;
 import com.chs.springboot.global.chs;
-import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
-import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -65,15 +64,17 @@ public class AggTradeRollupService {
     private final JdbcTemplate batchJdbcTemplate;
     private final AggTrade1sRollupService agg1sRollupService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
-    private final HealthHeartbeat healthHeartbeat;
 
-    private static final String HK_ROLLUP_1M = HealthCheckCatalog.PIPE_ROLLUP_1M.key();
-    private static final String HK_ROLLUP_5M = HealthCheckCatalog.PIPE_ROLLUP_5M.key();
+    @Value("${binance.agg-trade.save.enabled:false}")
+    private boolean aggTradeSaveEnabled;
 
     // ─── 기동 시 catch-up (1s catchUp 완료 후 체이닝) ────────────────────
 
     @PostConstruct
     public void catchUp() {
+        if (!aggTradeSaveEnabled) {
+            return;
+        }
         log.info("[RollupCatchUp] catchUp() 호출됨, 1s future 대기 시작");
         agg1sRollupService.getCatchUpFuture()
             .exceptionally(e -> {
@@ -87,6 +88,7 @@ public class AggTradeRollupService {
     }
 
     private void runCatchUp() {
+        if (!aggTradeSaveEnabled) return;
         boolean locked = Boolean.TRUE.equals(
             redisTemplate.opsForValue().setIfAbsent(CATCHUP_LOCK_KEY, "locked", Duration.ofMinutes(10))
         );
@@ -114,6 +116,7 @@ public class AggTradeRollupService {
     }
 
     private void catchUp1m(String symbol, String marketType, long nowMs) {
+        if (!aggTradeSaveEnabled) return;
         Long lastMs = agg1mRepository
             .findMaxCandleTimeMsBySymbolAndMarketType(symbol, marketType)
             .orElse(null);
@@ -205,6 +208,7 @@ public class AggTradeRollupService {
     }
 
     private void catchUp5m(String symbol, String marketType, long nowMs) {
+        if (!aggTradeSaveEnabled) return;
         Long lastMs = agg5mRepository
             .findMaxCandleTimeMsBySymbolAndMarketType(symbol, marketType)
             .orElse(null);
@@ -288,6 +292,10 @@ public class AggTradeRollupService {
     // ─── 수동 롤업 API (admin 트리거용) ─────────────────────────────────────
 
     public Map<String, Integer> rollupRange(long fromMs, long toMs) {
+        if (!aggTradeSaveEnabled) {
+            log.info("[RollupRange] raw_agg_trade 저장 비활성화 상태, 수동 롤업 생략");
+            return Map.of("inserted1m", 0, "inserted5m", 0);
+        }
         boolean locked = Boolean.TRUE.equals(
             redisTemplate.opsForValue().setIfAbsent(CATCHUP_LOCK_KEY, "locked", Duration.ofMinutes(10))
         );
@@ -403,7 +411,7 @@ public class AggTradeRollupService {
 
     @Scheduled(cron = "10 * * * * *")
     public void rollup1m() {
-        if (!leaderElectionService.isLeader()) return;
+        if (!aggTradeSaveEnabled || !leaderElectionService.isLeader()) return;
 
         long endMs   = currentMinuteStartMs();
         long startMs = endMs - 60_000L;
@@ -418,7 +426,6 @@ public class AggTradeRollupService {
             log.debug("[Rollup1m] {} {} 집계 완료", candle.getSymbol(), candle.getMarketType());
             eventPublisher.publishEvent(new Candle1mCompletedEvent(this, candle));
         }
-        healthHeartbeat.beat(HK_ROLLUP_1M);
     }
 
     // ─── 5분봉 롤업 (매 5분 :30초) — agg_trade_1m → agg_trade_5m ───────────
@@ -426,7 +433,7 @@ public class AggTradeRollupService {
 
     @Scheduled(cron = "30 */5 * * * *")
     public void rollup5m() {
-        if (!leaderElectionService.isLeader()) return;
+        if (!aggTradeSaveEnabled || !leaderElectionService.isLeader()) return;
 
         long endMs   = current5mStartMs();
         long startMs = endMs - 300_000L;
@@ -441,10 +448,10 @@ public class AggTradeRollupService {
             log.debug("[Rollup5m] {} {} 집계 완료", candle.getSymbol(), candle.getMarketType());
             eventPublisher.publishEvent(new CandleCompletedEvent(this, candle));
         }
-        healthHeartbeat.beat(HK_ROLLUP_5M);
     }
 
     private void upsert1mReplacingBad(AggTrade1m candle) {
+        if (!aggTradeSaveEnabled) return;
         String sql = """
             INSERT INTO agg_trade_1m
                 (symbol, market_type, candle_time_ms,
@@ -466,6 +473,7 @@ public class AggTradeRollupService {
     }
 
     private void upsert5mReplacingBad(AggTrade5m candle) {
+        if (!aggTradeSaveEnabled) return;
         String sql = """
             INSERT INTO agg_trade_5m
                 (symbol, market_type, candle_time_ms,

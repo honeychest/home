@@ -191,10 +191,10 @@ class HealthCheckServiceTest {
     @Test
     void heartbeatFromClusterWhenLocalUnknown() {
         // 비리더: 로컬 하트비트 UNKNOWN(대기)이어도 리더 스냅샷에 최근 성공이 있으면 UP
-        String key = HealthCheckCatalog.PIPE_ROLLUP_1S.key();
+        String key = HealthCheckCatalog.SCHED_LEADER_ELECTION.key();
         long now = System.currentTimeMillis();
         HealthClusterSnapshot.HeartbeatEntry entry =
-                new HealthClusterSnapshot.HeartbeatEntry(key, 10, 30, now, null, null);
+                new HealthClusterSnapshot.HeartbeatEntry(key, 15, 30, now, null, null);
         when(healthClusterSnapshot.read()).thenReturn(Optional.of(
                 new HealthClusterSnapshot.Dto(List.of(entry), List.of(), null, null, null, null, now)));
 

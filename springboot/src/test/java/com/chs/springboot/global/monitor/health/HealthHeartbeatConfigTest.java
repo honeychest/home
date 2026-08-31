@@ -21,5 +21,9 @@ class HealthHeartbeatConfigTest {
         }
         assertThat(heartbeat.isRegistered("pipe-kafka-consumer")).isFalse();
         assertThat(heartbeat.isRegistered("pipe-aggtrade-flush")).isFalse();
+        assertThat(heartbeat.isRegistered("pipe-rollup-1s")).isFalse();
+        assertThat(heartbeat.isRegistered("pipe-rollup-1m")).isFalse();
+        assertThat(heartbeat.isRegistered("pipe-rollup-5m")).isFalse();
+        assertThat(heartbeat.isRegistered("pipe-empty-candle-fix")).isFalse();
     }
 }
