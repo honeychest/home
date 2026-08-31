@@ -26,6 +26,9 @@ public class RawAggTradeArchiveScheduler {
     @Value("${spring.task.scheduling.enabled:true}")
     private boolean schedulingEnabled;
 
+    @Value("${archive.raw-agg-trade.enabled:false}")
+    private boolean archiveEnabled;
+
     @Value("${archive.retention-days:3}")
     private int retentionDays;
 
@@ -50,7 +53,9 @@ public class RawAggTradeArchiveScheduler {
      * - 보존 기간(retentionDays) 이전 데이터 존재
      */
     public void run() {
-        if (!schedulingEnabled) return;
+        if (!schedulingEnabled || !archiveEnabled) {
+            return;
+        }
 
         if (disabled) {
             log.warn("[Archive] S3 연속 {}회 실패로 비활성화 상태 — 스킵 (마지막 에러: {})",
@@ -105,7 +110,7 @@ public class RawAggTradeArchiveScheduler {
     }
 
     public boolean isDisabled() {
-        return disabled;
+        return !archiveEnabled || disabled;
     }
 
     public int getConsecutiveFailures() {

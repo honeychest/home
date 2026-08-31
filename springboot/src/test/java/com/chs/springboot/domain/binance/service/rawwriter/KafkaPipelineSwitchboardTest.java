@@ -16,11 +16,11 @@ class KafkaPipelineSwitchboardTest {
     }
 
     @Test
-    void defaultUsesSourceOwnedState() {
+    void defaultKeepsRawWriterDisabledAfterPhase4() {
         KafkaPipelineExecutionPlan plan = new KafkaPipelineSwitchboard(false).aggTradeRawWriterPlan();
 
-        assertThat(plan.mode()).isEqualTo("live");
-        assertThat(plan.enabled()).isTrue();
-        assertThat(plan.targetTable()).isEqualTo("raw_agg_trade");
+        assertThat(plan.mode()).isEqualTo("off");
+        assertThat(plan.enabled()).isFalse();
+        assertThat(plan.targetTable()).isNull();
     }
 }

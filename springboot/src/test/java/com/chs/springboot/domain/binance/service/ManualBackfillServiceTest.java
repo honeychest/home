@@ -5,12 +5,25 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ManualBackfillServiceTest {
+
+    @Test
+    void rejectsRawAggTradeBackfillAfterPhase4() {
+        ManualBackfillService service = new ManualBackfillService(
+                mock(JdbcTemplate.class),
+                mock(BinanceKlineTempSyncService.class));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.startCollect("RAW_AGG_TRADE", "BTCUSDT", "SPOT", 1L, 2L, null, null));
+
+        assertEquals("raw_agg_trade 백필은 중단되었습니다. KLINE_1M 백필을 사용하세요", error.getMessage());
+    }
 
     @Test
     void startsKlineJobWithExplicitTimeRange() throws InterruptedException {

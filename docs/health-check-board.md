@@ -28,6 +28,8 @@
 
 ## 마스터 체크리스트
 
+현재 카탈로그는 30개 체크(하트비트 10개)로 운영한다.
+
 표기: ○이미 신호 있음 · △부분 · ✕없음(신규 계측 필요) / P0=치명 P1=중요 P2=여유
 
 | key | 계층 | P | 대상 | 신호 |
@@ -40,8 +42,6 @@
 | feed-binance-aggtrade | L2 피드 | P0 | binance-aggTrade freshness | ○ |
 | feed-upbit | L2 피드 | P1 | upbit freshness | ○ |
 | feed-ws-reconnect | L2 피드 | P1 | WS 재연결 루프 상태 | △ |
-| pipe-kafka-consumer | L3 파이프라인 | P0 | rawwriter 소비지연/정지 | ✕ |
-| pipe-aggtrade-flush | L3 파이프라인 | P0 | aggTrade flush(1s) 적체 | ✕ |
 | pipe-rollup-1s | L3 파이프라인 | P0 | 1초 롤업 최근 성공 | ✕ |
 | pipe-rollup-1m | L3 파이프라인 | P0 | 1분 롤업 최근 성공 | ✕ |
 | pipe-rollup-5m | L3 파이프라인 | P1 | 5분 롤업 최근 성공 | ✕ |
@@ -63,7 +63,6 @@
 | res-cpu | L7 리소스 | P1 | CPU 임계 | ○ AlertService |
 | res-ram | L7 리소스 | P1 | RAM 임계 | ○ |
 | res-disk | L7 리소스 | P1 | DISK 임계 | ○ |
-| res-rawtable-growth | L7 리소스 | P1 | raw_agg_trade 테이블 폭증 | △ |
 | res-ws-connections | L7 리소스 | P2 | WS 연결수 이상 | △ |
 
 ## 진행 현황

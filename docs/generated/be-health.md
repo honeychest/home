@@ -4,7 +4,7 @@
 > 소스 위치: `springboot/src/main/java/com/chs/springboot/global/monitor/health/` (27개 클래스). 설계 원본은 `docs/health-check-board.md`.
 
 ## 한 줄 요약
-시스템의 인프라·피드·파이프라인·데이터·스케줄러·외부연동·리소스 7계층을 **33개 체크로 상시 점검**하고, "전부 OK"를 한 화면에서 확인하는 운영자용 헬스 보드의 백엔드다. 정상은 저장하지 않고 **실패(FAIL) 전환·복구만** `health_check_event` 테이블에 적립하며, DOWN 발생/복구 시 텔레그램으로 알린다. API는 `/api/admin/health/**`.
+시스템의 인프라·피드·파이프라인·데이터·스케줄러·외부연동·리소스 7계층을 **30개 체크로 상시 점검**하고, "전부 OK"를 한 화면에서 확인하는 운영자용 헬스 보드의 백엔드다. 정상은 저장하지 않고 **실패(FAIL) 전환·복구만** `health_check_event` 테이블에 적립하며, DOWN 발생/복구 시 텔레그램으로 알린다. API는 `/api/admin/health/**`.
 
 ## 이런 걸 물을 때 찾으면 된다 (검색 키워드)
 - "헬스 체크 보드 / admin health / 시스템 상태 점검 / 전부 정상 확인"
@@ -16,12 +16,12 @@
 - "리더 노드에서만 점검 / 비리더 대기 UNKNOWN / 클러스터 스냅샷"
 
 ## 핵심 개념·용어
-- **체크(check)**: 점검 항목 1개. `HealthCheckCatalog` enum에 33개가 코드로 고정돼 있고, 각 항목이 자기 계층·우선순위·상태 소스·판정 임계를 한 줄로 선언한다.
+- **체크(check)**: 점검 항목 1개. `HealthCheckCatalog` enum에 30개가 코드로 고정돼 있고, 각 항목이 자기 계층·우선순위·상태 소스·판정 임계를 한 줄로 선언한다.
 - **checkKey**: 체크의 문자열 식별자(예: `infra-mysql`, `pipe-rollup-1m`). `health_check_event.check_key`로 이력과 연결된다.
 - **계층(HealthLayer)**: 보드 그룹 단위. S1 인프라 → S2 피드 → S3 파이프라인 → S4 데이터 무결성 → S5 리더/스케줄러 → S6 외부연동 → S7 리소스 (enum 이름은 `L1_INFRA`~`L7_RESOURCE`, 화면 라벨은 `S1`~`S7`).
 - **우선순위(HealthPriority)**: `CRITICAL`(치명)·`HIGH`(중요)·`LOW`(여유). 치명=끊기면 수집·저장·차트가 즉시 망가짐.
 - **상태(HealthStatus)**: `UP`(정상)·`DEGRADED`(경고/지연)·`DOWN`(다운/실패)·`UNKNOWN`(미관측/대기).
-- **상태 소스(HealthSource)**: 각 체크의 상태를 "어디서 읽고 어떻게 판정하는지". 7종(FEED/HEARTBEAT/RESOURCE_PCT/RAWTABLE/WSCONN/INFRA/EVENT). 판정 로직과 임계 문구를 소스 스스로 소유한다.
+- **상태 소스(HealthSource)**: 각 체크의 상태를 "어디서 읽고 어떻게 판정하는지". 6종(FEED/HEARTBEAT/RESOURCE_PCT/WSCONN/INFRA/EVENT). 판정 로직과 임계 문구를 소스 스스로 소유한다.
 - **하트비트(heartbeat)**: 주기 잡이 성공할 때 `beat`, 실패할 때 `fail`을 남기고, watchdog이 "마지막 성공 후 경과"로 UP/DEGRADED/DOWN을 판정하는 패턴.
 - **이벤트 이력(health_check_event)**: 실패가 열리고(open, DOWN/DEGRADED) 복구되면 닫히는(RESOLVED) 이력 레코드. 정상 지속 시에는 아무것도 쓰지 않는다.
 - **리더(leader)**: Redis 리더 선출로 뽑힌 단일 노드. 능동 점검(프로브/평가기)과 스냅샷 발행은 리더만 수행해 다중 노드 flapping을 막는다.
@@ -40,22 +40,22 @@
  각 잡의 beat/fail ─▶ HealthHeartbeat ───┘                              ▼
                                      (상태 전환 시) ──▶ HealthAlertNotifier ──▶ 텔레그램
                                                                         │
- GET /api/admin/health/checks ─▶ HealthCheckService.getChecks() ─▶ 33개 체크 live 판정 + 최근 실패 3건
+ GET /api/admin/health/checks ─▶ HealthCheckService.getChecks() ─▶ 30개 체크 live 판정 + 최근 실패 3건
 ```
 핵심: **보드 요청 경로에는 실접속 프로브가 없다.** 화면은 이미 적립된 이벤트/하트비트/스냅샷을 읽어 판정만 하므로 빠르고, 정상 지속 시 DB write는 0이다.
 
 ### API — `HealthCheckController` (`@RequestMapping("/api/admin/health")`)
-- `GET /checks` — 33개 체크 전체 + 상태 요약. 응답: `{ generatedAt, summary{ total, up, degraded, down, unknown, allOk }, checks[] }`. `allOk`는 DOWN·DEGRADED가 모두 0일 때 true.
+- `GET /checks` — 30개 체크 전체 + 상태 요약. 응답: `{ generatedAt, summary{ total, up, degraded, down, unknown, allOk }, checks[] }`. `allOk`는 DOWN·DEGRADED가 모두 0일 때 true.
 - `GET /events` — 최근 실패 이력 100건(최신순, `HealthEventView`).
 - 보호: `SecurityConfig`가 `/api/admin/**`를 `ADMIN_ACCESS` 권한으로 자동 보호(별도 어노테이션 없음).
 
 ### 집계 — `HealthCheckService.getChecks()`
-- `HealthCheckCatalog.all()`(33개)을 순회하며 각 체크의 상태를 `c.source().judge(c, ports)` **한 줄로만** 판정한다(서비스는 소스별로 분기하지 않음 — 판정은 소스가 소유).
+- `HealthCheckCatalog.all()`(30개)을 순회하며 각 체크의 상태를 `c.source().judge(c, ports)` **한 줄로만** 판정한다(서비스는 소스별로 분기하지 않음 — 판정은 소스가 소유).
 - `Ports`(요청마다 구성)로 협력자를 넘긴다: `FeedHealthRegistry` 스냅샷 · `HealthHeartbeat` · `MetricCollectorService` · `HealthCheckEventRepository` · 리더 발행 `ClusterView`.
 - 각 체크에 최근 실패 3건(`findTop3ByCheckKeyOrderByLastFailedAtDesc`)을 붙이고, **현재 UP인데 최근 창(`recent-window-hours`, 기본 24h) 안에 복구된 장애**가 있으면 `recentlyRecovered=true`로 "최근이상" 흔적을 표시한다.
 - 반환 DTO는 `HealthCheckView`(key/label/description/layer/layerCode/priority/status/detail/thresholdText/최근실패 등).
 
-### 카탈로그 — `HealthCheckCatalog` (33개 enum, 마스터 체크리스트)
+### 카탈로그 — `HealthCheckCatalog` (30개 enum, 마스터 체크리스트)
 각 항목이 `(key, layer, priority, source, [feedId | 하트비트 임계], label, description)`를 한 줄로 선언. 정적 초기화 블록이 "FEED 소스↔feedId", "HEARTBEAT 소스↔임계 선언"의 일치를 **클래스 로딩 시점에 강제**(fail-fast).
 
 | 계층 | checkKey (우선순위) | 상태 소스 |
@@ -63,22 +63,20 @@
 | **S1 인프라** | infra-mysql·infra-redis·infra-kafka·infra-postgres (전부 치명) | INFRA |
 | **S2 피드** | feed-binance-ticker(치명)·feed-binance-aggtrade(치명)·feed-upbit(중요) | FEED |
 |  | feed-ws-reconnect(중요) | EVENT |
-| **S3 파이프라인** | pipe-kafka-consumer(치명 60/180)·pipe-aggtrade-flush(치명 60/180)·pipe-rollup-1s(치명 10/30)·pipe-rollup-1m(치명 180/360)·pipe-rollup-5m(중요 720/1200)·pipe-empty-candle-fix(중요 720/1200) | HEARTBEAT |
+| **S3 파이프라인** | pipe-rollup-1s(치명 10/30)·pipe-rollup-1m(치명 180/360)·pipe-rollup-5m(중요 720/1200)·pipe-empty-candle-fix(중요 720/1200) | HEARTBEAT |
 | **S4 데이터** | data-candle-gap(중요)·data-quality(중요) | EVENT |
 | **S5 스케줄러** | sched-leader-election(치명 15/30)·sched-weather(중요 1500/2100)·sched-news(중요 720/1200)·sched-telegram-poll(중요 150/300)·sched-openinterest-poll(중요 150/300)·sched-analysis(중요 180/360) | HEARTBEAT |
 | **S6 외부연동** | ext-telegram-send(중요)·ext-llm(중요)·ext-weather-api(여유)·ext-news-rss(여유)·ext-virustotal(여유)·ext-safebrowsing(여유) | EVENT |
 | **S7 리소스** | res-cpu·res-ram·res-disk(중요) | RESOURCE_PCT |
-|  | res-rawtable-growth(중요) | RAWTABLE |
 |  | res-ws-connections(여유) | WSCONN |
 
 > HEARTBEAT 항목 옆 `A/B`는 경고(stale)/다운 임계 초. 대상 주기의 약 2.5×/5× grace로 잡는다. 예: `pipe-rollup-1s`는 1초 주기라 10초 경과=경고, 30초=다운. `agentRunner`(Codex runner) 체크는 lab(home) 기준이라 제외.
 
-### 상태 소스 7종 — `HealthSource` enum (판정 + 임계 문구를 스스로 소유)
+### 상태 소스 6종 — `HealthSource` enum (판정 + 임계 문구를 스스로 소유)
 - **INFRA**: `InfraHealthEvaluator`가 적립한 open 이벤트 기반(UP 아니면 DOWN). 보드 경로에서 실접속 안 함. 문구 "20초 주기 능동 프로브 기록 기반".
 - **FEED**: `FeedHealthRegistry` 신선도(마지막 수신 경과 초). 사다리 `FEED_SECONDS`(경고 10s·다운 30s). 리더가 관측하면 로컬값, 비리더는 리더 발행 스냅샷으로 재판정.
 - **HEARTBEAT**: `HealthHeartbeat.evaluate(key)`로 "마지막 성공 경과" 판정. 항목이 선언한 stale/down 초를 임계로 사용. 비리더는 클러스터 스냅샷 원시상태로 동일 로직 재판정.
 - **RESOURCE_PCT**: `MetricCollectorService`의 cpu/ram/disk %. 사다리 `RESOURCE_PCT`(경고 70%·다운 80%, `AlertService` CRITICAL 알림 임계와 **동일 상수**). ram/disk는 비리더 폴백을 리더값에서 읽음(cpu는 양 노드 관측).
-- **RAWTABLE**: `raw_agg_trade` 물리 크기(bytes). 사다리 `RAWTABLE_GB`(경고 3GB·다운 6GB, data+index).
 - **WSCONN**: WS 세션 합계(4개 핸들러 합). 사다리 `WS_CONNS`(경고 300·다운 800).
 - **EVENT**: 능동 평가기(L4)나 호출지점 push(L6·ws-reconnect)가 적립한 open 이벤트 유무. open 없으면 UP("알려진 실패 없음" 낙관). 임계 문구 없음(사용 시점 push).
 
@@ -95,7 +93,7 @@
 - `InfraHealthEvaluator`(20초): `InfraHealthProbe`로 mysql/redis/kafka/postgres 프로브 → `recorder.record`. 키별 격리(한 대상 실패가 나머지를 막지 않음). MySQL 프로브는 기존 커넥션 풀에서 커넥션을 빌려 `isValid` 확인(신규 풀 없음), Redis는 `PING`→`PONG`, Kafka는 `AdminClient.describeCluster`(3초 타임아웃, Actuator 기본 인디케이터 없음). **한계: MySQL 자체 다운은 이벤트 저장소가 MySQL이라 저장·알림 불가(로그만).**
 - `FeedHealthEvaluator`(5초): `FeedHealthRegistry` 스냅샷 → checkKey 매핑 → 적립. 피드 WS는 리더만 소유하므로 리더만 평가(flapping 방지).
 - `DataIntegrityEvaluator`(2분): 대표 심볼 `BTCUSDT/FUTURES` 최근 60분 `agg_trade_1m`을 능동 쿼리. **gap**=누락봉 수(사다리 `CANDLE_GAP` 1/3봉) → `data-candle-gap`, **quality**=flat 캔들 비율(`FLAT_PCT` 10/30%) → `data-quality`. 최근 2분은 롤업 지연 여유로 제외.
-- 리소스(res-cpu/ram/disk/rawtable/ws)는 별도 평가기가 아니라 `MetricCollectorService`가 이미 수집한 스냅샷을 보드 요청 시점에 임계 판정한다(스냅샷 재사용 패턴).
+- 리소스(res-cpu/ram/disk/ws)는 별도 평가기가 아니라 `MetricCollectorService`가 이미 수집한 스냅샷을 보드 요청 시점에 임계 판정한다(스냅샷 재사용 패턴).
 
 ### 실패/복구 기록 — `HealthCheckRecorder` (모든 계측의 단일 입구)
 - `record(checkKey, status, cause)`: 상태에서 심각도 파생 — DOWN→CRITICAL·markFail, DEGRADED→WARN·markFail, UP→markOk(진행 중 이벤트 닫기), **UNKNOWN→무동작(오탐 방지)**.
@@ -114,7 +112,7 @@
 - 리테이션 `HealthCheckEventCleanupScheduler`: 매일 04:30 리더 노드가 `retention-days`(기본 30) 경과 이력 삭제. 진행 중(미복구) 장애는 `last_failed_at`이 계속 갱신돼 삭제되지 않는다.
 
 ### 다중 노드 처리 — `HealthClusterSnapshot` / `ClusterView`
-- 리소스%·rawtable·ws·피드 신선도·L4 등 "현재값"은 리더만 갱신한다. 리더가 원시 하트비트 + 자원값을 스냅샷으로 발행하면, 비리더 보드가 이를 읽어 **노드와 무관하게 동일한 화면**을 그린다(장애 이벤트는 공유 DB라 어느 노드서든 동일).
+- 리소스%·ws·피드 신선도·L4 등 "현재값"은 리더만 갱신한다. 리더가 원시 하트비트 + 자원값을 스냅샷으로 발행하면, 비리더 보드가 이를 읽어 **노드와 무관하게 동일한 화면**을 그린다(장애 이벤트는 공유 DB라 어느 노드서든 동일).
 - 공유키(leader·ws-reconnect)는 순간 flap 여지가 있으나 실용상 무해. 보안 검사는 provider별 키 분리(`ext-virustotal`/`ext-safebrowsing`)로 상태 뒤집힘을 해소.
 
 ## 새 하트비트 체크 추가 방법 (3단계)

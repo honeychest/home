@@ -54,6 +54,9 @@ public class S3ArchiveService {
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
 
+    @Value("${archive.raw-agg-trade.enabled:false}")
+    private boolean archiveEnabled;
+
     public S3ArchiveService(S3Client s3Client,
                             RawAggTradeRepository rawAggTradeRepository,
                             S3ArchiveLogRepository s3ArchiveLogRepository,
@@ -78,6 +81,10 @@ public class S3ArchiveService {
     public UploadResult uploadAndLog(long startMs, long endMs, String triggerType) {
         String rangeLabel = KEY_FORMATTER.format(Instant.ofEpochMilli(startMs))
                 + "_" + KEY_FORMATTER.format(Instant.ofEpochMilli(endMs));
+        if (!archiveEnabled) {
+            log.info("[Archive] raw_agg_trade 아카이빙 비활성화 상태 — 스킵: range={}", rangeLabel);
+            return UploadResult.disabled(rangeLabel);
+        }
         String s3Key = "raw_agg_trade/" + rangeLabel + ".csv";
         File tempFile = null;
 
@@ -156,6 +163,9 @@ public class S3ArchiveService {
      * @return 삭제된 행 수
      */
     public int deleteAndComplete(long startMs, long endMs, String s3Key) {
+        if (!archiveEnabled) {
+            return 0;
+        }
         String rangeLabel = s3Key.replace("raw_agg_trade/", "").replace(".csv", "");
 
         // DB 삭제
@@ -336,6 +346,11 @@ public class S3ArchiveService {
 
         static UploadResult skipped(String rangeLabel) {
             return new UploadResult(rangeLabel, null, 0, 0, 0, true, true, null);
+        }
+
+        static UploadResult disabled(String rangeLabel) {
+            return new UploadResult(rangeLabel, null, 0, 0, 0, false, true,
+                    "raw_agg_trade 아카이빙이 비활성화되어 실행되지 않았습니다");
         }
 
         static UploadResult failure(String rangeLabel, String errorMessage) {

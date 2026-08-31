@@ -5,7 +5,7 @@ import { datetimeLocalToMs } from '../utils';
 
 // 수동 수집 + Job 폴링.
 export default function useManualCollect() {
-    const [cType, setCType] = useState('RAW_AGG_TRADE');
+    const [cType, setCType] = useState('KLINE_1M');
     const [cSymbol, setCSymbol] = useState('BTCUSDT');
     const [cMarket, setCMarket] = useState('SPOT');
     const [cFrom, setCFrom] = useState('');

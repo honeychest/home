@@ -81,22 +81,6 @@ public enum HealthSource {
             return StatusLadder.RESOURCE_PCT.text("%", "(AlertService 임계와 동일)");
         }
     },
-    RAWTABLE {      // raw_agg_trade 물리 크기 절대값 임계
-        @Override
-        Judgement judge(HealthCheckCatalog check, Ports ports) {
-            long bytes = ports.metrics().getLastRawAggTradeBytes();
-            if (bytes < 0 && ports.cluster().rawTableBytes() != null) {
-                bytes = ports.cluster().rawTableBytes(); // 비리더 → 리더 발행값
-            }
-            StatusLadder.Judged j = StatusLadder.judgeRawTable(bytes);
-            return new Judgement(j.status(), j.detail());
-        }
-
-        @Override
-        String thresholdText(HealthCheckCatalog check) {
-            return StatusLadder.RAWTABLE_GB.text("GB", " (data+index)");
-        }
-    },
     WSCONN {        // WS 세션 수 절대값 임계
         @Override
         Judgement judge(HealthCheckCatalog check, Ports ports) {

@@ -19,5 +19,7 @@ class HealthHeartbeatConfigTest {
                     .as("체크 %s: 선언 source=%s", c.key(), c.source())
                     .isEqualTo(c.source() == HealthSource.HEARTBEAT);
         }
+        assertThat(heartbeat.isRegistered("pipe-kafka-consumer")).isFalse();
+        assertThat(heartbeat.isRegistered("pipe-aggtrade-flush")).isFalse();
     }
 }

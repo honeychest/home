@@ -46,7 +46,7 @@ public class AggTradeStorageService {
     private final AggTradeCollectStatusRepository statusRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${binance.agg-trade.save.enabled:true}")
+    @Value("${binance.agg-trade.save.enabled:false}")
     private boolean aggTradeSaveEnabled;
 
     @Value("${spring.profiles.active:default}")

@@ -4,6 +4,7 @@ import { fetchArchiveCount, runArchive, runArchiveUpload, fetchScanPreview, runS
 import { logApiCall } from '../shared/logApiCall.js';
 
 const toMs = (datetimeLocal) => new Date(datetimeLocal).getTime();
+const ARCHIVE_DISABLED = true;
 
 export default function useAuthTestActions() {
     const [email, setEmail] = useState('');
@@ -36,7 +37,7 @@ export default function useAuthTestActions() {
     };
 
     const handleArchiveCount = async () => {
-        if (busy || !archiveFrom || !archiveTo) return;
+        if (ARCHIVE_DISABLED || busy || !archiveFrom || !archiveTo) return;
         setArchiveCount(null);
         setRunningAction('archiveCount');
         const log = await logApiCall('POST /api/admin/archive/count', () => fetchArchiveCount(toMs(archiveFrom), toMs(archiveTo)));
@@ -48,7 +49,7 @@ export default function useAuthTestActions() {
     };
 
     const handleArchiveRun = async () => {
-        if (busy || archiveCount == null) return;
+        if (ARCHIVE_DISABLED || busy || archiveCount == null) return;
         setRunningAction('archiveRun');
         const log = await logApiCall('POST /api/admin/archive/run', () => runArchive(toMs(archiveFrom), toMs(archiveTo)));
         patchLog('archive', log);
@@ -57,7 +58,7 @@ export default function useAuthTestActions() {
     };
 
     const handleArchiveUpload = async () => {
-        if (busy || archiveCount == null) return;
+        if (ARCHIVE_DISABLED || busy || archiveCount == null) return;
         setRunningAction('archiveUpload');
         const log = await logApiCall('POST /api/admin/archive/upload', () => runArchiveUpload(toMs(archiveFrom), toMs(archiveTo)));
         patchLog('archive', log);
@@ -66,7 +67,7 @@ export default function useAuthTestActions() {
     };
 
     const handleScanPreview = async () => {
-        if (busy) return;
+        if (ARCHIVE_DISABLED || busy) return;
         setScanFiles(null);
         setRunningAction('scanPreview');
         const log = await logApiCall('GET /api/admin/archive/scan-preview', fetchScanPreview);
@@ -78,7 +79,7 @@ export default function useAuthTestActions() {
     };
 
     const handleScanRun = async () => {
-        if (busy) return;
+        if (ARCHIVE_DISABLED || busy) return;
         setRunningAction('scanRun');
         const log = await logApiCall('POST /api/admin/archive/scan', runScan);
         patchLog('archiveScan', log);
@@ -88,7 +89,7 @@ export default function useAuthTestActions() {
     return {
         email, setEmail, password, setPassword,
         archiveFrom, setArchiveFrom, archiveTo, setArchiveTo, archiveCount, setArchiveCount,
-        runningAction, busy, logs,
+        runningAction, busy, logs, archiveDisabled: ARCHIVE_DISABLED,
         handleLogin, handleCookieSnapshot,
         handleArchiveCount, handleArchiveRun, handleArchiveUpload,
         handleScanPreview, handleScanRun,

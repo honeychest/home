@@ -117,8 +117,9 @@ function LayerCard({ layer, onlyAlerts, pinned, onToggle }) {
 }
 
 // 하단 작업 인수인계 — 새 세션에서 이어가기 위한 개발 현황 기록(기본 펼침)
-function HandoffPanel() {
+function HandoffPanel({ checkCount }) {
     const [open, setOpen] = useState(true);
+    const totalChecks = checkCount ?? 30;
     return (
         <div className={styles.card}>
             <div className={styles.titleRow}>
@@ -133,7 +134,7 @@ function HandoffPanel() {
             </div>
             {open && (
                 <div className={b.handoff}>
-                    <div><strong>진행</strong> : 계측 완료 34/34 🎉 (피드 4 · 하트비트 13 · 리소스 5 · 인프라 4 · 데이터 2 · 외부 6). 전 항목 계측 완료.</div>
+                    <div><strong>진행</strong> : 계측 완료 {totalChecks}/{totalChecks} 🎉 (피드 4 · 하트비트 10 · 리소스 4 · 인프라 4 · 데이터 2 · 외부 6). 전 항목 계측 완료.</div>
                     <div><strong>구조</strong> : 백그라운드 상시 점검 → <span className={styles.mono}>health_check_event</span> 이력 저장 → 보드는 최신값 읽기만 (정상 지속 시 DB 쓰기 0).</div>
                     <div><strong>패턴 5종</strong> : ① 하트비트+watchdog(잡) &nbsp; ② 공용 평가기(피드) &nbsp; ③ 능동 프로브(인프라 mysql/redis/kafka/postgres) &nbsp; ④ 스냅샷 재사용(리소스, MetricCollectorService 값 임계 판정) &nbsp; ⑤ 이벤트 기반(L4 능동쿼리 · L6 외부연동 호출지점 push)</div>
                     <div><strong>핵심 파일</strong> : <span className={styles.mono}>global/monitor/health/</span> (HealthHeartbeat·Config·Watchdog·Recorder·Service·Controller·Catalog·InfraHealthProbe), FeedHealthEvaluator, <span className={styles.mono}>MetricCollectorService</span>(cpu/ram/disk 스냅샷), 테이블 <span className={styles.mono}>health_check_event</span>(V9)</div>
@@ -157,8 +158,9 @@ function HandoffPanel() {
 }
 
 // 하단 운영 체크리스트 · 장기 메모 — 후속 작업/점검용 참조 패널(기본 접힘, 정적 콘텐츠)
-function NotesPanel() {
+function NotesPanel({ checkCount }) {
     const [open, setOpen] = useState(false);
+    const totalChecks = checkCount ?? 30;
     return (
         <div className={styles.card}>
             <div className={styles.titleRow}>
@@ -175,14 +177,14 @@ function NotesPanel() {
                 <div className={b.handoff}>
                     <div><strong>■ 남은 작업 (우선순위)</strong></div>
                     <div>[높음] 임계값 실측 튜닝 — 전부 추정 기본값. 운영 baseline 관찰 후 조정
-                        (rawtable 3/6GB · ws 300/800 · ws-reconnect 3/6·60s · L4 gap 1/3봉·flat 10/30% · leader 15/30s)</div>
+                        (ws 300/800 · ws-reconnect 3/6·60s · L4 gap 1/3봉·flat 10/30% · leader 15/30s)</div>
                     <div>[중간] ext-llm 커버리지 — 로컬 <span className={styles.mono}>.call</span>만 계측, Codex external runner 실패는 미포함</div>
                     <div>[낮음] L4 다심볼 확장(현재 BTCUSDT FUTURES 1심볼) · 공유키 node별 분리(leader·ws-reconnect) · DEGRADED 알림 확장</div>
 
                     <div><strong>■ 주의점 (운영 시 인지)</strong></div>
                     <div>1. 알림 전제 : 텔레그램(<span className={styles.mono}>telegram_token/chatid</span>) 설정돼야 알림 발송. prod 확인 필수</div>
                     <div>2. DOWN만 알림 : DEGRADED(경고)는 텔레그램 미발송·보드만 표시</div>
-                    <div>3. leader 기준 : 리소스%·rawtable·ws·L4·weather 값은 leader 노드에서만 갱신
+                    <div>3. leader 기준 : 리소스%·ws·L4·weather 값은 leader 노드에서만 갱신
                         (장애 이벤트는 공유DB라 어느 노드서든 동일, '현재값'만 리더 기준)</div>
                     <div>4. 공유키 flap : leader·ws-reconnect(다노드) 순간 뒤집힘 여지(실용상 무해). security-scan은 provider별 키 분리(ext-virustotal/ext-safebrowsing)로 해소</div>
                     <div>5. 자기참조 : <span className={styles.mono}>ext-telegram-send</span>는 알림 제외 → 텔레그램 장애는 보드/로그로 확인</div>
@@ -193,10 +195,10 @@ function NotesPanel() {
                     <div><strong>■ 배포 전 체크리스트</strong></div>
                     <div>☐ prod 텔레그램 토큰/챗ID 설정 확인(알림 전제)</div>
                     <div>☐ <span className={styles.mono}>health_check_event</span>(V9) prod 존재 · <span className={styles.mono}>monitor.health.retention-days</span>(기본 30) 확인</div>
-                    <div>☐ 배포 후 이 보드 상단 34/34 · '전부 정상' 표시 확인</div>
+                    <div>☐ 배포 후 이 보드 상단 {totalChecks}/{totalChecks} · '전부 정상' 표시 확인</div>
                     <div>☐ 정상 지속 시 <span className={styles.mono}>health_check_event</span> write 0 확인</div>
                     <div>☐ 스테이징서 의도적 DOWN 1회 → 🔴 텔레그램 수신 + 복구 🟢 확인</div>
-                    <div>☐ 임계 baseline 관찰 시작(rawtable 실제 크기·ws 실제 세션수) → 값 튜닝</div>
+                    <div>☐ 임계 baseline 관찰 시작(ws 실제 세션수) → 값 튜닝</div>
 
                     <div className={styles.muted}>※ 이 메모는 후속 작업 참조용입니다. 설계·체크리스트 원본은 <span className={styles.mono}>docs/health-check-board.md</span>, 진행현황은 위 인수인계 패널이 단일 소스.</div>
                 </div>
@@ -316,8 +318,8 @@ export default function HealthBoardPage() {
                     {onlyAlerts && summary && summary.down === 0 && summary.degraded === 0 && (
                         <div className={`${styles.muted} ${styles.tableEmpty}`}>이상 항목 없음 — 전부 정상</div>
                     )}
-                </div>                <HandoffPanel />
-                <NotesPanel />
+                </div>                <HandoffPanel checkCount={summary?.total ?? data?.checks?.length} />
+                <NotesPanel checkCount={summary?.total ?? data?.checks?.length} />
                 </div>
             </div>
         </Layout>

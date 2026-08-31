@@ -1,6 +1,5 @@
 package com.chs.springboot.domain.binance.service.rawwriter;
 
-import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeadershipChangedEvent;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
@@ -33,9 +32,8 @@ class AggTradeRawWriterConsumerTest {
     private final AggTradeRawWriterBatchPartitioner batchPartitioner =
             new AggTradeRawWriterBatchPartitioner(new AggTradeRawWriterMessageParser(new com.fasterxml.jackson.databind.ObjectMapper()));
     private final MessageListenerContainer container = mock(MessageListenerContainer.class);
-    private final HealthHeartbeat healthHeartbeat = mock(HealthHeartbeat.class);
     private final AggTradeRawWriterConsumer consumer =
-            new AggTradeRawWriterConsumer(writerService, kafkaTemplate, registry, verifier, switchboard, telemetryService, batchPartitioner, healthHeartbeat);
+            new AggTradeRawWriterConsumer(writerService, kafkaTemplate, registry, verifier, switchboard, telemetryService, batchPartitioner);
     private final Acknowledgment ack = mock(Acknowledgment.class);
 
     AggTradeRawWriterConsumerTest() {
@@ -114,7 +112,6 @@ class AggTradeRawWriterConsumerTest {
         verify(telemetryService).recordWriteSuccess(1);
         verify(ack).acknowledge();
         verify(kafkaTemplate, never()).send(anyString(), anyString(), anyString());
-        verify(healthHeartbeat).beat(anyString());
     }
 
     @Test
@@ -127,8 +124,6 @@ class AggTradeRawWriterConsumerTest {
         verify(telemetryService).recordDbFailure(eq(1), anyString());
         verify(ack, never()).acknowledge();
         verify(kafkaTemplate, never()).send(anyString(), anyString(), anyString());
-        verify(healthHeartbeat).fail(anyString(), anyString());
-        verify(healthHeartbeat, never()).beat(anyString());
     }
 
     @Test
@@ -172,7 +167,6 @@ class AggTradeRawWriterConsumerTest {
 
         verify(telemetryService).recordDlqPublishFailure(eq("BTCUSDT"), eq("FUTURES"), eq(1), eq(7L), anyString());
         verify(ack, never()).acknowledge();
-        verify(healthHeartbeat).fail(anyString(), anyString());
     }
 
     private ConsumerRecord<String, String> record(String key, String value) {

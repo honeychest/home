@@ -23,8 +23,6 @@ public enum HealthCheckCatalog {
     FEED_WS_RECONNECT("feed-ws-reconnect", HealthLayer.L2_FEED, HealthPriority.HIGH, HealthSource.EVENT, "WS 재연결 루프 상태", "WebSocket 재연결 루프가 정상 동작하는지"),
 
     // ── L3 파이프라인 처리 ────────────────────────────────────────────
-    PIPE_KAFKA_CONSUMER("pipe-kafka-consumer", HealthLayer.L3_PIPELINE, HealthPriority.CRITICAL, HealthSource.HEARTBEAT, 60, 180, "rawwriter 소비지연/정지", "rawwriter 컨슈머가 밀리지 않고 소비 중인지"),   // 유입 주기 가변 → 보수적(리더 전용)
-    PIPE_AGGTRADE_FLUSH("pipe-aggtrade-flush", HealthLayer.L3_PIPELINE, HealthPriority.CRITICAL, HealthSource.HEARTBEAT, 60, 180, "aggTrade flush(1s) 적체", "aggTrade 큐→DB 플러시(1초)가 적체 없이 도는지"),   // 플러시 주기 가변 → 보수적
     PIPE_ROLLUP_1S("pipe-rollup-1s", HealthLayer.L3_PIPELINE, HealthPriority.CRITICAL, HealthSource.HEARTBEAT, 10, 30, "1초 롤업 최근 성공", "1초봉 롤업이 최근 정상 수행됐는지"),                                // 1초 주기
     PIPE_ROLLUP_1M("pipe-rollup-1m", HealthLayer.L3_PIPELINE, HealthPriority.CRITICAL, HealthSource.HEARTBEAT, 180, 360, "1분 롤업 최근 성공", "1분봉 롤업이 최근 정상 수행됐는지"),                             // 1분 주기
     PIPE_ROLLUP_5M("pipe-rollup-5m", HealthLayer.L3_PIPELINE, HealthPriority.HIGH, HealthSource.HEARTBEAT, 720, 1200, "5분 롤업 최근 성공", "5분봉 롤업이 최근 정상 수행됐는지"),                                // 5분 주기
@@ -56,7 +54,6 @@ public enum HealthCheckCatalog {
     RES_CPU("res-cpu", HealthLayer.L7_RESOURCE, HealthPriority.HIGH, HealthSource.RESOURCE_PCT, "CPU 임계", "CPU 사용률 임계 초과 여부"),
     RES_RAM("res-ram", HealthLayer.L7_RESOURCE, HealthPriority.HIGH, HealthSource.RESOURCE_PCT, "RAM 임계", "메모리 사용률 임계 초과 여부"),
     RES_DISK("res-disk", HealthLayer.L7_RESOURCE, HealthPriority.HIGH, HealthSource.RESOURCE_PCT, "DISK 임계", "디스크 사용률 임계 초과 여부"),
-    RES_RAWTABLE_GROWTH("res-rawtable-growth", HealthLayer.L7_RESOURCE, HealthPriority.HIGH, HealthSource.RAWTABLE, "raw_agg_trade 테이블 폭증", "raw_agg_trade 테이블이 비정상 폭증하는지"),
     RES_WS_CONNECTIONS("res-ws-connections", HealthLayer.L7_RESOURCE, HealthPriority.LOW, HealthSource.WSCONN, "WS 연결수 이상", "WebSocket 연결 수가 비정상인지");
 
     private final String key;

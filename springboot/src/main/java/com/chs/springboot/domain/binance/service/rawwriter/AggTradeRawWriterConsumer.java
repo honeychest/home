@@ -1,7 +1,5 @@
 package com.chs.springboot.domain.binance.service.rawwriter;
 
-import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
-import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.redis.LeadershipChangedEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,7 +29,6 @@ public class AggTradeRawWriterConsumer {
     private static final String RAW_TOPIC = "market.aggtrade.raw";
     private static final String DLQ_TOPIC = "market.aggtrade.dlq";
     static final String LISTENER_ID = "rawWriterListener";
-    private static final String HEALTH_KEY = HealthCheckCatalog.PIPE_KAFKA_CONSUMER.key();
 
     private final AggTradeRawWriterService writerService;
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -40,7 +37,6 @@ public class AggTradeRawWriterConsumer {
     private final KafkaPipelineSwitchboard switchboard;
     private final AggTradeRawWriterKafkaTelemetryService telemetryService;
     private final AggTradeRawWriterBatchPartitioner batchPartitioner;
-    private final HealthHeartbeat healthHeartbeat;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Set<String> failedRecordKeys = ConcurrentHashMap.newKeySet();
 
@@ -50,8 +46,7 @@ public class AggTradeRawWriterConsumer {
                                      AggTradeRawWriterDryRunVerifier verifier,
                                      KafkaPipelineSwitchboard switchboard,
                                      AggTradeRawWriterKafkaTelemetryService telemetryService,
-                                     AggTradeRawWriterBatchPartitioner batchPartitioner,
-                                     HealthHeartbeat healthHeartbeat) {
+                                     AggTradeRawWriterBatchPartitioner batchPartitioner) {
         this.writerService = writerService;
         this.kafkaTemplate = kafkaTemplate;
         this.listenerRegistry = listenerRegistry;
@@ -59,7 +54,6 @@ public class AggTradeRawWriterConsumer {
         this.switchboard = switchboard;
         this.telemetryService = telemetryService;
         this.batchPartitioner = batchPartitioner;
-        this.healthHeartbeat = healthHeartbeat;
     }
 
     /**
@@ -134,16 +128,13 @@ public class AggTradeRawWriterConsumer {
                 telemetryService.recordRetrySuccess(retrySuccessRecords);
             }
             ack.acknowledge();
-            healthHeartbeat.beat(HEALTH_KEY);
         } catch (DataAccessException e) {
             rememberFailedRecords(records);
             telemetryService.recordDbFailure(records.size(), e.getMessage());
-            healthHeartbeat.fail(HEALTH_KEY, e.getMessage());
             log.error("[AggTradeRawWriter] DB 실패, offset commit 보류: {}", e.getMessage());
         } catch (Exception e) {
             rememberFailedRecords(records);
             telemetryService.recordFailedBatch(e.getMessage());
-            healthHeartbeat.fail(HEALTH_KEY, e.getMessage());
             log.error("[AggTradeRawWriter] 처리 실패, offset commit 보류", e);
         }
     }

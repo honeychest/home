@@ -19,8 +19,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class KafkaPipelineSwitchboard {
 
-    // aggTrade 파이프라인 현재 상태. LIVE 로 올리기 전에 반드시 DEBUG 단계에서 _test 테이블 무결성 확인 필요.
-    private static final KafkaPipelineState AGG_TRADE_STATE = KafkaPipelineState.LIVE;
+    // Phase 4에서 raw_agg_trade 저장을 중단한다. 재개는 코드 변경과 검토를 거쳐야 한다.
+    private static final KafkaPipelineState AGG_TRADE_STATE = KafkaPipelineState.OFF;
 
     // LIVE 상태에서 INSERT 할 실 테이블.
     private static final String AGG_TRADE_LIVE_TABLE = "raw_agg_trade";
