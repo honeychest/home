@@ -1,7 +1,5 @@
 package com.chs.springboot.domain.binance.service;
 
-import com.chs.springboot.domain.binance.repository.AggTrade1mRepository;
-import com.chs.springboot.domain.binance.repository.AggTrade5mRepository;
 import com.chs.springboot.domain.binance.repository.ForceOrderRepository;
 import com.chs.springboot.domain.binance.repository.OpenInterestRepository;
 import com.chs.springboot.domain.binance.repository.SignalParamsRepository;
@@ -21,8 +19,7 @@ class SignalDataServiceTest {
         SignalDataService service = new SignalDataService(
                 mock(OpenInterestRepository.class),
                 mock(ForceOrderRepository.class),
-                mock(AggTrade1mRepository.class),
-                mock(AggTrade5mRepository.class),
+                mock(SignalCandleSource.class),
                 mock(SignalParamsRepository.class)
         );
 

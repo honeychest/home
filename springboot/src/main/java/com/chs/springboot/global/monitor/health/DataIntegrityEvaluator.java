@@ -4,14 +4,13 @@
 // 표시(HealthCheckService)는 이 적립된 이벤트로 상태를 읽는다(이벤트 이력 기반).
 package com.chs.springboot.global.monitor.health;
 
+import com.chs.springboot.domain.binance.service.SignalCandleSource;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -25,14 +24,14 @@ public class DataIntegrityEvaluator {
     // 1m 롤업 지연(cron 매분 +10초) 여유 — 최근 2분은 아직 안 굳었을 수 있어 제외
     private static final long LAG_MS = 2 * MINUTE_MS;
 
-    private final JdbcTemplate batchJdbcTemplate;
+    private final SignalCandleSource candleSource;
     private final HealthCheckRecorder recorder;
     private final LeaderElectionService leaderElection;
 
-    public DataIntegrityEvaluator(@Qualifier("batchJdbcTemplate") JdbcTemplate batchJdbcTemplate,
+    public DataIntegrityEvaluator(SignalCandleSource candleSource,
                                   HealthCheckRecorder recorder,
                                   LeaderElectionService leaderElection) {
-        this.batchJdbcTemplate = batchJdbcTemplate;
+        this.candleSource = candleSource;
         this.recorder = recorder;
         this.leaderElection = leaderElection;
     }
@@ -57,11 +56,10 @@ public class DataIntegrityEvaluator {
     }
 
     private void evaluateGap(long from, long end) {
-        Integer actual = batchJdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM agg_trade_1m WHERE symbol=? AND market_type=? "
-                        + "AND candle_time_ms >= ? AND candle_time_ms < ?",
-                Integer.class, SYMBOL, MARKET, from, end);
-        int present = actual != null ? actual : 0;
+        List<SignalCandleSource.SignalCandle> candles = candleSource.find(
+                SYMBOL, SignalCandleSource.Interval.ONE_MINUTE, from, end,
+                SignalCandleSource.QueryMode.COMPLETED);
+        int present = candles.size();
         int missing = Math.max(0, WINDOW_MINUTES - present);
         String cause = "[%s-%s] 최근%d분 누락봉 %d개(존재 %d/%d)"
                 .formatted(SYMBOL, MARKET, WINDOW_MINUTES, missing, present, WINDOW_MINUTES);
@@ -70,20 +68,19 @@ public class DataIntegrityEvaluator {
     }
 
     private void evaluateQuality(long from, long end) {
-        Map<String, Object> row = batchJdbcTemplate.queryForMap(
-                "SELECT COUNT(*) AS total, "
-                        + "SUM(CASE WHEN open_price=high_price AND high_price=low_price "
-                        + "AND low_price=close_price THEN 1 ELSE 0 END) AS flat "
-                        + "FROM agg_trade_1m WHERE symbol=? AND market_type=? "
-                        + "AND candle_time_ms >= ? AND candle_time_ms < ?",
-                SYMBOL, MARKET, from, end);
-        long total = ((Number) row.get("total")).longValue();
+        List<SignalCandleSource.SignalCandle> candles = candleSource.find(
+                SYMBOL, SignalCandleSource.Interval.ONE_MINUTE, from, end,
+                SignalCandleSource.QueryMode.COMPLETED);
+        long total = candles.size();
         if (total == 0) {
             // 표본 없음 — 판정 보류(gap 쪽에서 누락으로 이미 잡힘)
             return;
         }
-        Object flatObj = row.get("flat");
-        long flat = flatObj == null ? 0 : ((Number) flatObj).longValue();
+        long flat = candles.stream()
+                .filter(c -> c.openPrice().compareTo(c.highPrice()) == 0
+                        && c.highPrice().compareTo(c.lowPrice()) == 0
+                        && c.lowPrice().compareTo(c.closePrice()) == 0)
+                .count();
         double flatPct = (flat * 100d) / total;
         String cause = "[%s-%s] 최근%d분 flat %.1f%%(%d/%d)"
                 .formatted(SYMBOL, MARKET, WINDOW_MINUTES, flatPct, flat, total);

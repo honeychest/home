@@ -1,10 +1,12 @@
 package com.chs.springboot.global.monitor.health;
 
+import com.chs.springboot.domain.binance.service.SignalCandleSource;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.util.Map;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -20,19 +22,22 @@ class DataIntegrityEvaluatorTest {
     private static final String GAP = HealthCheckCatalog.DATA_CANDLE_GAP.key();
     private static final String QUALITY = HealthCheckCatalog.DATA_QUALITY.key();
 
-    private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    private final SignalCandleSource candleSource = mock(SignalCandleSource.class);
     private final HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
     private final LeaderElectionService leader = mock(LeaderElectionService.class);
-    private final DataIntegrityEvaluator evaluator = new DataIntegrityEvaluator(jdbc, recorder, leader);
+    private final DataIntegrityEvaluator evaluator = new DataIntegrityEvaluator(candleSource, recorder, leader);
 
-    private void stubGapPresent(int present) {
-        when(jdbc.queryForObject(anyString(), eq(Integer.class), any(), any(), any(), any()))
-                .thenReturn(present);
-    }
-
-    private void stubQuality(long total, long flat) {
-        when(jdbc.queryForMap(anyString(), any(), any(), any(), any()))
-                .thenReturn(Map.of("total", total, "flat", flat));
+    private void stubCandles(int present, int flat) {
+        List<SignalCandleSource.SignalCandle> candles = new ArrayList<>(present);
+        for (int i = 0; i < present; i++) {
+            BigDecimal price = BigDecimal.valueOf(i + 100L);
+            BigDecimal high = i < flat ? price : price.add(BigDecimal.ONE);
+            candles.add(new SignalCandleSource.SignalCandle(
+                    "BTCUSDT", i * 60_000L, price, high, price, price,
+                    BigDecimal.TEN, BigDecimal.ONE, BigDecimal.ZERO));
+        }
+        when(candleSource.find(any(), eq(SignalCandleSource.Interval.ONE_MINUTE), any(Long.class),
+                any(Long.class), eq(SignalCandleSource.QueryMode.COMPLETED))).thenReturn(candles);
     }
 
     @Test
@@ -41,15 +46,14 @@ class DataIntegrityEvaluatorTest {
 
         evaluator.evaluate();
 
-        verifyNoInteractions(jdbc);
+        verifyNoInteractions(candleSource);
         verifyNoInteractions(recorder);
     }
 
     @Test
     void gapAboveDownThreshold_recordsDown() {
         when(leader.isLeader()).thenReturn(true);
-        stubGapPresent(55);          // 누락 5개 ≥ 3 → DOWN
-        stubQuality(60, 0);          // quality 정상
+        stubCandles(55, 0);          // 누락 5개 ≥ 3 → DOWN
 
         evaluator.evaluate();
 
@@ -60,8 +64,7 @@ class DataIntegrityEvaluatorTest {
     @Test
     void flatRatioAboveDownThreshold_recordsDown() {
         when(leader.isLeader()).thenReturn(true);
-        stubGapPresent(60);          // gap 정상
-        stubQuality(100, 40);        // flat 40% ≥ 30 → DOWN
+        stubCandles(60, 40);          // flat 40% ≥ 30 → DOWN
 
         evaluator.evaluate();
 
@@ -72,8 +75,7 @@ class DataIntegrityEvaluatorTest {
     @Test
     void allHealthy_recordsUp() {
         when(leader.isLeader()).thenReturn(true);
-        stubGapPresent(60);          // 누락 0 → UP
-        stubQuality(60, 3);          // flat 5% → UP
+        stubCandles(60, 3);          // 누락 0 → UP, flat 5% → UP
 
         evaluator.evaluate();
 
@@ -84,12 +86,11 @@ class DataIntegrityEvaluatorTest {
     @Test
     void noSample_qualityNotRecorded() {
         when(leader.isLeader()).thenReturn(true);
-        stubGapPresent(60);          // gap UP
-        stubQuality(0, 0);           // 표본 없음 → quality 판정 보류
+        stubCandles(0, 0);           // 표본 없음 → quality 판정 보류
 
         evaluator.evaluate();
 
-        verify(recorder).record(eq(GAP), eq(HealthStatus.UP), anyString());
+        verify(recorder).record(eq(GAP), eq(HealthStatus.DOWN), anyString());
         // quality 는 어떤 기록도 하지 않음
         verify(recorder, never()).record(eq(QUALITY), any(), any());
     }

@@ -1,5 +1,5 @@
 // [AGENT] T4-ANALYSIS: AnalysisTemplate CRUD 서비스 + delta 조회 (1m/5m/15m interval 라우팅)
-// 연관파일: AnalysisTemplateRepository.java, AggTrade1mRepository.java, AggTrade5mRepository.java, AnalysisTemplateController.java
+// 연관파일: AnalysisTemplateRepository.java, SignalCandleSource.java, AnalysisTemplateController.java
 package com.chs.springboot.domain.analysis.service;
 
 import com.chs.springboot.domain.analysis.dto.ConditionTreeDto;
@@ -7,15 +7,13 @@ import com.chs.springboot.domain.analysis.dto.TemplateRequestDto;
 import com.chs.springboot.domain.analysis.dto.TemplateResponseDto;
 import com.chs.springboot.domain.analysis.model.AnalysisTemplate;
 import com.chs.springboot.domain.analysis.repository.AnalysisTemplateRepository;
-import com.chs.springboot.domain.binance.repository.AggTrade1mRepository;
-import com.chs.springboot.domain.binance.repository.AggTrade5mRepository;
+import com.chs.springboot.domain.binance.service.SignalCandleSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,8 +23,7 @@ import java.util.Map;
 public class AnalysisTemplateService {
 
     private final AnalysisTemplateRepository templateRepository;
-    private final AggTrade1mRepository       agg1mRepository;
-    private final AggTrade5mRepository       agg5mRepository;
+    private final SignalCandleSource         candleSource;
     private final AnalysisDetectionEngine    detectionEngine;
     private final ObjectMapper               objectMapper;
 
@@ -73,19 +70,13 @@ public class AnalysisTemplateService {
      */
     public List<Map<String, Object>> getDelta(String symbol, long startMs, long endMs, String interval) {
         String dbSymbol = symbol.toUpperCase() + "USDT";
-        List<Map<String, Object>> rows;
-        if ("15m".equals(interval)) {
-            rows = agg5mRepository.findDelta15mByTimeRange(dbSymbol, startMs, endMs);
-        } else if ("5m".equals(interval)) {
-            rows = agg5mRepository.findDeltaByTimeRange(dbSymbol, startMs, endMs);
-        } else {
-            rows = agg1mRepository.findDeltaByTimeRange(dbSymbol, startMs, endMs);
-        }
-        return rows.stream().map(r -> {
+        SignalCandleSource.Interval sourceInterval = SignalCandleSource.Interval.from(interval);
+        return candleSource.find(dbSymbol, sourceInterval, startMs, endMs, SignalCandleSource.QueryMode.COMPLETED)
+            .stream().map(c -> {
             Map<String, Object> m = new HashMap<>();
-            m.put("timeMs",  toBd(r.get("timeMs")).longValue());
-            m.put("volume",  toBd(r.get("volume")).doubleValue());
-            m.put("delta",   toBd(r.get("delta")).doubleValue());
+            m.put("timeMs",  c.timeMs());
+            m.put("volume",  c.baseVolume().doubleValue());
+            m.put("delta",   c.delta().doubleValue());
             return m;
         }).toList();
     }
@@ -118,24 +109,17 @@ public class AnalysisTemplateService {
             long dayStart = day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
             long dayEnd   = dayStart + 86_400_000L;
 
-            java.util.List<Map<String, Object>> rows = agg5mRepository.findByDateRange(symbol, dayStart, dayEnd);
-            if (rows == null || rows.isEmpty()) {
+            String dbSymbol = normalizeSymbol(symbol);
+            java.util.List<SignalCandleSource.SignalCandle> rows = candleSource.find(
+                    dbSymbol, SignalCandleSource.Interval.FIVE_MINUTES, dayStart, dayEnd,
+                    SignalCandleSource.QueryMode.COMPLETED);
+            if (rows.isEmpty()) {
                 continue;
             }
 
-            java.util.List<AnalysisDetectionEngine.CandleData> kline = new java.util.ArrayList<>(rows.size());
-            for (Map<String, Object> r : rows) {
-                long   timeMs = toBd(r.get("candle_time_ms")).longValue();
-                double open   = toBd(r.get("open_price")).doubleValue();
-                double high   = toBd(r.get("high_price")).doubleValue();
-                double low    = toBd(r.get("low_price")).doubleValue();
-                double close  = toBd(r.get("close_price")).doubleValue();
-                double volume = toBd(r.get("total_volume")).doubleValue();
-                double delta  = toBd(r.get("delta")).doubleValue();
-                kline.add(new AnalysisDetectionEngine.CandleData(
-                        timeMs, open, high, low, close, volume, delta
-                ));
-            }
+            java.util.List<AnalysisDetectionEngine.CandleData> kline = rows.stream()
+                    .map(SignalCandleAnalysisConverter::toCandleData)
+                    .toList();
 
             java.util.List<Integer> matched = detectionEngine.evaluate(kline, tree);
             if (matched.isEmpty()) {
@@ -143,15 +127,15 @@ public class AnalysisTemplateService {
             }
 
             java.util.List<Map<String, Object>> candles = new java.util.ArrayList<>(rows.size());
-            for (Map<String, Object> r : rows) {
+            for (SignalCandleSource.SignalCandle row : rows) {
                 Map<String, Object> c = new HashMap<>();
-                c.put("time",   toBd(r.get("candle_time_ms")).longValue());
-                c.put("open",   toBd(r.get("open_price")).doubleValue());
-                c.put("high",   toBd(r.get("high_price")).doubleValue());
-                c.put("low",    toBd(r.get("low_price")).doubleValue());
-                c.put("close",  toBd(r.get("close_price")).doubleValue());
-                c.put("volume", toBd(r.get("total_volume")).doubleValue());
-                c.put("delta",  toBd(r.get("delta")).doubleValue());
+                c.put("time",   row.timeMs());
+                c.put("open",   row.openPrice().doubleValue());
+                c.put("high",   row.highPrice().doubleValue());
+                c.put("low",    row.lowPrice().doubleValue());
+                c.put("close",  row.closePrice().doubleValue());
+                c.put("volume", row.quoteVolume().doubleValue());
+                c.put("delta",  row.delta().doubleValue());
                 candles.add(c);
             }
 
@@ -181,9 +165,9 @@ public class AnalysisTemplateService {
                 t.getPalette(), t.getCreatedAt(), t.getUpdatedAt());
     }
 
-    private BigDecimal toBd(Object v) {
-        if (v == null) return BigDecimal.ZERO;
-        if (v instanceof BigDecimal bd) return bd;
-        return new BigDecimal(v.toString());
+    private String normalizeSymbol(String symbol) {
+        String normalized = symbol.toUpperCase();
+        return normalized.endsWith("USDT") ? normalized : normalized + "USDT";
     }
+
 }

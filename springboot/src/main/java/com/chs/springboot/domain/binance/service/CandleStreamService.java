@@ -1,27 +1,24 @@
-// [AGENT] 역할: 1분봉·5분봉 완성 이벤트 수신 → WS 브로드캐스트 + 15분봉 집계 브로드캐스트 + 진행 중 봉 주기 브로드캐스트
-// 연관파일: CandleWebSocketHandler.java, AggTradeRollupService.java(이벤트 발행), Candle1mCompletedEvent.java, CandleCompletedEvent.java
-// 주요메서드: onCandleCompleted(5m/15m), onCandle1mCompleted(1m), broadcastInProgress5m(15s), broadcastInProgress15m, broadcastInProgress1m(5s)
+// [AGENT] 1분봉·5분봉·15분봉 캔들 원천 조회 → WS 브로드캐스트
+// 완료봉은 SignalCandleSource의 hybrid 원천을 주기적으로 확인하고, 진행봉은 temp shadow를 부분 집계한다.
 package com.chs.springboot.domain.binance.service;
 
-import com.chs.springboot.domain.binance.model.AggTrade1m;
-import com.chs.springboot.domain.binance.model.AggTrade5m;
 import com.chs.springboot.domain.binance.model.event.Candle1mCompletedEvent;
 import com.chs.springboot.domain.binance.model.event.CandleCompletedEvent;
 import com.chs.springboot.domain.binance.websocket.CandleWebSocketHandler;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -29,216 +26,198 @@ import java.util.Set;
 public class CandleStreamService {
 
     private final CandleWebSocketHandler candleWebSocketHandler;
-    private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final SignalCandleSource candleSource;
+    private final Map<String, Long> lastClosedByStream = new ConcurrentHashMap<>();
+    private final Map<String, ProgressSnapshot> lastProgressByStream = new ConcurrentHashMap<>();
 
-    @EventListener
-    public void onCandleCompleted(CandleCompletedEvent event) {
-        AggTrade5m c = event.getCandle();
-        try {
-            Map<String, Object> msg = new HashMap<>();
-            msg.put("time",      Instant.ofEpochMilli(c.getCandleTimeMs()).toString());
-            msg.put("open",      c.getOpenPrice().doubleValue());
-            msg.put("high",      c.getHighPrice().doubleValue());
-            msg.put("low",       c.getLowPrice().doubleValue());
-            msg.put("close",     c.getClosePrice().doubleValue());
-            msg.put("volume",    c.getBuyQuantity().add(c.getSellQuantity()).doubleValue());
-            msg.put("delta",     c.getDelta().doubleValue());
-            msg.put("is_closed", true);
-            candleWebSocketHandler.broadcastCandle(c.getSymbol(), "5m", objectMapper.writeValueAsString(msg));
-            broadcastClosed15mIfReady(c);
-        } catch (Exception e) {
-            log.error("[CandleStream] 5분봉 브로드캐스트 실패: {}", e.getMessage());
-        }
+    private record ProgressSnapshot(long timeMs, BigDecimal closePrice,
+                                    BigDecimal quoteVolume, BigDecimal baseVolume, BigDecimal delta) {
     }
 
-    private void broadcastClosed15mIfReady(AggTrade5m completed5m) {
-        long candleTimeMs = completed5m.getCandleTimeMs();
-        if (candleTimeMs % 900_000L != 600_000L) return;
-        if (!candleWebSocketHandler.getActiveSymbols("15m").contains(completed5m.getSymbol())) return;
-
-        long startMs = (candleTimeMs / 900_000L) * 900_000L;
-        long endMs   = startMs + 900_000L;
-        try {
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(aggregate5mSql(), completed5m.getSymbol(), startMs, endMs);
-            if (rows.isEmpty() || rows.get(0).get("open_price") == null) return;
-
-            Map<String, Object> msg = toCandleMessage(startMs, rows.get(0), true);
-            candleWebSocketHandler.broadcastCandle(completed5m.getSymbol(), "15m", objectMapper.writeValueAsString(msg));
-        } catch (Exception e) {
-            log.error("[CandleStream] 15분봉 완성 브로드캐스트 실패 symbol={}: {}", completed5m.getSymbol(), e.getMessage());
-        }
+    /** legacy 이벤트가 남아 있는 동안에도 canonical source를 통해서만 완료봉을 만든다. */
+    @EventListener
+    public void onCandleCompleted(CandleCompletedEvent event) {
+        long candleTimeMs = event.getCandle().getCandleTimeMs();
+        broadcastClosedFromSource(event.getCandle().getSymbol(), SignalCandleSource.Interval.FIVE_MINUTES, candleTimeMs);
+        long fifteenMs = Math.floorDiv(candleTimeMs, SignalCandleSource.Interval.FIFTEEN_MINUTES.durationMs())
+                * SignalCandleSource.Interval.FIFTEEN_MINUTES.durationMs();
+        broadcastClosedFromSource(event.getCandle().getSymbol(), SignalCandleSource.Interval.FIFTEEN_MINUTES, fifteenMs);
     }
 
     @EventListener
     public void onCandle1mCompleted(Candle1mCompletedEvent event) {
-        AggTrade1m c = event.getCandle();
+        broadcastClosedFromSource(event.getCandle().getSymbol(), SignalCandleSource.Interval.ONE_MINUTE,
+                event.getCandle().getCandleTimeMs());
+    }
+
+    /** 이벤트가 더 이상 발생하지 않는 raw OFF 상태에서도 완료봉을 놓치지 않도록 5초마다 확인한다. */
+    @Scheduled(fixedDelayString = "${binance.signal.candle.poll.fixed-delay-ms:5000}")
+    public void broadcastClosedCandles() {
+        pollClosed(SignalCandleSource.Interval.ONE_MINUTE);
+        pollClosed(SignalCandleSource.Interval.FIVE_MINUTES);
+        pollClosed(SignalCandleSource.Interval.FIFTEEN_MINUTES);
+    }
+
+    private void pollClosed(SignalCandleSource.Interval interval) {
+        Set<String> symbols = candleWebSocketHandler.getActiveSymbols(interval.value());
+        if (symbols.isEmpty()) {
+            return;
+        }
+        long nowMs = System.currentTimeMillis();
+        for (String symbol : symbols) {
+            if (symbol.isBlank()) {
+                continue;
+            }
+            String streamKey = streamKey(symbol, interval);
+            Long lastClosed = lastClosedByStream.get(streamKey);
+            if (lastClosed == null) {
+                initializeClosedWatermark(symbol, interval, streamKey, nowMs);
+                continue;
+            }
+            long fromMs = lastClosed + interval.durationMs();
+            try {
+                candleSource.find(symbol, interval, Math.max(0, fromMs), nowMs,
+                                SignalCandleSource.QueryMode.COMPLETED)
+                        .stream()
+                        .filter(c -> lastClosed == null || c.timeMs() > lastClosed)
+                        .forEach(c -> broadcastClosed(symbol, interval, c));
+            } catch (Exception e) {
+                log.warn("[CandleStream] 완료봉 조회 실패 symbol={} interval={}: {}",
+                        symbol, interval.value(), e.getMessage());
+            }
+        }
+    }
+
+    private void initializeClosedWatermark(String symbol, SignalCandleSource.Interval interval,
+                                           String streamKey, long nowMs) {
         try {
-            Map<String, Object> msg = new HashMap<>();
-            msg.put("time",      Instant.ofEpochMilli(c.getCandleTimeMs()).toString());
-            msg.put("open",      c.getOpenPrice().doubleValue());
-            msg.put("high",      c.getHighPrice().doubleValue());
-            msg.put("low",       c.getLowPrice().doubleValue());
-            msg.put("close",     c.getClosePrice().doubleValue());
-            msg.put("volume",    c.getBuyQuantity().add(c.getSellQuantity()).doubleValue());
-            msg.put("delta",     c.getDelta().doubleValue());
-            msg.put("is_closed", true);
-            candleWebSocketHandler.broadcastCandle(c.getSymbol(), "1m", objectMapper.writeValueAsString(msg));
+            var recent = candleSource.find(symbol, interval,
+                    Math.max(0, nowMs - interval.durationMs() * 2), nowMs,
+                    SignalCandleSource.QueryMode.COMPLETED);
+            recent.stream().mapToLong(SignalCandleSource.SignalCandle::timeMs).max()
+                    .ifPresent(latest -> lastClosedByStream.putIfAbsent(streamKey, latest));
         } catch (Exception e) {
-            log.error("[CandleStream] 1분봉 브로드캐스트 실패: {}", e.getMessage());
+            log.warn("[CandleStream] 완료봉 watermark 초기화 실패 symbol={} interval={}: {}",
+                    symbol, interval.value(), e.getMessage());
         }
     }
 
-    @Scheduled(fixedDelay = 1000)
+    /** 진행봉은 temp 1분 데이터를 5분/15분으로 부분 집계해 같은 open time으로 갱신한다. */
+    @Scheduled(fixedDelayString = "${binance.signal.candle.progress-poll-fixed-delay-ms:10000}")
     public void broadcastInProgress5m() {
-        Set<String> symbols = candleWebSocketHandler.getActiveSymbols("5m");
-        if (symbols.isEmpty()) return;
-
-        long nowMs         = System.currentTimeMillis();
-        long current5mStart = (nowMs / 300_000L) * 300_000L;
-
-        for (String symbol : symbols) {
-            if (symbol.isBlank()) continue;
-            try {
-                String sql = """
-                    SELECT
-                        SUBSTRING_INDEX(MIN(CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price)),'|',-1)  AS open_price,
-                        MAX(high_price)                                                                   AS high_price,
-                        MIN(low_price)                                                                    AS low_price,
-                        SUBSTRING_INDEX(MAX(CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price)),'|',-1) AS close_price,
-                        COALESCE(SUM(buy_quantity) + SUM(sell_quantity), 0)                              AS total_volume,
-                        COALESCE(SUM(delta), 0)                                                          AS delta
-                    FROM agg_trade_1s
-                    WHERE symbol = ? AND market_type = 'FUTURES' AND candle_time_ms >= ? AND candle_time_ms < ?
-                      AND trade_count > 0
-                    """;
-                List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, symbol, current5mStart, nowMs);
-                if (rows.isEmpty() || rows.get(0).get("open_price") == null) continue;
-
-                Map<String, Object> row = rows.get(0);
-                Map<String, Object> msg = new HashMap<>();
-                msg.put("time",      Instant.ofEpochMilli(current5mStart).toString());
-                msg.put("open",      toBd(row.get("open_price")).doubleValue());
-                msg.put("high",      toBd(row.get("high_price")).doubleValue());
-                msg.put("low",       toBd(row.get("low_price")).doubleValue());
-                msg.put("close",     toBd(row.get("close_price")).doubleValue());
-                msg.put("volume",    toBd(row.get("total_volume")).doubleValue());
-                msg.put("delta",     toBd(row.get("delta")).doubleValue());
-                msg.put("is_closed", false);
-                candleWebSocketHandler.broadcastCandle(symbol, "5m", objectMapper.writeValueAsString(msg));
-            } catch (Exception e) {
-                log.error("[CandleStream] 5분봉 진행중봉 브로드캐스트 실패 symbol={}: {}", symbol, e.getMessage());
-            }
-        }
+        pollInProgress(SignalCandleSource.Interval.FIVE_MINUTES);
     }
 
-    @Scheduled(fixedDelay = 1000)
+    @Scheduled(fixedDelayString = "${binance.signal.candle.progress-poll-fixed-delay-ms:10000}")
     public void broadcastInProgress15m() {
-        Set<String> symbols = candleWebSocketHandler.getActiveSymbols("15m");
-        if (symbols.isEmpty()) return;
-
-        long nowMs          = System.currentTimeMillis();
-        long current15mStart = (nowMs / 900_000L) * 900_000L;
-
-        for (String symbol : symbols) {
-            if (symbol.isBlank()) continue;
-            try {
-                String sql = """
-                    SELECT
-                        SUBSTRING_INDEX(MIN(CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price)),'|',-1)  AS open_price,
-                        MAX(high_price)                                                                   AS high_price,
-                        MIN(low_price)                                                                    AS low_price,
-                        SUBSTRING_INDEX(MAX(CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price)),'|',-1) AS close_price,
-                        COALESCE(SUM(buy_quantity) + SUM(sell_quantity), 0)                              AS total_volume,
-                        COALESCE(SUM(delta), 0)                                                          AS delta
-                    FROM agg_trade_1s
-                    WHERE symbol = ? AND market_type = 'FUTURES' AND candle_time_ms >= ? AND candle_time_ms < ?
-                      AND trade_count > 0
-                    """;
-                List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, symbol, current15mStart, nowMs);
-                if (rows.isEmpty() || rows.get(0).get("open_price") == null) continue;
-
-                Map<String, Object> msg = toCandleMessage(current15mStart, rows.get(0), false);
-                candleWebSocketHandler.broadcastCandle(symbol, "15m", objectMapper.writeValueAsString(msg));
-            } catch (Exception e) {
-                log.error("[CandleStream] 15분봉 진행중봉 브로드캐스트 실패 symbol={}: {}", symbol, e.getMessage());
-            }
-        }
+        pollInProgress(SignalCandleSource.Interval.FIFTEEN_MINUTES);
     }
 
-    @Scheduled(fixedDelay = 1000)
+    @Scheduled(fixedDelayString = "${binance.signal.candle.progress-poll-fixed-delay-ms:10000}")
     public void broadcastInProgress1m() {
-        Set<String> symbols = candleWebSocketHandler.getActiveSymbols("1m");
-        if (symbols.isEmpty()) return;
+        pollInProgress(SignalCandleSource.Interval.ONE_MINUTE);
+    }
 
-        long nowMs          = System.currentTimeMillis();
-        long current1mStart = (nowMs / 60_000L) * 60_000L;
-
+    private void pollInProgress(SignalCandleSource.Interval interval) {
+        Set<String> symbols = candleWebSocketHandler.getActiveSymbols(interval.value());
+        if (symbols.isEmpty()) {
+            return;
+        }
+        long nowMs = System.currentTimeMillis();
+        long currentStartMs = Math.floorDiv(nowMs, interval.durationMs()) * interval.durationMs();
         for (String symbol : symbols) {
-            if (symbol.isBlank()) continue;
+            if (symbol.isBlank()) {
+                continue;
+            }
             try {
-                String sql = """
-                    SELECT
-                        SUBSTRING_INDEX(MIN(CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price)),'|',-1)  AS open_price,
-                        MAX(high_price)                                                                   AS high_price,
-                        MIN(low_price)                                                                    AS low_price,
-                        SUBSTRING_INDEX(MAX(CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price)),'|',-1) AS close_price,
-                        COALESCE(SUM(buy_quantity) + SUM(sell_quantity), 0)                              AS total_volume,
-                        COALESCE(SUM(delta), 0)                                                          AS delta
-                    FROM agg_trade_1s
-                    WHERE symbol = ? AND market_type = 'FUTURES' AND candle_time_ms >= ? AND candle_time_ms < ?
-                      AND trade_count > 0
-                    """;
-                List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, symbol, current1mStart, nowMs);
-                if (rows.isEmpty() || rows.get(0).get("open_price") == null) continue;
-
-                Map<String, Object> row = rows.get(0);
-                Map<String, Object> msg = new HashMap<>();
-                msg.put("time",      Instant.ofEpochMilli(current1mStart).toString());
-                msg.put("open",      toBd(row.get("open_price")).doubleValue());
-                msg.put("high",      toBd(row.get("high_price")).doubleValue());
-                msg.put("low",       toBd(row.get("low_price")).doubleValue());
-                msg.put("close",     toBd(row.get("close_price")).doubleValue());
-                msg.put("volume",    toBd(row.get("total_volume")).doubleValue());
-                msg.put("delta",     toBd(row.get("delta")).doubleValue());
-                msg.put("is_closed", false);
-                candleWebSocketHandler.broadcastCandle(symbol, "1m", objectMapper.writeValueAsString(msg));
+                var candles = candleSource.find(symbol, interval, currentStartMs, nowMs,
+                        SignalCandleSource.QueryMode.IN_PROGRESS);
+                if (candles.isEmpty()) {
+                    continue;
+                }
+                broadcastInProgress(symbol, interval, candles.get(candles.size() - 1));
             } catch (Exception e) {
-                log.error("[CandleStream] 1분봉 진행중봉 브로드캐스트 실패 symbol={}: {}", symbol, e.getMessage());
+                log.warn("[CandleStream] 진행봉 조회 실패 symbol={} interval={}: {}",
+                        symbol, interval.value(), e.getMessage());
             }
         }
     }
 
-    private BigDecimal toBd(Object v) {
-        if (v == null) return BigDecimal.ZERO;
-        if (v instanceof BigDecimal bd) return bd;
-        return new BigDecimal(v.toString());
+    private void broadcastClosedFromSource(String symbol, SignalCandleSource.Interval interval, long candleTimeMs) {
+        try {
+            candleSource.find(symbol, interval, candleTimeMs, candleTimeMs + interval.durationMs(),
+                            SignalCandleSource.QueryMode.COMPLETED)
+                    .stream()
+                    .filter(c -> c.timeMs() == candleTimeMs)
+                    .forEach(c -> broadcastClosed(symbol, interval, c));
+        } catch (Exception e) {
+            log.warn("[CandleStream] 완료봉 원천 조회 실패 symbol={} interval={}: {}",
+                    symbol, interval.value(), e.getMessage());
+        }
     }
 
-    private String aggregate5mSql() {
-        return """
-            SELECT
-                SUBSTRING_INDEX(MIN(CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price)),'|',-1)  AS open_price,
-                MAX(high_price)                                                                   AS high_price,
-                MIN(low_price)                                                                    AS low_price,
-                SUBSTRING_INDEX(MAX(CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price)),'|',-1) AS close_price,
-                COALESCE(SUM(buy_quantity) + SUM(sell_quantity), 0)                              AS total_volume,
-                COALESCE(SUM(delta), 0)                                                          AS delta
-            FROM agg_trade_5m
-            WHERE symbol = ? AND market_type = 'FUTURES' AND candle_time_ms >= ? AND candle_time_ms < ?
-            """;
+    private void broadcastClosed(String symbol, SignalCandleSource.Interval interval,
+                                 SignalCandleSource.SignalCandle candle) {
+        String streamKey = streamKey(symbol, interval);
+        synchronized (lastClosedByStream) {
+            Long lastClosed = lastClosedByStream.get(streamKey);
+            if (lastClosed != null && candle.timeMs() <= lastClosed) {
+                return;
+            }
+            try {
+                candleWebSocketHandler.broadcastCandle(symbol, interval.value(),
+                        objectMapper.writeValueAsString(toCandleMessage(candle, true)));
+                lastClosedByStream.put(streamKey, candle.timeMs());
+            } catch (JsonProcessingException e) {
+                log.warn("[CandleStream] 완료봉 직렬화 실패 symbol={} interval={}: {}",
+                        symbol, interval.value(), e.getMessage());
+            }
+        }
     }
 
-    private Map<String, Object> toCandleMessage(long timeMs, Map<String, Object> row, boolean closed) {
+    private void broadcastInProgress(String symbol, SignalCandleSource.Interval interval,
+                                     SignalCandleSource.SignalCandle candle) {
+        try {
+            String json = objectMapper.writeValueAsString(toCandleMessage(candle, false));
+            String streamKey = streamKey(symbol, interval);
+            synchronized (lastProgressByStream) {
+                ProgressSnapshot previous = lastProgressByStream.get(streamKey);
+                if (previous != null && previous.timeMs() == candle.timeMs()
+                        && same(previous.closePrice(), candle.closePrice())
+                        && same(previous.quoteVolume(), candle.quoteVolume())
+                        && same(previous.baseVolume(), candle.baseVolume())
+                        && same(previous.delta(), candle.delta())) {
+                    return;
+                }
+                candleWebSocketHandler.broadcastCandle(symbol, interval.value(), json);
+                lastProgressByStream.put(streamKey, new ProgressSnapshot(
+                        candle.timeMs(), candle.closePrice(), candle.quoteVolume(), candle.baseVolume(), candle.delta()));
+            }
+        } catch (JsonProcessingException e) {
+            log.warn("[CandleStream] 진행봉 직렬화 실패 symbol={} interval={}: {}",
+                    symbol, interval.value(), e.getMessage());
+        }
+    }
+
+    private boolean same(BigDecimal first, BigDecimal second) {
+        return first.compareTo(second) == 0;
+    }
+
+    private Map<String, Object> toCandleMessage(SignalCandleSource.SignalCandle candle, boolean closed) {
         Map<String, Object> msg = new HashMap<>();
-        msg.put("time",      Instant.ofEpochMilli(timeMs).toString());
-        msg.put("open",      toBd(row.get("open_price")).doubleValue());
-        msg.put("high",      toBd(row.get("high_price")).doubleValue());
-        msg.put("low",       toBd(row.get("low_price")).doubleValue());
-        msg.put("close",     toBd(row.get("close_price")).doubleValue());
-        msg.put("volume",    toBd(row.get("total_volume")).doubleValue());
-        msg.put("delta",     toBd(row.get("delta")).doubleValue());
+        msg.put("time", Instant.ofEpochMilli(candle.timeMs()).toString());
+        msg.put("open", candle.openPrice().doubleValue());
+        msg.put("high", candle.highPrice().doubleValue());
+        msg.put("low", candle.lowPrice().doubleValue());
+        msg.put("close", candle.closePrice().doubleValue());
+        msg.put("volume", candle.baseVolume().doubleValue());
+        msg.put("delta", candle.delta().doubleValue());
         msg.put("is_closed", closed);
         return msg;
+    }
+
+    private String streamKey(String symbol, SignalCandleSource.Interval interval) {
+        return symbol + "|" + interval.value();
     }
 }
