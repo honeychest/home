@@ -53,6 +53,7 @@ admin > "백엔드 패턴"에서 열람. 패턴 등록·변경 시 표와 이 �
 | 영역 | 따를 것 |
 |---|---|
 | `domain/recipe/**` | `docs/recipe/PLAYBOOK.md` 아키텍처 관례 절 — 필수 |
+| binance 자동매매 (신규, PoC 단계 — 착수 전 필수) | `docs/binance/CONTEXT.md` — 선물 전용·안전 원칙 4가지·기존 인프라 이력 |
 
 ## 검증
 - 커밋 전 `./gradlew test`. 한글 JSON body 를 셸 curl 로 보내면 CP949 로 깨짐 —
