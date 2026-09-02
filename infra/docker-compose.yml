@@ -63,7 +63,7 @@ services:
       - "127.0.0.1:15672:15672"
     networks:
       - chs-network
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     env_file: .env
     environment:
@@ -114,7 +114,7 @@ services:
     container_name: chs-kafka
     networks:
       - chs-network
-    restart: always
+    restart: unless-stopped
     ports:
       # 호스트에서 CLI/디버깅용으로 접근할 때만 사용. AWS 보안그룹에 public open 금지.
       - "127.0.0.1:9094:9094"
