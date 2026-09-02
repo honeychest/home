@@ -99,6 +99,13 @@ public class LiveMarketDataService {
         return toDto(buffer.snapshot(), SYMBOL, MARKET_TYPE, INTERVAL);
     }
 
+    private static final int RSI_PERIOD = 14;
+    private static final int MACD_FAST = 12;
+    private static final int MACD_SLOW = 26;
+    private static final int MACD_SIGNAL = 9;
+    private static final int SUPERTREND_ATR_PERIOD = 10;
+    private static final int SUPERTREND_MULTIPLIER = 3;
+
     /** 버퍼 스냅샷 → 응답 DTO 변환. 순수 함수라 버퍼 없이도 테스트 가능. */
     static MarketSnapshotDto toDto(LiveKlineBuffer.Snapshot snapshot, String symbol, String marketType, String interval) {
         List<BinanceKline> closed = snapshot.closedCandles();
@@ -126,8 +133,33 @@ public class LiveMarketDataService {
             }
         }
 
+        // 확정봉 사이에 결측(재연결 등으로 1분 캔들이 비는 경우)이 있으면 지표를 안 낸다 —
+        // 결측을 무시하고 이어붙이면 RSI/MACD가 실제와 다른 기간으로 계산된다(Codex 리뷰 지적).
+        boolean hasGap = hasGap(closed);
+        BigDecimal rsi14 = hasGap ? null : RsiCalculator.calculate(closed, RSI_PERIOD);
+        MacdCalculator.Result macd = hasGap ? null
+                : MacdCalculator.calculate(closed, MACD_FAST, MACD_SLOW, MACD_SIGNAL);
+        SupertrendCalculator.Result supertrend = hasGap ? null
+                : SupertrendCalculator.calculate(closed, SUPERTREND_ATR_PERIOD, SUPERTREND_MULTIPLIER);
+
         return new MarketSnapshotDto(symbol, marketType, interval, closed.size(),
-                snapshot.lastAcceptedAtMs(), currentPrice, windowHigh, windowLow, changePercent);
+                snapshot.lastAcceptedAtMs(), currentPrice, windowHigh, windowLow, changePercent,
+                rsi14,
+                macd != null ? macd.macdLine() : null,
+                macd != null ? macd.signalLine() : null,
+                macd != null ? macd.histogram() : null,
+                supertrend != null ? supertrend.value() : null,
+                supertrend != null ? supertrend.uptrend() : null);
+    }
+
+    /** 확정봉 목록에 1분 경계가 아닌 간격(결측)이 있는지 확인. */
+    private static boolean hasGap(List<BinanceKline> closed) {
+        for (int i = 1; i < closed.size(); i++) {
+            if (closed.get(i).openTimeMs() - closed.get(i - 1).openTimeMs() != BinanceKlineWindow.INTERVAL_MS) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void startForGeneration(int myGen) {

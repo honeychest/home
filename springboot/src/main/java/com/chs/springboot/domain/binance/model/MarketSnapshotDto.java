@@ -12,6 +12,12 @@ public record MarketSnapshotDto(
         BigDecimal currentPrice,
         BigDecimal windowHigh,
         BigDecimal windowLow,
-        BigDecimal changePercentFromWindowStart
+        BigDecimal changePercentFromWindowStart,
+        BigDecimal rsi14,
+        BigDecimal macdLine,
+        BigDecimal macdSignal,
+        BigDecimal macdHistogram,
+        BigDecimal supertrendValue,
+        Boolean supertrendUptrend
 ) {
 }

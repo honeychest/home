@@ -25,6 +25,16 @@ function formatTime(value) {
     return new Date(value).toLocaleString('ko-KR', { hour12: false });
 }
 
+function formatNumber(value, digits = 2) {
+    if (value == null) return '-';
+    return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: digits }).format(value);
+}
+
+function formatTrend(uptrend) {
+    if (uptrend == null) return '-';
+    return uptrend ? '상승' : '하락';
+}
+
 export default function TradeTestPage() {
     const [log, setLog] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -111,6 +121,21 @@ export default function TradeTestPage() {
                     <div className={styles.statusBox}>
                         <span className={styles.statusLabel}>last received(마지막 수신 시각 — 거래소 캔들 시각 아님)</span>
                         <strong>{formatTime(snapshot.lastUpdatedMs)}</strong>
+                    </div>
+                    <div className={styles.statusBox}>
+                        <span className={styles.statusLabel}>RSI(14)(상대강도지수 — 70↑ 과매수, 30↓ 과매도)</span>
+                        <strong>{formatNumber(snapshot.rsi14)}</strong>
+                    </div>
+                    <div className={styles.statusBox}>
+                        <span className={styles.statusLabel}>MACD(12,26,9)(단기·장기 이동평균 차이)</span>
+                        <strong>
+                            {formatNumber(snapshot.macdLine, 4)} / {formatNumber(snapshot.macdSignal, 4)}
+                            {' '}(hist {formatNumber(snapshot.macdHistogram, 4)})
+                        </strong>
+                    </div>
+                    <div className={styles.statusBox}>
+                        <span className={styles.statusLabel}>Supertrend(10,3)(추세 방향 + 추적 지지·저항선)</span>
+                        <strong>{formatTrend(snapshot.supertrendUptrend)} / {formatNumber(snapshot.supertrendValue)}</strong>
                     </div>
                 </section>
             )}

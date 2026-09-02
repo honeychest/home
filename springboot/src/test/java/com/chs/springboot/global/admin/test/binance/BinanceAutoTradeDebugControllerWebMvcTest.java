@@ -54,7 +54,8 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
     void getSnapshot_backfilling() throws Exception {
         when(liveMarketDataService.isLeader()).thenReturn(true);
         when(liveMarketDataService.buildSnapshotDto()).thenReturn(
-                new MarketSnapshotDto("BTCUSDT", "FUTURES", "1m", 0, 0L, null, null, null, null));
+                new MarketSnapshotDto("BTCUSDT", "FUTURES", "1m", 0, 0L, null, null, null, null,
+                        null, null, null, null, null, null));
 
         mockMvc.perform(get("/api/admin/test/binance/debug/snapshot"))
                 .andExpect(status().isOk())
@@ -67,7 +68,9 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
         when(liveMarketDataService.isLeader()).thenReturn(true);
         when(liveMarketDataService.buildSnapshotDto()).thenReturn(
                 new MarketSnapshotDto("BTCUSDT", "FUTURES", "1m", 480, 1L,
-                        new BigDecimal("100"), new BigDecimal("110"), new BigDecimal("90"), new BigDecimal("1.5")));
+                        new BigDecimal("100"), new BigDecimal("110"), new BigDecimal("90"), new BigDecimal("1.5"),
+                        new BigDecimal("55.00"), new BigDecimal("1.2"), new BigDecimal("1.0"), new BigDecimal("0.2"),
+                        new BigDecimal("95.00"), true));
         when(liveMarketDataService.isStale()).thenReturn(true);
 
         mockMvc.perform(get("/api/admin/test/binance/debug/snapshot"))
@@ -81,7 +84,9 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
         when(liveMarketDataService.isLeader()).thenReturn(true);
         when(liveMarketDataService.buildSnapshotDto()).thenReturn(
                 new MarketSnapshotDto("BTCUSDT", "FUTURES", "1m", 480, 1700000000000L,
-                        new BigDecimal("77000.5"), new BigDecimal("78000"), new BigDecimal("76500"), new BigDecimal("-0.32")));
+                        new BigDecimal("77000.5"), new BigDecimal("78000"), new BigDecimal("76500"), new BigDecimal("-0.32"),
+                        new BigDecimal("62.50"), new BigDecimal("15.2"), new BigDecimal("10.1"), new BigDecimal("5.1"),
+                        new BigDecimal("76800.00"), true));
         when(liveMarketDataService.isStale()).thenReturn(false);
 
         mockMvc.perform(get("/api/admin/test/binance/debug/snapshot"))
@@ -89,6 +94,10 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
                 .andExpect(jsonPath("$.status").value("READY"))
                 .andExpect(jsonPath("$.snapshot.symbol").value("BTCUSDT"))
                 .andExpect(jsonPath("$.snapshot.candleCount").value(480))
-                .andExpect(jsonPath("$.snapshot.currentPrice").value(77000.5));
+                .andExpect(jsonPath("$.snapshot.currentPrice").value(77000.5))
+                .andExpect(jsonPath("$.snapshot.rsi14").value(62.50))
+                .andExpect(jsonPath("$.snapshot.macdHistogram").value(5.1))
+                .andExpect(jsonPath("$.snapshot.supertrendValue").value(76800.00))
+                .andExpect(jsonPath("$.snapshot.supertrendUptrend").value(true));
     }
 }
