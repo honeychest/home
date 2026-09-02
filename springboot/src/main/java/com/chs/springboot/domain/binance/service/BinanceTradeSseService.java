@@ -6,6 +6,7 @@ package com.chs.springboot.domain.binance.service;
 import com.chs.springboot.domain.binance.model.BinanceTradeDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,11 @@ public class BinanceTradeSseService {
 
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // broadcast() 호출부(BinanceTradeService.parseAndSave, DB save 직후)가
+    // WebSocket 수신 스레드(onText) 안에서 호출된다. 동기 emitter.send()가 그 스레드를
+    // 막지 않도록 별도 스레드로 위임한다. (pattern-async-sse-dispatch — springboot/AGENTS.md 참고)
+    private final AsyncSseDispatcher dispatcher = new AsyncSseDispatcher("trade-sse-broadcast");
 
     /** 클라이언트 SSE 구독 등록 */
     public SseEmitter subscribe() {
@@ -51,6 +57,10 @@ public class BinanceTradeSseService {
     /** DB 저장 성공 후 호출 — 전체 구독자에게 체결 이벤트 전송 */
     public void broadcast(BinanceTradeDto dto) {
         if (emitters.isEmpty()) return;
+        dispatcher.dispatch(() -> doBroadcast(dto));
+    }
+
+    private void doBroadcast(BinanceTradeDto dto) {
         log.debug("[TradeSse] broadcast id={} emitters={}", dto.id(), emitters.size());
         String json;
         try {
@@ -85,5 +95,10 @@ public class BinanceTradeSseService {
             }
         }
         emitters.removeAll(dead);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        dispatcher.shutdown();
     }
 }

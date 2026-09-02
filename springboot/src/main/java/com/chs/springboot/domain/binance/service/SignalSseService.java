@@ -5,6 +5,7 @@ package com.chs.springboot.domain.binance.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,12 @@ public class SignalSseService {
 
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // broadcastX 호출부(AggTradeStreamService.dispatch 등)가 WebSocket 수신 스레드에서 직접 부른다.
+    // emitter.send()를 그 스레드에서 동기 실행하면 느린 브라우저 클라이언트 하나가 소켓 읽기를 막아
+    // 거래량 급증 시 stale 오탐 → 재연결을 유발한다(실측). 전송을 별도 스레드로 떼어 그 경로를 끊는다.
+    // (pattern-async-sse-dispatch — springboot/AGENTS.md 패턴 카탈로그 참고)
+    private final AsyncSseDispatcher dispatcher = new AsyncSseDispatcher("signal-sse-broadcast");
 
     public SseEmitter subscribe() {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
@@ -69,7 +76,10 @@ public class SignalSseService {
 
     private void broadcast(String eventName, Object dto) {
         if (emitters.isEmpty()) return;
+        dispatcher.dispatch(() -> doBroadcast(eventName, dto));
+    }
 
+    private void doBroadcast(String eventName, Object dto) {
         String json;
         try {
             json = objectMapper.writeValueAsString(dto);
@@ -90,6 +100,11 @@ public class SignalSseService {
             log.warn("[SignalSse] broadcast dead emitter {}개 제거, event={}", dead.size(), eventName);
             emitters.removeAll(dead);
         }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        dispatcher.shutdown();
     }
 
     @Scheduled(fixedDelay = 30_000)

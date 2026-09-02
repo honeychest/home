@@ -21,6 +21,7 @@ recipe 코드 수정도 gikka 저장소에서만 한다.
 | pattern-queue-worker | DB 대기열 + 단일 워커 비동기 처리 (2인스턴스 중복 실행 안전) | `registration/RegistrationWorker.java` + `registration/GeminiRateLimiter.java` (호출 속도·백오프·생존 신호를 DB 원자적 UPDATE 로 조율 — 인스턴스 메모리에 두면 합산 한도를 못 지킨다) |
 | pattern-tx-template | 보조 DB(gikka) 트랜잭션 — 스프링 빈 TransactionManager 등록 금지(아래 금지 참조) | `GikkaDataSourceConfig` 의 `gikkaTxTemplate` |
 | pattern-raw-signal | 품질 경고 등 "증상" 표시 — 증상 하나짜리 좁은 컬럼(`has_xxx`, `xxx_warning`) 대신 원인이 될 원시 신호를 목록 컬럼에 저장, 경고 문구는 그 신호 조합을 보는 별도 순수 매핑 함수가 도출 | `registration/RegistrationRules.analysisSignals` + `video.analysis_signals` |
+| pattern-async-sse-dispatch | SSE(emitter) 팬아웃을 웹소켓 수신 등 호출 스레드에서 떼어내기. emitter.send()를 호출 스레드에서 동기로 돌리면 느린 클라이언트 하나가 그 스레드를 막는다(실측: 거래량 급증 시 재연결 반복). emitter 목록·직렬화·이벤트 이름 같은 서비스별 로직은 그대로 두고, 실행기(단일 데몬 스레드) 생명주기만 공용화 | `binance/service/AsyncSseDispatcher.java` + `binance/service/SignalSseService.java`·`RawTickSseService.java`·`BinanceTradeSseService.java` |
 
 적립 규칙: 이번 작업에서 2곳 이상 쓰일 만한 구조를 만들었으면 커밋 전에 키를 붙여
 이 표에 등록한다. 실물이 리팩토링되면 키는 유지하고 경로만 갱신. 10개를 넘으면
