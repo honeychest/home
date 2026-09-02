@@ -11,6 +11,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -50,7 +51,8 @@ public class GroundedAnswerGenerator {
     private final ChatbotProperties properties;
     private final HealthCheckRecorder healthCheckRecorder;
 
-    public GroundedAnswerGenerator(ChatClient chatbotChatClient, VectorStore vectorStore,
+    public GroundedAnswerGenerator(@Qualifier("chatbotChatClient") ChatClient chatbotChatClient,
+                                   VectorStore vectorStore,
                                    ChatbotProperties properties, HealthCheckRecorder healthCheckRecorder) {
         this.chatbotChatClient = chatbotChatClient;
         this.vectorStore = vectorStore;

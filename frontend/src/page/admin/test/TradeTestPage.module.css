@@ -1,11 +1,11 @@
 .page {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    color: var(--monitor-text-primary);
+    gap: 12px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    color: var(--monitor-text-primary);
 }
 
 .header {
@@ -13,80 +13,302 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
+    padding-bottom: 4px;
+}
+
+.eyebrow {
+    margin: 0;
+    color: var(--monitor-primary);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
 }
 
 .title {
-    margin: 0;
-    font-size: 18px;
+    margin: 4px 0 0;
+    font-size: 22px;
     line-height: 1.2;
 }
 
 .subtitle {
-    margin: 4px 0 0;
+    max-width: 720px;
+    margin: 6px 0 0;
     color: var(--monitor-text-secondary);
     font-size: 12px;
+    line-height: 1.5;
 }
 
-.refreshButton {
+.refreshButton,
+.askButton {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    min-width: 124px;
     justify-content: center;
+    gap: 8px;
+    min-height: 44px;
     padding: 10px 14px;
     border: 1px solid var(--monitor-border);
     background: var(--monitor-primary);
-    color: #fff;
+    color: var(--monitor-card-bg);
     cursor: pointer;
+    font-weight: 700;
 }
 
-.refreshButton:disabled {
+.refreshButton {
+    min-width: 124px;
+}
+
+.refreshButton:disabled,
+.askButton:disabled {
     cursor: wait;
     opacity: 0.55;
 }
 
-.statusGrid {
-    display: grid;
-    gap: 10px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.statusBox {
+.marketStrip,
+.analysisCard,
+.intervalCard,
+.emptyBox,
+.noticeBox {
     border: 1px solid var(--monitor-border);
     background: var(--monitor-card-bg);
-    min-height: 0;
-    padding: 6px 10px;
+}
+
+.marketStrip {
     display: grid;
-    gap: 2px;
+    grid-template-columns: 1.35fr repeat(3, 1fr);
+    gap: 1px;
+    background: var(--monitor-border);
+}
+
+.marketStrip > div {
+    display: grid;
+    gap: 4px;
+    min-height: 62px;
+    padding: 12px;
+    background: var(--monitor-card-bg);
 }
 
 .statusLabel {
-    margin: 0;
     color: var(--monitor-text-secondary);
     font-size: 11px;
     line-height: 1.35;
-    text-transform: uppercase;
 }
 
-.errorText {
-    margin: 0;
-    color: #b91c1c;
-    font-size: 12px;
-    font-weight: 600;
+.currentPrice {
+    color: var(--monitor-primary);
+    font-size: 20px;
 }
 
+.noticeBox,
 .emptyBox {
-    border: 1px solid var(--monitor-border);
-    background: var(--monitor-card-bg);
-    color: var(--monitor-text-secondary);
     padding: 14px;
+    color: var(--monitor-text-secondary);
     font-size: 13px;
 }
 
-@media (max-width: 900px) {
-    .header,
+.statusGrid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.intervalCard,
+.analysisCard {
+    min-width: 0;
+    padding: 14px;
+}
+
+.intervalCard {
+    display: grid;
+    gap: 8px;
+}
+
+.cardHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid var(--monitor-border);
+    padding-bottom: 10px;
+}
+
+.cardHeader h2 {
+    margin: 4px 0 0;
+    font-size: 16px;
+}
+
+.pill {
+    padding: 4px 7px;
+    border: 1px solid var(--monitor-border);
+    color: var(--monitor-primary);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.metricRow,
+.indicatorLine {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.metricRow {
+    font-size: 12px;
+}
+
+.metricRow strong {
+    font-size: 15px;
+}
+
+.indicatorLine {
+    color: var(--monitor-text-secondary);
+    font-size: 11px;
+}
+
+.indicatorLine strong {
+    color: var(--monitor-text-primary);
+}
+
+.cardNote,
+.muted,
+.asOf,
+.formFooter,
+.userTurn,
+.assistantTurn {
+    color: var(--monitor-text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.cardNote {
+    min-height: 16px;
+    margin: 2px 0 0;
+}
+
+.analysisGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 10px;
+    padding-bottom: 12px;
+}
+
+.analysisCard {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.analysisStatus {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--monitor-primary);
+    font-size: 12px;
+}
+
+.analysisStatus span {
+    color: var(--monitor-text-secondary);
+}
+
+.answer {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 13px;
+    line-height: 1.65;
+}
+
+.asOf {
+    margin: 0;
+}
+
+.askForm {
+    display: grid;
+    gap: 8px;
+}
+
+.askForm textarea {
+    width: 100%;
+    min-height: 96px;
+    resize: vertical;
+    box-sizing: border-box;
+    border: 1px solid var(--monitor-border);
+    background: var(--monitor-card-bg);
+    color: var(--monitor-text-primary);
+    padding: 10px;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.askForm textarea:focus {
+    outline: 2px solid var(--monitor-primary);
+    outline-offset: 1px;
+}
+
+.formFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.askButton {
+    flex: 0 0 auto;
+}
+
+.askResult,
+.turns {
+    border-top: 1px solid var(--monitor-border);
+    padding-top: 10px;
+}
+
+.turns {
+    display: grid;
+    gap: 6px;
+}
+
+.userTurn,
+.assistantTurn {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.userTurn strong,
+.assistantTurn strong {
+    color: var(--monitor-text-primary);
+}
+
+@media (max-width: 1100px) {
     .statusGrid {
-        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 800px) {
+    .header,
+    .marketStrip,
+    .analysisGrid {
         grid-template-columns: 1fr;
+    }
+
+    .header {
+        display: grid;
+    }
+
+    .marketStrip {
+        display: grid;
+    }
+}
+
+@media (max-width: 520px) {
+    .statusGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .formFooter {
+        align-items: stretch;
+        flex-direction: column;
     }
 }

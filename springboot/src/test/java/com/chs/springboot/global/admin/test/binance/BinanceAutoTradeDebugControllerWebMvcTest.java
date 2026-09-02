@@ -1,6 +1,13 @@
 package com.chs.springboot.global.admin.test.binance;
 
-import com.chs.springboot.domain.binance.model.MarketSnapshotDto;
+import com.chs.springboot.domain.binance.model.BinanceAnalysisResponse;
+import com.chs.springboot.domain.binance.model.BinanceAnalysisStatus;
+import com.chs.springboot.domain.binance.model.BinanceKline;
+import com.chs.springboot.domain.binance.model.BinanceKlineInterval;
+import com.chs.springboot.domain.binance.model.IntervalMarketSnapshot;
+import com.chs.springboot.domain.binance.model.MarketDataStatus;
+import com.chs.springboot.domain.binance.model.MultiTimeframeMarketSnapshot;
+import com.chs.springboot.domain.binance.service.BinanceAutoTradeAnalysisService;
 import com.chs.springboot.domain.binance.service.LiveMarketDataService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +19,7 @@ import org.springframework.http.converter.json.MappingJackson2HttpMessageConvert
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,11 +36,14 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
     @Mock
     LiveMarketDataService liveMarketDataService;
 
+    @Mock
+    BinanceAutoTradeAnalysisService analysisService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        BinanceAutoTradeDebugController controller = new BinanceAutoTradeDebugController(liveMarketDataService);
+        BinanceAutoTradeDebugController controller = new BinanceAutoTradeDebugController(liveMarketDataService, analysisService);
         mockMvc = standaloneSetup(controller)
                 .setMessageConverters(new MappingJackson2HttpMessageConverter())
                 .build();
@@ -41,21 +52,18 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
     @Test
     @DisplayName("리더가 아니면 200 + status=NOT_LEADER (503 아님 — 전역 과부하 토스트 회피)")
     void getSnapshot_notLeader() throws Exception {
-        when(liveMarketDataService.isLeader()).thenReturn(false);
+        when(liveMarketDataService.buildSnapshot()).thenReturn(snapshot(false, MarketDataStatus.ERROR));
 
         mockMvc.perform(get("/api/admin/test/binance/debug/snapshot"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("NOT_LEADER"))
-                .andExpect(jsonPath("$.snapshot").doesNotExist());
+                .andExpect(jsonPath("$.snapshot.symbol").value("BTCUSDT"));
     }
 
     @Test
     @DisplayName("리더인데 캔들이 아직 없으면 200 + status=BACKFILLING")
     void getSnapshot_backfilling() throws Exception {
-        when(liveMarketDataService.isLeader()).thenReturn(true);
-        when(liveMarketDataService.buildSnapshotDto()).thenReturn(
-                new MarketSnapshotDto("BTCUSDT", "FUTURES", "1m", 0, 0L, null, null, null, null,
-                        null, null, null, null, null, null));
+        when(liveMarketDataService.buildSnapshot()).thenReturn(snapshot(true, MarketDataStatus.BACKFILLING));
 
         mockMvc.perform(get("/api/admin/test/binance/debug/snapshot"))
                 .andExpect(status().isOk())
@@ -65,13 +73,7 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
     @Test
     @DisplayName("캔들은 있는데 신선도 실패면 200 + status=STALE")
     void getSnapshot_stale() throws Exception {
-        when(liveMarketDataService.isLeader()).thenReturn(true);
-        when(liveMarketDataService.buildSnapshotDto()).thenReturn(
-                new MarketSnapshotDto("BTCUSDT", "FUTURES", "1m", 480, 1L,
-                        new BigDecimal("100"), new BigDecimal("110"), new BigDecimal("90"), new BigDecimal("1.5"),
-                        new BigDecimal("55.00"), new BigDecimal("1.2"), new BigDecimal("1.0"), new BigDecimal("0.2"),
-                        new BigDecimal("95.00"), true));
-        when(liveMarketDataService.isStale()).thenReturn(true);
+        when(liveMarketDataService.buildSnapshot()).thenReturn(snapshot(true, MarketDataStatus.STALE));
 
         mockMvc.perform(get("/api/admin/test/binance/debug/snapshot"))
                 .andExpect(status().isOk())
@@ -81,23 +83,52 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
     @Test
     @DisplayName("리더 + 캔들 있음 + 신선함 → 200 + status=READY + 스냅샷 필드")
     void getSnapshot_ready() throws Exception {
-        when(liveMarketDataService.isLeader()).thenReturn(true);
-        when(liveMarketDataService.buildSnapshotDto()).thenReturn(
-                new MarketSnapshotDto("BTCUSDT", "FUTURES", "1m", 480, 1700000000000L,
-                        new BigDecimal("77000.5"), new BigDecimal("78000"), new BigDecimal("76500"), new BigDecimal("-0.32"),
-                        new BigDecimal("62.50"), new BigDecimal("15.2"), new BigDecimal("10.1"), new BigDecimal("5.1"),
-                        new BigDecimal("76800.00"), true));
-        when(liveMarketDataService.isStale()).thenReturn(false);
+        when(liveMarketDataService.buildSnapshot()).thenReturn(snapshot(true, MarketDataStatus.READY));
 
         mockMvc.perform(get("/api/admin/test/binance/debug/snapshot"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("READY"))
                 .andExpect(jsonPath("$.snapshot.symbol").value("BTCUSDT"))
-                .andExpect(jsonPath("$.snapshot.candleCount").value(480))
-                .andExpect(jsonPath("$.snapshot.currentPrice").value(77000.5))
-                .andExpect(jsonPath("$.snapshot.rsi14").value(62.50))
-                .andExpect(jsonPath("$.snapshot.macdHistogram").value(5.1))
-                .andExpect(jsonPath("$.snapshot.supertrendValue").value(76800.00))
-                .andExpect(jsonPath("$.snapshot.supertrendUptrend").value(true));
+                .andExpect(jsonPath("$.snapshot.snapshots[0].candleCount").value(1))
+                .andExpect(jsonPath("$.snapshot.snapshots[0].currentPrice").value(77000.5))
+                .andExpect(jsonPath("$.snapshot.intervalStatuses[0].status").value("READY"));
+    }
+
+    @Test
+    void getAnalysisAndAskExposeAnalysisStatuses() throws Exception {
+        BinanceAnalysisResponse response = new BinanceAnalysisResponse(
+                BinanceAnalysisStatus.READY, null, "답변", 1700000000000L,
+                1700000001000L, 1700000001000L, "완료");
+        when(analysisService.getLatestAnalysis()).thenReturn(response);
+        when(analysisService.ask("현재가?", List.of())).thenReturn(response);
+
+        mockMvc.perform(get("/api/admin/test/binance/debug/analysis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("READY"))
+                .andExpect(jsonPath("$.asOfMs").value(1700000000000L));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/admin/test/binance/debug/analysis/ask")
+                        .contentType("application/json")
+                        .content("{\"question\":\"현재가?\",\"recentTurns\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer").value("답변"));
+    }
+
+    private static MultiTimeframeMarketSnapshot snapshot(boolean leader, MarketDataStatus status) {
+        List<IntervalMarketSnapshot> intervals = List.of(BinanceKlineInterval.values()).stream()
+                .map(interval -> new IntervalMarketSnapshot(interval, status,
+                        List.of(candle(interval)), null, 1700000000000L, "",
+                        new BigDecimal("77000.5"), new BigDecimal("78000"), new BigDecimal("76500"),
+                        new BigDecimal("-0.32"), null))
+                .toList();
+        return new MultiTimeframeMarketSnapshot("BTCUSDT", "FUTURES", 1700000000000L,
+                leader, 1L, intervals, false);
+    }
+
+    private static BinanceKline candle(BinanceKlineInterval interval) {
+        BigDecimal price = new BigDecimal("77000.5");
+        return new BinanceKline(0L, price, price, price, price, BigDecimal.ONE,
+                interval.intervalMs() - 1, BigDecimal.ONE, 1L, BigDecimal.ONE, BigDecimal.ONE);
     }
 }

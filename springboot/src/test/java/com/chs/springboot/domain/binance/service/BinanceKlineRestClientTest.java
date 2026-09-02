@@ -1,5 +1,6 @@
 package com.chs.springboot.domain.binance.service;
 
+import com.chs.springboot.domain.binance.model.BinanceKlineInterval;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,29 @@ class BinanceKlineRestClientTest {
                 .andRespond(withSuccess("[]", org.springframework.http.MediaType.APPLICATION_JSON));
 
         assertEquals(0, client.fetchPage("ENAUSDT", "FUTURES", 0L, 60_000L).size());
+        server.verify();
+    }
+
+    @Test
+    void latestClosedFuturesUsesFuturesServerTimeAndExcludesInProgressCandle() {
+        server.expect(requestTo("https://futures.test/fapi/v1/time"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("{\"serverTime\":1234567}",
+                        org.springframework.http.MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://futures.test/fapi/v1/klines?symbol=BTCUSDT&interval=1m&startTime=1080000&endTime=1199999&limit=2"))
+                .andExpect(method(GET))
+                .andExpect(queryParam("interval", equalTo("1m")))
+                .andExpect(queryParam("limit", equalTo("2")))
+                .andRespond(withSuccess(
+                        "[[1080000,\"1\",\"2\",\"0.5\",\"1.5\",\"10\",1139999,\"15\",3,\"5\",\"7.5\",\"0\"],"
+                                + "[1140000,\"1\",\"2\",\"0.5\",\"1.5\",\"10\",1199999,\"15\",3,\"5\",\"7.5\",\"0\"],"
+                                + "[1200000,\"1\",\"2\",\"0.5\",\"1.5\",\"10\",1259999,\"15\",3,\"5\",\"7.5\",\"0\"]]",
+                        org.springframework.http.MediaType.APPLICATION_JSON));
+
+        var result = client.fetchLatestClosedFutures("BTCUSDT", BinanceKlineInterval.ONE_MINUTE, 2);
+
+        assertEquals(2, result.size());
+        assertEquals(1_140_000L, result.get(1).openTimeMs());
         server.verify();
     }
 }
