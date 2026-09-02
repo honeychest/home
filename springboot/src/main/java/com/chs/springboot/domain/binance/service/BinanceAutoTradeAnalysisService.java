@@ -108,12 +108,16 @@ public class BinanceAutoTradeAnalysisService {
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.NOT_LEADER, null, null,
                     null, null, null, null, "리더 노드에서만 자동 분석 결과를 제공합니다");
         }
+        long currentGeneration = liveMarketDataService.leadershipGeneration();
         BinanceAnalysisResponse success = lastSuccessfulAnalysis;
         if (success == null) {
-            return new BinanceAnalysisResponse(BinanceAnalysisStatus.NO_ANALYSIS, lastFailureStatus,
-                    null, null, null, null, null, messageOrDefault("아직 분석 요청 결과가 없습니다"));
+            BinanceAnalysisStatus failureStatus = failureGeneration == currentGeneration ? lastFailureStatus : null;
+            String message = failureStatus == null
+                    ? "아직 분석 요청 결과가 없습니다" : messageOrDefault("아직 분석 요청 결과가 없습니다");
+            return new BinanceAnalysisResponse(BinanceAnalysisStatus.NO_ANALYSIS, failureStatus,
+                    null, null, null, null, null, message);
         }
-        if (failureGeneration == liveMarketDataService.leadershipGeneration() && lastFailureStatus != null) {
+        if (failureGeneration == currentGeneration && lastFailureStatus != null) {
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.STALE, lastFailureStatus,
                     success.answer(), success.asOfMs(), success.generatedAtMs(), success.tookMs(),
                     success.lastSuccessAtMs(), messageOrDefault("마지막 성공 분석 이후 새 분석이 실패했습니다"));
@@ -273,6 +277,9 @@ public class BinanceAutoTradeAnalysisService {
     }
 
     private void recordFailure(BinanceAnalysisStatus status, String message, long generation) {
+        if (!isCurrentGeneration(generation)) {
+            return;
+        }
         lastFailureStatus = status;
         lastFailureMessage = message;
         failureGeneration = generation;

@@ -8,6 +8,7 @@ import com.chs.springboot.domain.binance.model.BinanceKlineInterval;
 import com.chs.springboot.domain.binance.model.IntervalMarketSnapshot;
 import com.chs.springboot.domain.binance.model.MarketDataStatus;
 import com.chs.springboot.domain.binance.model.MultiTimeframeMarketSnapshot;
+import com.chs.springboot.global.redis.LeadershipChangedEvent;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -23,6 +24,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -185,6 +187,45 @@ class BinanceAutoTradeAnalysisServiceTest {
         assertThat(result.status()).isEqualTo(BinanceAnalysisStatus.STALE);
         assertThat(result.failureStatus()).isEqualTo(BinanceAnalysisStatus.LLM_ERROR);
         assertThat(result.answer()).isEqualTo("첫 자동 답변");
+    }
+
+    @Test
+    void refreshFailureFromPreviousLeadershipGenerationIsNotExposed() throws Exception {
+        AtomicBoolean leader = new AtomicBoolean(true);
+        AtomicLong generation = new AtomicLong(1L);
+        LiveMarketDataService live = mockLive(leader);
+        when(live.leadershipGeneration()).thenAnswer(invocation -> generation.get());
+        ChatClient chatClient = mock(ChatClient.class);
+        ChatClient.CallResponseSpec response = mock(CallResponseSpec.class);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ChatClientRequestSpec request = mockRequest(response);
+        when(chatClient.prompt()).thenReturn(request);
+        when(response.content()).thenAnswer(invocation -> {
+            started.countDown();
+            release.await(1, TimeUnit.SECONDS);
+            throw new IllegalStateException("이전 리더의 LLM 오류");
+        });
+        createService(live, chatClient, 1_000);
+
+        ExecutorService callers = Executors.newSingleThreadExecutor();
+        try {
+            Future<com.chs.springboot.domain.binance.model.BinanceAnalysisResponse> first =
+                    callers.submit(() -> service.refreshAnalysis());
+            assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+
+            generation.set(2L);
+            service.onLeadershipChanged(new LeadershipChangedEvent("server", true, "new-owner", 2L));
+            release.countDown();
+
+            assertThat(first.get(1, TimeUnit.SECONDS).status()).isEqualTo(BinanceAnalysisStatus.LLM_ERROR);
+            var latest = service.getLatestAnalysis();
+            assertThat(latest.status()).isEqualTo(BinanceAnalysisStatus.NO_ANALYSIS);
+            assertThat(latest.failureStatus()).isNull();
+            assertThat(latest.message()).isEqualTo("아직 분석 요청 결과가 없습니다");
+        } finally {
+            callers.shutdownNow();
+        }
     }
 
     private void createService(LiveMarketDataService live, ChatClient chatClient, long timeoutMs) {
