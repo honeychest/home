@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -101,7 +102,7 @@ class BinanceAutoTradeAnalysisServiceTest {
             leader.set(false);
             return "폐기될 답변";
         });
-        createService(live, chatClient, 200);
+        createService(live, chatClient, 2_000);
 
         var result = service.ask("지금 얼마야?", List.of());
 
@@ -110,7 +111,7 @@ class BinanceAutoTradeAnalysisServiceTest {
     }
 
     @Test
-    void automaticAnalysisDoesNotOverlap() throws Exception {
+    void refreshDoesNotOverlap() throws Exception {
         LiveMarketDataService live = mockLive(true);
         ChatClient chatClient = mockChatClient(null);
         ChatClient.CallResponseSpec response = mock(CallResponseSpec.class);
@@ -127,18 +128,25 @@ class BinanceAutoTradeAnalysisServiceTest {
         });
         createService(live, chatClient, 1_000);
 
-        service.scheduledAnalysis();
-        assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
-        service.scheduledAnalysis();
-        release.countDown();
+        ExecutorService callers = Executors.newFixedThreadPool(2);
+        try {
+            Future<com.chs.springboot.domain.binance.model.BinanceAnalysisResponse> first =
+                    callers.submit(() -> service.refreshAnalysis());
+            assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+            var second = service.refreshAnalysis();
+            release.countDown();
 
-        Thread.sleep(100);
-        assertThat(calls).hasValue(1);
-        verify(response).content();
+            assertThat(second.status()).isEqualTo(BinanceAnalysisStatus.ANALYSIS_IN_PROGRESS);
+            assertThat(first.get(1, TimeUnit.SECONDS).status()).isEqualTo(BinanceAnalysisStatus.READY);
+            assertThat(calls).hasValue(1);
+            verify(response).content();
+        } finally {
+            callers.shutdownNow();
+        }
     }
 
     @Test
-    void automaticTimeoutIsReportedWithoutLeavingAReadyResult() throws Exception {
+    void refreshTimeoutIsReportedWithoutLeavingAReadyResult() {
         LiveMarketDataService live = mockLive(true);
         ChatClient chatClient = mockChatClient(null);
         ChatClient.CallResponseSpec response = mock(CallResponseSpec.class);
@@ -150,15 +158,15 @@ class BinanceAutoTradeAnalysisServiceTest {
         });
         createService(live, chatClient, 20);
 
-        service.scheduledAnalysis();
-        awaitFailureStatus(BinanceAnalysisStatus.LLM_TIMEOUT);
+        var result = service.refreshAnalysis();
+        assertThat(result.status()).isEqualTo(BinanceAnalysisStatus.LLM_TIMEOUT);
 
         assertThat(service.getLatestAnalysis().status()).isEqualTo(BinanceAnalysisStatus.NO_ANALYSIS);
         assertThat(service.getLatestAnalysis().failureStatus()).isEqualTo(BinanceAnalysisStatus.LLM_TIMEOUT);
     }
 
     @Test
-    void automaticFailureMakesPreviousAnswerStale() throws Exception {
+    void refreshFailureMakesPreviousAnswerStale() {
         LiveMarketDataService live = mockLive(true);
         ChatClient chatClient = mock(ChatClient.class);
         CallResponseSpec response = mock(CallResponseSpec.class);
@@ -168,10 +176,10 @@ class BinanceAutoTradeAnalysisServiceTest {
                 .thenThrow(new IllegalStateException("LLM down"));
         createService(live, chatClient, 200);
 
-        service.scheduledAnalysis();
-        awaitAnalysisStatus(BinanceAnalysisStatus.READY);
-        service.scheduledAnalysis();
-        awaitFailureStatus(BinanceAnalysisStatus.LLM_ERROR);
+        var first = service.refreshAnalysis();
+        assertThat(first.status()).isEqualTo(BinanceAnalysisStatus.READY);
+        var second = service.refreshAnalysis();
+        assertThat(second.status()).isEqualTo(BinanceAnalysisStatus.LLM_ERROR);
 
         var result = service.getLatestAnalysis();
         assertThat(result.status()).isEqualTo(BinanceAnalysisStatus.STALE);
@@ -212,22 +220,6 @@ class BinanceAutoTradeAnalysisServiceTest {
         when(request.toolCallbacks(anyList())).thenReturn(request);
         when(request.call()).thenReturn(response);
         return request;
-    }
-
-    private void awaitAnalysisStatus(BinanceAnalysisStatus expected) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
-        while (service.getLatestAnalysis().status() != expected && System.nanoTime() < deadline) {
-            Thread.sleep(10);
-        }
-        assertThat(service.getLatestAnalysis().status()).isEqualTo(expected);
-    }
-
-    private void awaitFailureStatus(BinanceAnalysisStatus expected) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
-        while (service.getLatestAnalysis().failureStatus() != expected && System.nanoTime() < deadline) {
-            Thread.sleep(10);
-        }
-        assertThat(service.getLatestAnalysis().failureStatus()).isEqualTo(expected);
     }
 
     private MultiTimeframeMarketSnapshot snapshot() {

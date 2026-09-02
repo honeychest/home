@@ -7,6 +7,7 @@ public record BinanceAnalysisResponse(
         String answer,
         Long asOfMs,
         Long generatedAtMs,
+        Long tookMs,
         Long lastSuccessAtMs,
         String message
 ) {

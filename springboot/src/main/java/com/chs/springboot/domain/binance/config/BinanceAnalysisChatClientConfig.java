@@ -20,6 +20,8 @@ public class BinanceAnalysisChatClientConfig {
             한 답변에서 툴을 호출할 수 있는 횟수는 최대 5회다.
             툴 호출 상한에 도달하거나 데이터 상태가 READY가 아니면 이미 받은 정보만으로 답하고 한계를 밝히라.
             답변은 툴 결과의 asOfMs 시각 기준이라는 점을 명시하라.
+            답변은 5줄 이내로, 가장 강한 신호 하나를 근거로 결론부터 말하라.
+            각 인터벌·각 지표를 전부 나열하지 마라. 결론을 뒷받침하는 근거는 한두 개만 짧게 덧붙여라.
 
             현재 포지션의 방향, 진입가, 레버리지, 수량, 마진 모드는 제공되지 않는다.
             향후 포지션 컨텍스트를 붙일 자리인 positionDirection, entryPrice, leverage, quantity,

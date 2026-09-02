@@ -4,6 +4,7 @@ import {
     askAutoTradeAnalysis,
     fetchAutoTradeAnalysis,
     fetchAutoTradeSnapshot,
+    refreshAutoTradeAnalysis,
 } from '@/api/adminTest/binance.js';
 import { logApiCall } from './shared/logApiCall.js';
 import styles from './TradeTestPage.module.css';
@@ -17,7 +18,8 @@ const STATUS_LABELS = {
     GAP: '재연결 후 결측 봉을 보정 중입니다',
     ERROR: '이 인터벌 데이터를 읽지 못했습니다',
     PARTIAL: '일부 인터벌 데이터만 준비되었습니다',
-    NO_ANALYSIS: '아직 자동 분석 결과가 없습니다',
+    NO_ANALYSIS: '아직 분석 요청 결과가 없습니다',
+    ANALYSIS_IN_PROGRESS: '이미 분석이 진행 중입니다',
     LLM_TIMEOUT: '로컬 LLM 응답 시간이 초과되었습니다',
     LLM_ERROR: '로컬 LLM 분석에 실패했습니다',
     EMPTY_QUESTION: '질문을 입력하세요',
@@ -45,6 +47,11 @@ function formatNumber(value, digits = 2) {
     return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: digits }).format(value);
 }
 
+function formatDuration(tookMs) {
+    if (tookMs == null) return null;
+    return `생성에 ${(tookMs / 1000).toFixed(1)}초 걸림`;
+}
+
 function formatTrend(uptrend) {
     if (uptrend == null) return '-';
     return uptrend ? '상승' : '하락';
@@ -66,6 +73,7 @@ export default function TradeTestPage() {
     const [turns, setTurns] = useState([]);
     const [askLog, setAskLog] = useState(null);
     const [asking, setAsking] = useState(false);
+    const [analyzing, setAnalyzing] = useState(false);
     const loadingRef = useRef(false);
 
     const load = useCallback(async () => {
@@ -84,12 +92,19 @@ export default function TradeTestPage() {
 
     useEffect(() => {
         const initialLoad = window.setTimeout(() => void load(), 0);
-        const timer = window.setInterval(() => void load(), 15_000);
-        return () => {
-            window.clearTimeout(initialLoad);
-            window.clearInterval(timer);
-        };
+        return () => window.clearTimeout(initialLoad);
     }, [load]);
+
+    const handleRefreshAnalysis = async () => {
+        if (analyzing) return;
+        setAnalyzing(true);
+        const result = await logApiCall(
+            'POST /api/admin/test/binance/debug/analysis/refresh',
+            refreshAutoTradeAnalysis
+        );
+        setAnalysisLog(result);
+        setAnalyzing(false);
+    };
 
     const handleAsk = async (event) => {
         event.preventDefault();
@@ -215,10 +230,17 @@ export default function TradeTestPage() {
                 <article className={styles.analysisCard}>
                     <div className={styles.cardHeader}>
                         <div>
-                            <span className={styles.eyebrow}>AUTO BRIEF / 5 MIN</span>
-                            <h2>자동 분석 요약</h2>
+                            <span className={styles.eyebrow}>MARKET BRIEF / ON DEMAND</span>
+                            <h2>분석 요약</h2>
                         </div>
-                        <Bot size={20} />
+                        <button
+                            className={styles.refreshButton}
+                            onClick={() => void handleRefreshAnalysis()}
+                            disabled={analyzing}
+                        >
+                            <Bot size={16} />
+                            {analyzing ? '분석 중' : '분석 요청'}
+                        </button>
                     </div>
                     {!analysisLog ? (
                         <p className={styles.muted}>분석 상태 조회 중...</p>
@@ -235,6 +257,7 @@ export default function TradeTestPage() {
                             <p className={styles.answer}>{analysisBody?.answer || analysisBody?.message}</p>
                             <p className={styles.asOf}>
                                 기준 {formatTime(analysisBody?.asOfMs)} · 마지막 성공 {formatTime(analysisBody?.lastSuccessAtMs)}
+                                {formatDuration(analysisBody?.tookMs) ? ` · ${formatDuration(analysisBody?.tookMs)}` : ''}
                             </p>
                         </>
                     )}
@@ -271,7 +294,10 @@ export default function TradeTestPage() {
                                 <>
                                     <strong>{statusLabel(askBody?.status)}</strong>
                                     <p className={styles.answer}>{askBody?.answer || askBody?.message}</p>
-                                    <p className={styles.asOf}>기준 {formatTime(askBody?.asOfMs)}</p>
+                                    <p className={styles.asOf}>
+                                        기준 {formatTime(askBody?.asOfMs)}
+                                        {formatDuration(askBody?.tookMs) ? ` · ${formatDuration(askBody?.tookMs)}` : ''}
+                                    </p>
                                 </>
                             )}
                         </div>

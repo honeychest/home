@@ -98,7 +98,7 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
     void getAnalysisAndAskExposeAnalysisStatuses() throws Exception {
         BinanceAnalysisResponse response = new BinanceAnalysisResponse(
                 BinanceAnalysisStatus.READY, null, "답변", 1700000000000L,
-                1700000001000L, 1700000001000L, "완료");
+                1700000001000L, 500L, 1700000001000L, "완료");
         when(analysisService.getLatestAnalysis()).thenReturn(response);
         when(analysisService.ask("현재가?", List.of())).thenReturn(response);
 

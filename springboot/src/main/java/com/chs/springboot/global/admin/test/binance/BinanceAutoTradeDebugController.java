@@ -37,6 +37,11 @@ public class BinanceAutoTradeDebugController {
         return analysisService.getLatestAnalysis();
     }
 
+    @PostMapping("/analysis/refresh")
+    public BinanceAnalysisResponse refreshAnalysis() {
+        return analysisService.refreshAnalysis();
+    }
+
     @PostMapping("/analysis/ask")
     public BinanceAnalysisResponse askAnalysis(@RequestBody(required = false) BinanceAnalysisAskRequest request) {
         if (request == null) {

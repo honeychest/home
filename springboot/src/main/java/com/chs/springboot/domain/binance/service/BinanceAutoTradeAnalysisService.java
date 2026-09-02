@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import com.chs.springboot.global.redis.LeadershipChangedEvent;
 
@@ -26,14 +25,11 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.RejectedExecutionException;
 
+/** 자동매매 PoC 시장 분석 — 관리자가 직접 요청할 때만 로컬 LLM을 호출한다(자동 스케줄 없음). */
 @Service
 public class BinanceAutoTradeAnalysisService {
 
@@ -46,8 +42,7 @@ public class BinanceAutoTradeAnalysisService {
     private final ChatClient analysisChatClient;
     private final long llmTimeoutMs;
     private final ExecutorService llmExecutor;
-    private final ScheduledExecutorService timeoutExecutor;
-    private final AtomicBoolean automaticRunning = new AtomicBoolean(false);
+    private final AtomicBoolean refreshRunning = new AtomicBoolean(false);
 
     private volatile BinanceAnalysisResponse lastSuccessfulAnalysis;
     private volatile BinanceAnalysisStatus lastFailureStatus;
@@ -68,27 +63,11 @@ public class BinanceAutoTradeAnalysisService {
                     Thread thread = new Thread(runnable, "binance-analysis-llm");
                     thread.setDaemon(true);
                     return thread;
-                }),
-                Executors.newSingleThreadScheduledExecutor(runnable -> {
-                    Thread thread = new Thread(runnable, "binance-analysis-timeout");
-                    thread.setDaemon(true);
-                    return thread;
                 }));
     }
 
     BinanceAutoTradeAnalysisService(LiveMarketDataService liveMarketDataService, ChatClient analysisChatClient,
                                     long llmTimeoutMs, ExecutorService llmExecutor) {
-        this(liveMarketDataService, analysisChatClient, llmTimeoutMs, llmExecutor,
-                Executors.newSingleThreadScheduledExecutor(runnable -> {
-                    Thread thread = new Thread(runnable, "binance-analysis-timeout");
-                    thread.setDaemon(true);
-                    return thread;
-                }));
-    }
-
-    private BinanceAutoTradeAnalysisService(LiveMarketDataService liveMarketDataService,
-                                            ChatClient analysisChatClient, long llmTimeoutMs,
-                                            ExecutorService llmExecutor, ScheduledExecutorService timeoutExecutor) {
         if (llmTimeoutMs <= 0) {
             throw new IllegalArgumentException("LLM 타임아웃은 0보다 커야 합니다");
         }
@@ -96,77 +75,48 @@ public class BinanceAutoTradeAnalysisService {
         this.analysisChatClient = analysisChatClient;
         this.llmTimeoutMs = llmTimeoutMs;
         this.llmExecutor = llmExecutor;
-        this.timeoutExecutor = timeoutExecutor;
     }
 
-    @Scheduled(fixedDelayString = "${binance.analysis.fixed-delay-ms:300000}")
-    public void scheduledAnalysis() {
-        if (!liveMarketDataService.isLeader() || !automaticRunning.compareAndSet(false, true)) {
-            return;
+    /** 관리자가 "분석 요청" 버튼을 눌렀을 때만 호출된다 — 자동 주기 실행 없음. */
+    public BinanceAnalysisResponse refreshAnalysis() {
+        if (!liveMarketDataService.isLeader()) {
+            return new BinanceAnalysisResponse(BinanceAnalysisStatus.NOT_LEADER, null, null,
+                    null, null, null, lastSuccessAtMs(), "리더 노드에서만 분석 요청을 처리합니다");
         }
-        MultiTimeframeMarketSnapshot snapshot;
+        if (!refreshRunning.compareAndSet(false, true)) {
+            return new BinanceAnalysisResponse(BinanceAnalysisStatus.ANALYSIS_IN_PROGRESS, null, null,
+                    null, null, null, lastSuccessAtMs(), "이미 분석이 진행 중입니다. 잠시 후 다시 시도하세요");
+        }
         try {
-            snapshot = liveMarketDataService.buildSnapshot();
-        } catch (RuntimeException e) {
-            recordFailure(BinanceAnalysisStatus.PARTIAL, "시장 스냅샷 생성에 실패했습니다", liveMarketDataService.leadershipGeneration());
-            automaticRunning.set(false);
-            return;
-        }
-        long generation = snapshot.leadershipGeneration();
-        AtomicBoolean completed = new AtomicBoolean(false);
-        AtomicReference<ScheduledFuture<?>> timeoutTask = new AtomicReference<>();
-        Future<?> llmTask;
-        try {
-            llmTask = llmExecutor.submit(() -> {
-                try {
-                    String answer = callLlm(snapshot, List.of(), automaticPrompt(snapshot));
-                    if (completed.compareAndSet(false, true)) {
-                        completeAutomaticAnalysis(snapshot, generation, answer, null);
-                    }
-                } catch (Throwable error) {
-                    if (completed.compareAndSet(false, true)) {
-                        completeAutomaticAnalysis(snapshot, generation, null, error);
-                    }
-                } finally {
-                    automaticRunning.set(false);
-                    cancel(timeoutTask.get());
-                }
-            });
-        } catch (RejectedExecutionException e) {
-            automaticRunning.set(false);
-            recordFailure(BinanceAnalysisStatus.LLM_ERROR, "전용 LLM 실행기를 사용할 수 없습니다", generation);
-            return;
-        }
-        ScheduledFuture<?> scheduledTimeout = timeoutExecutor.schedule(() -> {
-            if (completed.compareAndSet(false, true)) {
-                llmTask.cancel(true);
-                if (isCurrentGeneration(generation)) {
-                    recordFailure(BinanceAnalysisStatus.LLM_TIMEOUT,
-                            "로컬 LLM 자동 분석 시간이 초과되었습니다", generation);
-                }
-                automaticRunning.set(false);
+            MultiTimeframeMarketSnapshot snapshot;
+            try {
+                snapshot = liveMarketDataService.buildSnapshot();
+            } catch (RuntimeException e) {
+                long generation = liveMarketDataService.leadershipGeneration();
+                recordFailure(BinanceAnalysisStatus.PARTIAL, "시장 스냅샷 생성에 실패했습니다", generation);
+                return new BinanceAnalysisResponse(BinanceAnalysisStatus.PARTIAL, null, null,
+                        null, null, null, lastSuccessAtMs(), "시장 스냅샷 생성에 실패했습니다");
             }
-        }, llmTimeoutMs, TimeUnit.MILLISECONDS);
-        timeoutTask.set(scheduledTimeout);
-        if (completed.get()) {
-            scheduledTimeout.cancel(false);
+            return runLlmCall(snapshot, List.of(), automaticPrompt(snapshot), true);
+        } finally {
+            refreshRunning.set(false);
         }
     }
 
     public BinanceAnalysisResponse getLatestAnalysis() {
         if (!liveMarketDataService.isLeader()) {
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.NOT_LEADER, null, null,
-                    null, null, null, "리더 노드에서만 자동 분석 결과를 제공합니다");
+                    null, null, null, null, "리더 노드에서만 자동 분석 결과를 제공합니다");
         }
         BinanceAnalysisResponse success = lastSuccessfulAnalysis;
         if (success == null) {
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.NO_ANALYSIS, lastFailureStatus,
-                    null, null, null, null, messageOrDefault("아직 성공한 자동 분석이 없습니다"));
+                    null, null, null, null, null, messageOrDefault("아직 분석 요청 결과가 없습니다"));
         }
         if (failureGeneration == liveMarketDataService.leadershipGeneration() && lastFailureStatus != null) {
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.STALE, lastFailureStatus,
-                    success.answer(), success.asOfMs(), success.generatedAtMs(), success.lastSuccessAtMs(),
-                    messageOrDefault("마지막 성공 분석 이후 새 분석이 실패했습니다"));
+                    success.answer(), success.asOfMs(), success.generatedAtMs(), success.tookMs(),
+                    success.lastSuccessAtMs(), messageOrDefault("마지막 성공 분석 이후 새 분석이 실패했습니다"));
         }
         return success;
     }
@@ -174,46 +124,72 @@ public class BinanceAutoTradeAnalysisService {
     public BinanceAnalysisResponse ask(String question, List<BinanceAnalysisTurn> recentTurns) {
         BinanceAnalysisStatus inputStatus = validateQuestion(question, recentTurns);
         if (inputStatus != null) {
-            return new BinanceAnalysisResponse(inputStatus, null, null, null, null, null,
+            return new BinanceAnalysisResponse(inputStatus, null, null, null, null, null, null,
                     questionMessage(inputStatus));
         }
         if (!liveMarketDataService.isLeader()) {
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.NOT_LEADER, null, null,
-                    null, null, null, "리더 노드에서만 시장 분석 질문을 처리합니다");
+                    null, null, null, null, "리더 노드에서만 시장 분석 질문을 처리합니다");
         }
 
         MultiTimeframeMarketSnapshot snapshot = liveMarketDataService.buildSnapshot();
         if (snapshot.intervals().stream().noneMatch(interval -> interval.currentPrice() != null)) {
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.BACKFILLING, null, null,
-                    snapshot.asOfMs(), null, null, "현재 시장 데이터가 아직 준비되지 않았습니다");
+                    snapshot.asOfMs(), null, null, null, "현재 시장 데이터가 아직 준비되지 않았습니다");
         }
-        long generation = snapshot.leadershipGeneration();
         List<Message> history = toMessages(recentTurns);
-        Future<String> call = llmExecutor.submit(
-                () -> callLlm(snapshot, history, questionPrompt(snapshot, question)));
+        return runLlmCall(snapshot, history, questionPrompt(snapshot, question), false);
+    }
+
+    /** LLM 호출 + 타임아웃/리더십변경/실패 처리 공통 경로. cacheResult=true면 자동요약 캐시에 반영. */
+    private BinanceAnalysisResponse runLlmCall(MultiTimeframeMarketSnapshot snapshot, List<Message> history,
+                                               String prompt, boolean cacheResult) {
+        long generation = snapshot.leadershipGeneration();
+        long startedAtMs = System.currentTimeMillis();
+        Future<String> call = llmExecutor.submit(() -> callLlm(snapshot, history, prompt));
         try {
             String answer = call.get(llmTimeoutMs, TimeUnit.MILLISECONDS);
+            long tookMs = System.currentTimeMillis() - startedAtMs;
             if (!isCurrentGeneration(generation)) {
                 return new BinanceAnalysisResponse(BinanceAnalysisStatus.NOT_LEADER, null, null,
-                        snapshot.asOfMs(), null, null, "응답 대기 중 리더십이 변경되어 결과를 폐기했습니다");
+                        snapshot.asOfMs(), null, null, lastSuccessAtMs(),
+                        "응답 대기 중 리더십이 변경되어 결과를 폐기했습니다");
             }
             BinanceAnalysisStatus status = snapshot.analysisAvailable()
                     ? BinanceAnalysisStatus.READY : BinanceAnalysisStatus.PARTIAL;
-            return new BinanceAnalysisResponse(status, null, answer, snapshot.asOfMs(),
-                    System.currentTimeMillis(), lastSuccessAtMs(), snapshot.analysisAvailable()
-                            ? "스냅샷 기준 시각이 포함된 답변입니다" : "일부 인터벌 데이터가 준비되지 않은 상태의 답변입니다");
+            long generatedAtMs = System.currentTimeMillis();
+            Long effectiveLastSuccessAtMs = cacheResult ? Long.valueOf(generatedAtMs) : lastSuccessAtMs();
+            BinanceAnalysisResponse response = new BinanceAnalysisResponse(status, null, answer, snapshot.asOfMs(),
+                    generatedAtMs, tookMs, effectiveLastSuccessAtMs,
+                    snapshot.analysisAvailable() ? "분석 완료" : "일부 인터벌 데이터가 준비되지 않은 상태의 분석입니다");
+            if (cacheResult) {
+                lastSuccessfulAnalysis = response;
+                lastFailureStatus = null;
+                lastFailureMessage = null;
+                failureGeneration = generation;
+            }
+            return response;
         } catch (TimeoutException | CancellationException e) {
             call.cancel(true);
+            if (cacheResult) {
+                recordFailure(BinanceAnalysisStatus.LLM_TIMEOUT, "로컬 LLM 응답 시간이 초과되었습니다", generation);
+            }
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.LLM_TIMEOUT, null, null,
-                    snapshot.asOfMs(), null, lastSuccessAtMs(), "로컬 LLM 응답 시간이 초과되었습니다");
+                    snapshot.asOfMs(), null, null, lastSuccessAtMs(), "로컬 LLM 응답 시간이 초과되었습니다");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             call.cancel(true);
+            if (cacheResult) {
+                recordFailure(BinanceAnalysisStatus.LLM_TIMEOUT, "로컬 LLM 호출이 중단되었습니다", generation);
+            }
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.LLM_TIMEOUT, null, null,
-                    snapshot.asOfMs(), null, lastSuccessAtMs(), "로컬 LLM 호출이 중단되었습니다");
+                    snapshot.asOfMs(), null, null, lastSuccessAtMs(), "로컬 LLM 호출이 중단되었습니다");
         } catch (Exception e) {
+            if (cacheResult) {
+                recordFailure(BinanceAnalysisStatus.LLM_ERROR, "로컬 LLM 호출에 실패했습니다", generation);
+            }
             return new BinanceAnalysisResponse(BinanceAnalysisStatus.LLM_ERROR, null, null,
-                    snapshot.asOfMs(), null, lastSuccessAtMs(), "로컬 LLM 호출에 실패했습니다");
+                    snapshot.asOfMs(), null, null, lastSuccessAtMs(), "로컬 LLM 호출에 실패했습니다");
         }
     }
 
@@ -272,7 +248,7 @@ public class BinanceAutoTradeAnalysisService {
 
     private String automaticPrompt(MultiTimeframeMarketSnapshot snapshot) {
         return """
-                다음 현재 개요를 바탕으로 BTCUSDT 선물 시장의 5분 주기 정보성 분석 요약을 작성하라.
+                다음 현재 개요를 바탕으로 BTCUSDT 선물 시장의 정보성 분석 요약을 작성하라.
                 원본 캔들은 개요에 포함하지 않았으므로 필요할 때만 읽기 전용 툴을 호출하라.
                 인터벌별 상태가 READY가 아니면 그 사실과 분석 한계를 함께 말하라.
                 매매 주문이나 정확한 손절가는 제시하지 말고, 관찰할 기술적 무효화 후보만 말하라.
@@ -294,30 +270,6 @@ public class BinanceAutoTradeAnalysisService {
                 [관리자 질문]
                 %s
                 """.formatted(snapshot.overview(), question.trim());
-    }
-
-    private void completeAutomaticAnalysis(MultiTimeframeMarketSnapshot snapshot, long generation,
-                                           String answer, Throwable error) {
-        if (!isCurrentGeneration(generation)) {
-            return;
-        }
-        Throwable cause = unwrap(error);
-        if (cause != null) {
-            BinanceAnalysisStatus failure = cause instanceof TimeoutException
-                    ? BinanceAnalysisStatus.LLM_TIMEOUT : BinanceAnalysisStatus.LLM_ERROR;
-            recordFailure(failure, cause instanceof TimeoutException
-                    ? "로컬 LLM 자동 분석 시간이 초과되었습니다" : "로컬 LLM 자동 분석에 실패했습니다", generation);
-            return;
-        }
-        BinanceAnalysisStatus status = snapshot.analysisAvailable()
-                ? BinanceAnalysisStatus.READY : BinanceAnalysisStatus.PARTIAL;
-        long generatedAtMs = System.currentTimeMillis();
-        lastSuccessfulAnalysis = new BinanceAnalysisResponse(status, null, answer, snapshot.asOfMs(),
-                generatedAtMs, generatedAtMs, snapshot.analysisAvailable()
-                        ? "자동 분석 완료" : "일부 인터벌 데이터가 준비되지 않은 상태에서 분석 완료");
-        lastFailureStatus = null;
-        lastFailureMessage = null;
-        failureGeneration = generation;
     }
 
     private void recordFailure(BinanceAnalysisStatus status, String message, long generation) {
@@ -349,28 +301,11 @@ public class BinanceAutoTradeAnalysisService {
         return lastFailureMessage == null || lastFailureMessage.isBlank() ? fallback : lastFailureMessage;
     }
 
-    private void cancel(ScheduledFuture<?> task) {
-        if (task != null) {
-            task.cancel(false);
-        }
-    }
-
     private String normalize(String value) {
         if (value == null) {
             return "";
         }
         return value.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
-    }
-
-    private Throwable unwrap(Throwable error) {
-        if (error == null) {
-            return null;
-        }
-        if (error.getCause() != null && (error instanceof java.util.concurrent.CompletionException
-                || error instanceof java.util.concurrent.ExecutionException)) {
-            return error.getCause();
-        }
-        return error;
     }
 
     @EventListener
@@ -397,6 +332,5 @@ public class BinanceAutoTradeAnalysisService {
     @PreDestroy
     public void shutdown() {
         llmExecutor.shutdownNow();
-        timeoutExecutor.shutdownNow();
     }
 }

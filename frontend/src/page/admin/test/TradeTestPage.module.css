@@ -217,6 +217,8 @@
     white-space: pre-wrap;
     font-size: 13px;
     line-height: 1.65;
+    max-height: 60vh;
+    overflow-y: auto;
 }
 
 .asOf {
