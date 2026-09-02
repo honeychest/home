@@ -1,0 +1,92 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--monitor-text-primary);
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.title {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.2;
+}
+
+.subtitle {
+    margin: 4px 0 0;
+    color: var(--monitor-text-secondary);
+    font-size: 12px;
+}
+
+.refreshButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 124px;
+    justify-content: center;
+    padding: 10px 14px;
+    border: 1px solid var(--monitor-border);
+    background: var(--monitor-primary);
+    color: #fff;
+    cursor: pointer;
+}
+
+.refreshButton:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
+.statusGrid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.statusBox {
+    border: 1px solid var(--monitor-border);
+    background: var(--monitor-card-bg);
+    min-height: 0;
+    padding: 6px 10px;
+    display: grid;
+    gap: 2px;
+}
+
+.statusLabel {
+    margin: 0;
+    color: var(--monitor-text-secondary);
+    font-size: 11px;
+    line-height: 1.35;
+    text-transform: uppercase;
+}
+
+.errorText {
+    margin: 0;
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.emptyBox {
+    border: 1px solid var(--monitor-border);
+    background: var(--monitor-card-bg);
+    color: var(--monitor-text-secondary);
+    padding: 14px;
+    font-size: 13px;
+}
+
+@media (max-width: 900px) {
+    .header,
+    .statusGrid {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+}
