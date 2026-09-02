@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** 한 분석 요청에 고정된 읽기 전용 시장 조회 툴 3종. 주문·계정·포지션 권한은 없다. */
 public final class BinanceAnalysisTools {
 
-    public static final int MAX_COUNT = 200;
+    public static final int MAX_COUNT = 100;
 
     private final MultiTimeframeMarketSnapshot snapshot;
 
