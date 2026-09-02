@@ -9,6 +9,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
@@ -57,6 +58,7 @@ public class BinanceAutoTradeAnalysisService {
     private long lastLeaderEpoch = Long.MIN_VALUE;
     private String lastLeaderOwnerToken = "";
 
+    @Autowired
     public BinanceAutoTradeAnalysisService(
             LiveMarketDataService liveMarketDataService,
             @Qualifier("binanceAnalysisChatClient") ChatClient analysisChatClient,
