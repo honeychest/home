@@ -15,12 +15,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -39,11 +45,15 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
     @Mock
     BinanceAutoTradeAnalysisService analysisService;
 
+    @Mock
+    BinanceAnalysisLeaderForwarder forwarder;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        BinanceAutoTradeDebugController controller = new BinanceAutoTradeDebugController(liveMarketDataService, analysisService);
+        BinanceAutoTradeDebugController controller =
+                new BinanceAutoTradeDebugController(liveMarketDataService, analysisService, forwarder);
         mockMvc = standaloneSetup(controller)
                 .setMessageConverters(new MappingJackson2HttpMessageConverter())
                 .build();
@@ -95,7 +105,9 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
     }
 
     @Test
+    @DisplayName("리더면 forwarder를 호출하지 않고 기존 서비스만 호출한다")
     void getAnalysisAndAskExposeAnalysisStatuses() throws Exception {
+        when(liveMarketDataService.isLeader()).thenReturn(true);
         BinanceAnalysisResponse response = new BinanceAnalysisResponse(
                 BinanceAnalysisStatus.READY, null, "답변", 1700000000000L,
                 1700000001000L, 500L, 1700000001000L, "완료");
@@ -113,6 +125,59 @@ class BinanceAutoTradeDebugControllerWebMvcTest {
                         .content("{\"question\":\"현재가?\",\"recentTurns\":[]}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.answer").value("답변"));
+
+        verify(forwarder, never()).forward(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("비리더 + 전달 성공이면 로컬 서비스를 호출하지 않고 피어 응답을 그대로 반환한다")
+    void getAnalysis_notLeader_forwardSucceeds_returnsPeerResponse() throws Exception {
+        when(liveMarketDataService.isLeader()).thenReturn(false);
+        BinanceAnalysisResponse peerResponse = new BinanceAnalysisResponse(
+                BinanceAnalysisStatus.READY, null, "피어답변", 1700000000000L,
+                1700000001000L, 500L, 1700000001000L, "완료");
+        when(forwarder.forward(any(), eq("/api/admin/test/binance/debug/analysis"), eq(HttpMethod.GET), isNull()))
+                .thenReturn(new AnalysisForwardOutcome.Forwarded(peerResponse, null));
+
+        mockMvc.perform(get("/api/admin/test/binance/debug/analysis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer").value("피어답변"));
+
+        verify(analysisService, never()).getLatestAnalysis();
+    }
+
+    @Test
+    @DisplayName("비리더 + 전달 실패면 로컬 POST를 다시 실행하지 않고 안전한 NOT_LEADER를 반환한다")
+    void refreshAnalysis_notLeader_forwardFails_returnsNotLeaderWithoutLocalRetry() throws Exception {
+        when(liveMarketDataService.isLeader()).thenReturn(false);
+        when(forwarder.forward(any(), eq("/api/admin/test/binance/debug/analysis/refresh"), eq(HttpMethod.POST), isNull()))
+                .thenReturn(new AnalysisForwardOutcome.Failed());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/admin/test/binance/debug/analysis/refresh"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("NOT_LEADER"));
+
+        verify(analysisService, never()).refreshAnalysis();
+    }
+
+    @Test
+    @DisplayName("ask 요청 본문이 실제로 forwarder에 전달된다")
+    void askAnalysis_notLeader_passesDeserializedBodyToForwarder() throws Exception {
+        when(liveMarketDataService.isLeader()).thenReturn(false);
+        BinanceAnalysisResponse peerResponse = new BinanceAnalysisResponse(
+                BinanceAnalysisStatus.READY, null, "피어답변", null, null, null, null, "완료");
+        when(forwarder.forward(any(), eq("/api/admin/test/binance/debug/analysis/ask"), eq(HttpMethod.POST), any()))
+                .thenReturn(new AnalysisForwardOutcome.Forwarded(peerResponse, null));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/admin/test/binance/debug/analysis/ask")
+                        .contentType("application/json")
+                        .content("{\"question\":\"현재가?\",\"recentTurns\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer").value("피어답변"));
+
+        verify(analysisService, never()).ask(any(), any());
     }
 
     private static MultiTimeframeMarketSnapshot snapshot(boolean leader, MarketDataStatus status) {

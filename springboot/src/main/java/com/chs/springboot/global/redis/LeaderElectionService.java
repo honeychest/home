@@ -157,6 +157,19 @@ public class LeaderElectionService {
         return serverName;
     }
 
+    /**
+     * 지금 lease 를 쥔 서버 이름을 Redis에서 직접 조회한다(이 인스턴스가 리더인지와 무관).
+     * 비리더 인스턴스가 실제 리더로 요청을 내부 전달할 때 사용한다. Redis 장애 시 null.
+     */
+    public String getCurrentLeaderName() {
+        try {
+            return redisTemplate.opsForValue().get(SERVER_LEADER_KEY);
+        } catch (Exception e) {
+            log.warn("[{}] 현재 리더 이름 조회 실패 error={}", serverName, e.getMessage());
+            return null;
+        }
+    }
+
     /** 현재(혹은 마지막으로 보유했던) lease 의 owner token — telemetry 등 fence 검증용 참고 노출. */
     public String getOwnerToken() {
         return ownerToken;

@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.HashMap;
@@ -273,5 +274,27 @@ class LeaderElectionServiceTest {
 
         assertThat(service.isLeader()).isFalse();
         verify(eventPublisher).publishEvent(new LeadershipChangedEvent("server-A", false, "token-A", 1L));
+    }
+
+    @Test
+    @DisplayName("getCurrentLeaderName: Redis 값을 그대로 반환한다(이 인스턴스가 리더인지와 무관)")
+    void getCurrentLeaderName_returnsRedisValue() {
+        LeaderElectionService service = newService("server-A", "token-A");
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(SERVER_LEADER_KEY)).thenReturn("server-B");
+
+        assertThat(service.getCurrentLeaderName()).isEqualTo("server-B");
+    }
+
+    @Test
+    @DisplayName("getCurrentLeaderName: Redis 예외 시 null(500으로 새지 않음)")
+    void getCurrentLeaderName_redisThrows_returnsNull() {
+        LeaderElectionService service = newService("server-A", "token-A");
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(SERVER_LEADER_KEY)).thenThrow(new RuntimeException("redis down"));
+
+        assertThat(service.getCurrentLeaderName()).isNull();
     }
 }
