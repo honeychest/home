@@ -3,6 +3,7 @@
 // [AGENT] TASK-11: canEdit/params/onParamsSave props 추가, ⚙ 드롭다운 ParamPanel 통합
 import { useState, useRef, useEffect } from 'react';
 import ParamPanel from './ParamPanel.jsx';
+import { msToDatetimeLocal } from './model/datetimeLocal.js';
 
 const TEMPLATE_SELECT_STYLE = {
     backgroundColor: 'var(--black-border)',
@@ -35,6 +36,10 @@ export default function TopBar({
     templates = [],
     selectedTemplateId = null,
     onTemplateChange,
+    customHistoryEnabled = false,
+    onCustomHistoryEnabledChange,
+    customHistoryStart = '',
+    onCustomHistoryStartChange,
 }) {
     const [panelOpen, setPanelOpen] = useState(false);
     const gearContainerRef = useRef(null);
@@ -87,19 +92,28 @@ export default function TopBar({
         fontFamily: "'Pretendard', sans-serif",
     };
 
+    const datetimeInputStyle = {
+        ...selectStyle,
+        fontSize: '11px',
+        fontWeight: '500',
+        padding: '3px 6px',
+    };
+    const currentDatetimeLocal = msToDatetimeLocal(Date.now());
+
     return (
-        <div
-            style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                height: '44px',
-                backgroundColor: 'var(--black-topbar-bg)',
-                borderRadius: '10px',
-                padding: '0 16px',
-                fontFamily: "'Pretendard', sans-serif",
-            }}
-        >
+        <>
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    height: '44px',
+                    backgroundColor: 'var(--black-topbar-bg)',
+                    borderRadius: '10px',
+                    padding: '0 16px',
+                    fontFamily: "'Pretendard', sans-serif",
+                }}
+            >
             <style>{`
                 @keyframes fundingBlink {
                     0%, 100% { opacity: 1; }
@@ -108,7 +122,7 @@ export default function TopBar({
             `}</style>
 
             {compact ? (
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <select
                         value={symbol}
                         onChange={(e) => onSymbolChange(e.target.value)}
@@ -127,6 +141,14 @@ export default function TopBar({
                             <option key={value} value={value} style={{ backgroundColor: 'var(--black-panel-bg)', color: 'var(--black-text-primary)' }}>{label}</option>
                         ))}
                     </select>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '3px', color: 'var(--black-text-muted)', fontSize: '10px', whiteSpace: 'nowrap' }}>
+                        <input
+                            type="checkbox"
+                            checked={customHistoryEnabled}
+                            onChange={(e) => onCustomHistoryEnabledChange(e.target.checked)}
+                        />
+                        직접
+                    </label>
                 </div>
             ) : (
                 <>
@@ -175,7 +197,7 @@ export default function TopBar({
                             </select>
                         )}
                     </div>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         {timeRanges.map(({ value, label }) => (
                             <button
                                 key={value}
@@ -194,6 +216,23 @@ export default function TopBar({
                                 {label}
                             </button>
                         ))}
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--black-text-muted)', fontSize: '11px', whiteSpace: 'nowrap', marginLeft: '4px' }}>
+                            <input
+                                type="checkbox"
+                                checked={customHistoryEnabled}
+                                onChange={(e) => onCustomHistoryEnabledChange(e.target.checked)}
+                            />
+                            시작 시각 지정
+                        </label>
+                        {customHistoryEnabled && (
+                            <input
+                                type="datetime-local"
+                                value={customHistoryStart}
+                                max={currentDatetimeLocal}
+                                onChange={(e) => onCustomHistoryStartChange(e.target.value)}
+                                style={datetimeInputStyle}
+                            />
+                        )}
                     </div>
                 </>
             )}
@@ -239,6 +278,18 @@ export default function TopBar({
                     </div>
                 )}
             </div>
-        </div>
+            </div>
+            {compact && customHistoryEnabled && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', minHeight: '36px', backgroundColor: 'var(--black-topbar-bg)', borderRadius: '8px', padding: '0 10px' }}>
+                    <input
+                        type="datetime-local"
+                        value={customHistoryStart}
+                        max={currentDatetimeLocal}
+                        onChange={(e) => onCustomHistoryStartChange(e.target.value)}
+                        style={{ ...datetimeInputStyle, width: '100%' }}
+                    />
+                </div>
+            )}
+        </>
     );
 }

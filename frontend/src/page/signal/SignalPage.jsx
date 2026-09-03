@@ -26,6 +26,7 @@ import {
     createSignalRuntimeState,
     resetSignalRuntimeState,
 } from './model/signalRuntimeModel.js';
+import { datetimeLocalToMs } from './model/datetimeLocal.js';
 
 // value: 타임라인 식별자 | dataRange: 에너지·청산·OI 조회 범위 | displayCount: 차트 표시 기준 범위
 const TIME_RANGES = [
@@ -42,12 +43,17 @@ const getDisplayCount = (range) => TIME_RANGES.find((r) => r.value === range)?.d
 
 // OI 차트와 동일한 캔들 타입 — 비교 기준 통일 (변경 시 여기만 수정)
 const CHART_CANDLE_TYPE = '5m';
+const HISTORY_INPUT_ERROR = '시작 시각을 확인해 주세요.';
+const HISTORY_LOAD_ERROR = '에너지 내역을 불러오지 못했습니다.';
 
 export default function SignalPage() {
     const [theme] = usePageTheme('signal');
     const themeClass = theme !== 'black' ? `theme-${theme}` : '';
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [timeRange, setTimeRange] = useState(() => localStorage.getItem('signal_timeRange') || TIME_RANGES[Math.floor(TIME_RANGES.length / 2)].value);
+    const [customHistoryEnabled, setCustomHistoryEnabled] = useState(false);
+    const [customHistoryStart, setCustomHistoryStart] = useState('');
+    const [historyError, setHistoryError] = useState('');
     const [initData, setInitData] = useState(null);
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
@@ -90,8 +96,20 @@ export default function SignalPage() {
         abortControllerRef.current = new AbortController();
 
         const loadHistory = async () => {
+            let historyUrl;
+            if (customHistoryEnabled) {
+                const fromMs = datetimeLocalToMs(customHistoryStart);
+                if (!Number.isFinite(fromMs) || fromMs > Date.now()) {
+                    setHistoryError(HISTORY_INPUT_ERROR);
+                    return;
+                }
+                historyUrl = `/api/signal/history?symbol=${symbol}&fromMs=${fromMs}`;
+            } else {
+                historyUrl = `/api/signal/history?symbol=${symbol}&range=${getDataRange(timeRange)}`;
+            }
+
             try {
-                const res = await apiClient.get(`/api/signal/history?symbol=${symbol}&range=${getDataRange(timeRange)}`, {
+                const res = await apiClient.get(historyUrl, {
                     signal: abortControllerRef.current.signal,
                 });
                 setRuntimeState((prev) => ({
@@ -103,14 +121,16 @@ export default function SignalPage() {
                     longLiqEvents: res.data.longLiqEvents ?? prev.longLiqEvents,
                     shortLiqEvents: res.data.shortLiqEvents ?? prev.shortLiqEvents,
                 }));
+                setHistoryError('');
             } catch (err) {
                 if (err.name !== 'CanceledError') {
                     console.error('[SignalPage] history failed', err);
+                    setHistoryError(HISTORY_LOAD_ERROR);
                 }
             }
         };
         loadHistory();
-    }, [symbol, timeRange]);
+    }, [symbol, timeRange, customHistoryEnabled, customHistoryStart]);
 
     // OI 히스토리: timeRange 이상 데이터 로드 (최소 120h 보장) → 클라이언트에서 rangeMs 기준 슬라이싱
     const LARGE_OI_RANGES = new Set(['168h', '336h']);
@@ -249,8 +269,13 @@ export default function SignalPage() {
                         onTimeRangeChange={handleTimeRangeChange}
                         fundingRate={commonProps.fundingRate}
                         timeRanges={TIME_RANGES}
+                        customHistoryEnabled={customHistoryEnabled}
+                        onCustomHistoryEnabledChange={setCustomHistoryEnabled}
+                        customHistoryStart={customHistoryStart}
+                        onCustomHistoryStartChange={setCustomHistoryStart}
                         compact
                     />
+                    {historyError && <div style={{ color: 'var(--black-short)', fontSize: '11px', padding: '0 4px' }}>{historyError}</div>}
                     <div style={{ backgroundColor: 'var(--black-panel-bg)', borderRadius: '10px', padding: '10px', position: 'relative', height: '200px', flexShrink: 0 }}>
                         <EnergyGauge longEnergy={runtimeState.longEnergy} shortEnergy={runtimeState.shortEnergy} compact />
                         <TugOfWar longEnergy={runtimeState.longEnergy} shortEnergy={runtimeState.shortEnergy} />
@@ -277,7 +302,7 @@ export default function SignalPage() {
                 style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(12, 1fr)',
-                    gridTemplateRows: '44px 1fr 0.6fr minmax(200px, 0.5fr)',
+                    gridTemplateRows: 'auto 1fr 0.6fr minmax(200px, 0.5fr)',
                     gap: '4px',
                     padding: '4px',
                     height: '100%',
@@ -299,7 +324,12 @@ export default function SignalPage() {
                     templates={templates}
                     selectedTemplateId={selectedTemplateId}
                     onTemplateChange={setSelectedTemplateId}
+                    customHistoryEnabled={customHistoryEnabled}
+                    onCustomHistoryEnabledChange={setCustomHistoryEnabled}
+                    customHistoryStart={customHistoryStart}
+                    onCustomHistoryStartChange={setCustomHistoryStart}
                 />
+                {historyError && <div style={{ color: 'var(--black-short)', fontSize: '11px', padding: '2px 4px' }}>{historyError}</div>}
             </div>
 
             <div style={{ gridColumn: '1 / 4', gridRow: '2', overflow: 'hidden' }}>

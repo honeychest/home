@@ -62,9 +62,10 @@ public class SignalController {
     @GetMapping("/history")
     public ResponseEntity<Map<String, Object>> history(
             @RequestParam String symbol,
-            @RequestParam String range) {
-        log.debug("[SignalController] /history symbol={} range={}", symbol, range);
-        Map<String, Object> data = signalDataService.getHistoryData(symbol, range);
+            @RequestParam(required = false) String range,
+            @RequestParam(required = false) Long fromMs) {
+        log.debug("[SignalController] /history symbol={} range={} fromMs={}", symbol, range, fromMs);
+        Map<String, Object> data = signalDataService.getHistoryData(symbol, range, fromMs);
         return ResponseEntity.ok(data);
     }
 

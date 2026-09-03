@@ -53,16 +53,30 @@ public class SignalDataService {
         return result;
     }
 
-    public Map<String, Object> getHistoryData(String symbol, String range) {
-        long nowMs  = System.currentTimeMillis();
-        long fromMs = nowMs - parseRangeToMs(range);
-        log.info("[SignalEnergy] ▶ symbol={} range={} fromMs={} nowMs={}", symbol, range, fromMs, nowMs);
+    public Map<String, Object> getHistoryData(String symbol, String range, Long customFromMs) {
+        long nowMs = System.currentTimeMillis();
+        long fromMs;
+        SignalCandleSource.Interval interval;
 
-        // 10m·50m 이하 → 1분봉 롤업 / 그 이상 → 5분봉 롤업
-        SignalCandleSource.Interval interval = switch (range) {
-            case "1m", "5m", "10m", "30m", "50m" -> SignalCandleSource.Interval.ONE_MINUTE;
-            default -> SignalCandleSource.Interval.FIVE_MINUTES;
-        };
+        if (customFromMs != null) {
+            if (customFromMs < 0 || customFromMs > nowMs) {
+                throw new IllegalArgumentException("fromMs는 0 이상이고 현재 시각을 넘을 수 없습니다.");
+            }
+            fromMs = customFromMs;
+            interval = nowMs - fromMs <= 50 * 60_000L
+                    ? SignalCandleSource.Interval.ONE_MINUTE
+                    : SignalCandleSource.Interval.FIVE_MINUTES;
+        } else {
+            if (range == null || range.isBlank()) {
+                throw new IllegalArgumentException("range 또는 fromMs 중 하나는 필수입니다.");
+            }
+            fromMs = nowMs - parseRangeToMs(range);
+            interval = switch (range) {
+                case "1m", "5m", "10m", "30m", "50m" -> SignalCandleSource.Interval.ONE_MINUTE;
+                default -> SignalCandleSource.Interval.FIVE_MINUTES;
+            };
+        }
+        log.info("[SignalEnergy] ▶ symbol={} range={} fromMs={} nowMs={}", symbol, range, fromMs, nowMs);
         SignalCandleSource.Energy energy = candleSource.sumEnergy(
                 symbol, interval, fromMs, nowMs, SignalCandleSource.QueryMode.COMPLETED);
         BigDecimal longEnergy = energy.longEnergy();

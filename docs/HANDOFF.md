@@ -89,3 +89,44 @@
     `springboot/AGENTS.md`(recipe 패턴 표) 에서 recipe 서술 삭제
   - `frontend/.../backendPatterns.js` 의 `[gikka 저장소]` 표기 정리
   - 이 파일(HANDOFF.md)은 위 항목이 끝나면 **비운다**
+
+## binance 자동매매 — LLM 시장 분석 다음 작업 (2026-09-02 이어서)
+배경·설계는 `docs/binance/CONTEXT.md` 단일 원본. 오늘 커밋 4개로 멀티 타임프레임
+(1m/5m/15m/4h) 라이브 버퍼 + 로컬 LLM(Mac-mini-LLM) 분석/질의응답 기능을 구현·수정
+완료(`5d42b75`·`bebfdf0`·`e2e5543`·`8a32195`). 자동 5분 스케줄은 폐지하고 관리자가
+"분석 요청" 버튼을 눌러야만 LLM을 호출하도록 전환됨(리소스 낭비 우려로 사용자 요청).
+
+### 다음 세션에서 할 일 (사용자가 요청, 다음으로 미룸)
+1. **일봉(1d) 인터벌 추가** — 지금 1m/5m/15m/4h 4개뿐인데 4시간봉으로는 장기 추세 판단에
+   부족하다는 지적. `BinanceKlineInterval`에 일봉을 추가하고 버퍼·툴·화면을 함께 확장한다.
+2. **시간 표시를 KST로 변환** — 화면에 epoch ms(long)가 그대로 노출되는 곳이 남아있다는 지적.
+   `formatTime` 헬퍼가 이미 적용된 곳과 안 된 곳을 구분해 확인 필요.
+3. **결론 가독성 개선** — 시스템 프롬프트에 "5줄 이내 결론부터" 지침을 오늘 추가했으나,
+   사용자가 화면에서 아직 개선을 체감 못함 — 재배포 전이라 반영이 안 됐을 수도 있어 재확인 필요.
+4. **매수/매도 추천가격 표시** — `BinanceAnalysisChatClientConfig`의 현재 시스템 프롬프트는
+   포지션 정보(방향·진입가·레버리지 등)가 없어 "정확한 손절가는 계산 못 한다"고 명시돼 있음
+   (오늘 사용자와 합의된 제약). 추천가격을 보여주려면 이 제약을 어떻게 풀지(포지션 정보를
+   입력받을지, 계속 "기술적 후보"로만 표시할지) 사용자와 먼저 다시 확인해야 한다.
+
+### 아직 안 한 것
+- 오늘 만든 커밋 4개 전부 **로컬에만 있고 푸시 안 됨** — 에이전트는 push 안 함, 사용자가 직접.
+- `chs/server/nginx/devcontext.conf`에 `/api/admin/test/binance/debug/analysis` 전용
+  location 블록(60초 타임아웃)을 로컬 사본에 추가했으나 **실서버 반영은 아직 안 됨**.
+- 맥미니 DOCKER1/DOCKER2 재배포도 푸시 이후 별도로 필요(오늘 세션 중 한 번 잘못 요청했다가
+  취소함 — 미푸시 상태에서 재배포 요청하지 말 것).
+
+## binance signal — energy 히스토리 시작시각 + kline temp 정식화 (2026-09-03)
+
+### 완료 — energy 히스토리 시작시각 지정
+signal 페이지 long/short energy·청산 합계에 시작 시각을 직접 지정하는 기능. 계획→Codex
+검수→구현까지 끝났고 이 세션에서 커밋됨(`SignalController`/`SignalDataService`/`SignalPage`
+/`TopBar` + signal 전용 `datetimeLocal` 모듈). 캔들·OI 차트는 기존 프리셋 그대로 유지.
+
+### 계획만 완료 — kline temp 표 정식화 (다음 세션에서 이어감)
+`agg_trade_1m_temp`가 설계상 "임시"인데 2026-08-31 raw tick 중단 이후 사실상 유일한
+실시간 kline 원천이 됨(전체 행을 자바로 읽는 구조라 512MB 힙 제약에서 위험). 5분 네이티브
+저장 + 롤업 대신 리필 방식으로 재설계하는 계획을 `docs/binance/kline-temp-retire-plan.md`에
+정리함(GitNexus로 확인: 지켜야 할 경계는 `SignalCandleSource` 인터페이스뿐, 그 아래는
+자유롭게 재작성 가능). **다음 세션 할 일**: 표 이름 확정(가안 `binance_kline_5m` 권장,
+계획 문서 참고) → 구현 착수.
+**죽음조건: 구현·배포가 끝나면 이 절과 `docs/binance/kline-temp-retire-plan.md`를 지운다.**
