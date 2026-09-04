@@ -25,6 +25,11 @@ const TEMPLATE_SELECT_STYLE = {
 function CustomHistoryStartInput({ value, maxDate, onChange, inputStyle, wrapperStyle }) {
     const datePart = value ? value.slice(0, 10) : '';
     const hourPart = value ? value.slice(11, 13) : '';
+    const [hourDraft, setHourDraft] = useState(hourPart);
+
+    useEffect(() => {
+        setHourDraft(hourPart);
+    }, [hourPart]);
 
     const emit = (date, hour) => {
         if (!date) {
@@ -41,7 +46,7 @@ function CustomHistoryStartInput({ value, maxDate, onChange, inputStyle, wrapper
                 type="date"
                 value={datePart}
                 max={maxDate}
-                onChange={(e) => emit(e.target.value, hourPart)}
+                onChange={(e) => emit(e.target.value, hourDraft)}
                 onClick={(e) => e.target.showPicker && e.target.showPicker()}
                 style={inputStyle}
             />
@@ -50,12 +55,13 @@ function CustomHistoryStartInput({ value, maxDate, onChange, inputStyle, wrapper
                 inputMode="numeric"
                 pattern="[0-9]*"
                 maxLength={2}
-                value={hourPart}
+                value={hourDraft}
                 onChange={(e) => {
                     const digits = e.target.value.replace(/\D/g, '').slice(0, 2);
                     const clamped = digits === '' ? '' : String(Math.min(23, Number(digits)));
-                    emit(datePart, clamped);
+                    setHourDraft(clamped);
                 }}
+                onBlur={() => emit(datePart, hourDraft)}
                 onFocus={(e) => e.target.select()}
                 placeholder="시"
                 style={{ ...inputStyle, flex: '0 0 44px', width: '44px' }}
