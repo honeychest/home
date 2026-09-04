@@ -176,7 +176,10 @@ export default function TopBar({
                     </select>
                     <select
                         value={timeRange}
-                        onChange={(e) => onTimeRangeChange(e.target.value)}
+                        onChange={(e) => {
+                            if (customHistoryEnabled) onCustomHistoryEnabledChange(false);
+                            onTimeRangeChange(e.target.value);
+                        }}
                         style={selectStyle}
                     >
                         {timeRanges.map(({ value, label }) => (
@@ -243,7 +246,10 @@ export default function TopBar({
                         {timeRanges.map(({ value, label }) => (
                             <button
                                 key={value}
-                                onClick={() => onTimeRangeChange(value)}
+                                onClick={() => {
+                                    if (customHistoryEnabled) onCustomHistoryEnabledChange(false);
+                                    onTimeRangeChange(value);
+                                }}
                                 style={{
                                     padding: '4px 10px',
                                     borderRadius: '3px',

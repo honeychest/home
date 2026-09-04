@@ -51,8 +51,8 @@ export default function SignalPage() {
     const themeClass = theme !== 'black' ? `theme-${theme}` : '';
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [timeRange, setTimeRange] = useState(() => localStorage.getItem('signal_timeRange') || TIME_RANGES[Math.floor(TIME_RANGES.length / 2)].value);
-    const [customHistoryEnabled, setCustomHistoryEnabled] = useState(false);
-    const [customHistoryStart, setCustomHistoryStart] = useState('');
+    const [customHistoryEnabled, setCustomHistoryEnabled] = useState(() => localStorage.getItem('signal_customHistoryEnabled') === 'true');
+    const [customHistoryStart, setCustomHistoryStart] = useState(() => localStorage.getItem('signal_customHistoryStart') || '');
     const [historyError, setHistoryError] = useState('');
     const [initData, setInitData] = useState(null);
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
@@ -240,6 +240,21 @@ export default function SignalPage() {
         setTimeRange(range);
     };
 
+    // 체크 해제는 조건만 끈다 — 날짜값은 로컬스토리지에 남겨 재입력 번거로움을 없앤다.
+    const handleCustomHistoryEnabledChange = (enabled) => {
+        if (enabled) {
+            localStorage.setItem('signal_customHistoryEnabled', 'true');
+        } else {
+            localStorage.removeItem('signal_customHistoryEnabled');
+        }
+        setCustomHistoryEnabled(enabled);
+    };
+
+    const handleCustomHistoryStartChange = (value) => {
+        localStorage.setItem('signal_customHistoryStart', value);
+        setCustomHistoryStart(value);
+    };
+
     const handleSymbolChange = (newSymbol) => {
         if (symbolDebounceRef.current) clearTimeout(symbolDebounceRef.current);
         symbolDebounceRef.current = setTimeout(() => {
@@ -270,9 +285,9 @@ export default function SignalPage() {
                         fundingRate={commonProps.fundingRate}
                         timeRanges={TIME_RANGES}
                         customHistoryEnabled={customHistoryEnabled}
-                        onCustomHistoryEnabledChange={setCustomHistoryEnabled}
+                        onCustomHistoryEnabledChange={handleCustomHistoryEnabledChange}
                         customHistoryStart={customHistoryStart}
-                        onCustomHistoryStartChange={setCustomHistoryStart}
+                        onCustomHistoryStartChange={handleCustomHistoryStartChange}
                         compact
                     />
                     {historyError && <div style={{ color: 'var(--black-short)', fontSize: '11px', padding: '0 4px' }}>{historyError}</div>}
@@ -325,9 +340,9 @@ export default function SignalPage() {
                     selectedTemplateId={selectedTemplateId}
                     onTemplateChange={setSelectedTemplateId}
                     customHistoryEnabled={customHistoryEnabled}
-                    onCustomHistoryEnabledChange={setCustomHistoryEnabled}
+                    onCustomHistoryEnabledChange={handleCustomHistoryEnabledChange}
                     customHistoryStart={customHistoryStart}
-                    onCustomHistoryStartChange={setCustomHistoryStart}
+                    onCustomHistoryStartChange={handleCustomHistoryStartChange}
                 />
                 {historyError && <div style={{ color: 'var(--black-short)', fontSize: '11px', padding: '2px 4px' }}>{historyError}</div>}
             </div>
