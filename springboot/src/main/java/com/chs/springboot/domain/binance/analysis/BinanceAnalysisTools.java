@@ -34,7 +34,7 @@ public final class BinanceAnalysisTools {
 
     @Tool(description = "특정 interval의 최근 확정봉만 조회한다. 진행 중인 봉은 반환하지 않는다.")
     public CandleToolResponse getCandles(
-            @ToolParam(description = "1m, 5m, 15m 또는 4h") String interval,
+            @ToolParam(description = "1m, 5m, 15m, 4h 또는 1d") String interval,
             @ToolParam(description = "조회할 확정봉 개수, 최대 200") Integer count) {
         int safeCount = validateCount(count);
         IntervalMarketSnapshot market = market(interval);
@@ -45,7 +45,7 @@ public final class BinanceAnalysisTools {
 
     @Tool(description = "특정 interval의 RSI, MACD, Supertrend 최신값과 최근 시계열, 교차 정보를 조회한다.")
     public IndicatorHistoryToolResponse getIndicatorHistory(
-            @ToolParam(description = "1m, 5m, 15m 또는 4h") String interval,
+            @ToolParam(description = "1m, 5m, 15m, 4h 또는 1d") String interval,
             @ToolParam(description = "조회할 시계열 개수, 최대 200") Integer count) {
         int safeCount = validateCount(count);
         IntervalMarketSnapshot market = market(interval);
@@ -70,7 +70,7 @@ public final class BinanceAnalysisTools {
 
     @Tool(description = "특정 interval의 최근 확정봉별 taker buy와 나머지 매도량, 순매수량을 조회한다.")
     public OrderFlowToolResponse getOrderFlow(
-            @ToolParam(description = "1m, 5m, 15m 또는 4h") String interval,
+            @ToolParam(description = "1m, 5m, 15m, 4h 또는 1d") String interval,
             @ToolParam(description = "조회할 확정봉 개수, 최대 200") Integer count) {
         int safeCount = validateCount(count);
         IntervalMarketSnapshot market = market(interval);

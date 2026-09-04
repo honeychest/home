@@ -7,7 +7,8 @@ public enum BinanceKlineInterval {
     ONE_MINUTE("1m", 60_000L, "kline_1m"),
     FIVE_MINUTES("5m", 5 * 60_000L, "kline_5m"),
     FIFTEEN_MINUTES("15m", 15 * 60_000L, "kline_15m"),
-    FOUR_HOURS("4h", 4 * 60 * 60_000L, "kline_4h");
+    FOUR_HOURS("4h", 4 * 60 * 60_000L, "kline_4h"),
+    ONE_DAY("1d", 24 * 60 * 60_000L, "kline_1d");
 
     private final String label;
     private final long intervalMs;

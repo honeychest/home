@@ -43,7 +43,7 @@ class LiveMarketDataServiceTest {
     }
 
     @Test
-    void leaderEventCreatesFourFuturesStreamsAndDuplicateEventDoesNotCreateMore() throws Exception {
+    void leaderEventCreatesFiveFuturesStreamsAndDuplicateEventDoesNotCreateMore() throws Exception {
         BinanceKlineRestClient restClient = mock(BinanceKlineRestClient.class);
         List<BinanceWebSocketStream> streams = new CopyOnWriteArrayList<>();
         when(restClient.fetchLatestClosedFutures(anyString(), any(), eq(1_000))).thenReturn(List.of(candle(0, 1)));
@@ -51,16 +51,17 @@ class LiveMarketDataServiceTest {
         LeadershipChangedEvent event = new LeadershipChangedEvent("server-A", true, "owner", 1L);
 
         service.onLeadershipChanged(event);
-        awaitSize(streams, 4);
+        awaitSize(streams, 5);
         service.onLeadershipChanged(event);
         Thread.sleep(100);
 
-        assertThat(streams).hasSize(4);
+        assertThat(streams).hasSize(5);
         assertThat(streamUrls).containsExactlyInAnyOrder(
                 "wss://fstream.binance.com/market/ws/btcusdt@kline_1m",
                 "wss://fstream.binance.com/market/ws/btcusdt@kline_5m",
                 "wss://fstream.binance.com/market/ws/btcusdt@kline_15m",
-                "wss://fstream.binance.com/market/ws/btcusdt@kline_4h");
+                "wss://fstream.binance.com/market/ws/btcusdt@kline_4h",
+                "wss://fstream.binance.com/market/ws/btcusdt@kline_1d");
         for (BinanceWebSocketStream stream : streams) {
             verify(stream).connect();
         }
@@ -128,20 +129,21 @@ class LiveMarketDataServiceTest {
         service = newService(restClient, streams, null);
 
         service.onLeadershipChanged(new LeadershipChangedEvent("server-A", true, "owner", 1L));
-        awaitSize(streams, 4);
+        awaitSize(streams, 5);
         for (Consumer<WebSocket> listener : connectedListeners.values()) {
             listener.accept(mock(WebSocket.class));
         }
         connectedListeners.get("wss://fstream.binance.com/market/ws/btcusdt@kline_1m")
                 .accept(mock(WebSocket.class));
 
-        awaitCount(fetchCount, 5);
+        awaitCount(fetchCount, 6);
+        awaitAllIntervalsReady();
         assertThat(service.buildSnapshot().intervals()).allSatisfy(interval ->
                 assertThat(interval.status().name()).isEqualTo("READY"));
-        assertThat(fetchCount).hasValue(5);
+        assertThat(fetchCount).hasValue(6);
         assertThat(fetchedIntervals).contains(BinanceKlineInterval.ONE_MINUTE,
                 BinanceKlineInterval.FIVE_MINUTES, BinanceKlineInterval.FIFTEEN_MINUTES,
-                BinanceKlineInterval.FOUR_HOURS);
+                BinanceKlineInterval.FOUR_HOURS, BinanceKlineInterval.ONE_DAY);
         assertThat(fetchedIntervals.stream().filter(interval -> interval == BinanceKlineInterval.ONE_MINUTE).count())
                 .isEqualTo(2);
     }
@@ -182,6 +184,17 @@ class LiveMarketDataServiceTest {
     private void awaitCount(AtomicInteger value, int expected) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
         while (value.get() < expected && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+        }
+    }
+
+    private void awaitAllIntervalsReady() throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (System.nanoTime() < deadline) {
+            if (service.buildSnapshot().intervals().stream()
+                    .allMatch(interval -> interval.status().name().equals("READY"))) {
+                return;
+            }
             Thread.sleep(10);
         }
     }

@@ -13,7 +13,7 @@ public class BinanceAnalysisChatClientConfig {
             오직 제공된 현재 개요와 읽기 전용 툴 결과만 근거로 한국어로 답하라.
             원본 캔들, 지표 시계열, 순매수·순매도 세부값이 필요하면 다음 툴을 직접 호출하라:
             getCandles, getIndicatorHistory, getOrderFlow.
-            툴은 1m, 5m, 15m, 4h 중 하나의 interval과 count를 받으며 count는 최대 100이다.
+            툴은 1m, 5m, 15m, 4h, 1d 중 하나의 interval과 count를 받으며 count는 최대 100이다.
             한 번에 여러 interval이나 여러 종류를 전부 부르지 마라. 먼저 판단에 필요한 것
             한두 개만 작은 count(예: 20~50)로 호출해 확인하고, 그래도 부족할 때만 추가로
             더 부르거나 count를 늘려라.

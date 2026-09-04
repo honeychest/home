@@ -29,6 +29,17 @@ class BinanceAnalysisToolsTest {
     }
 
     @Test
+    void candlesSupportDailyInterval() {
+        IntervalMarketSnapshot interval = market(BinanceKlineInterval.ONE_DAY, MarketDataStatus.READY);
+        BinanceAnalysisTools tools = new BinanceAnalysisTools(snapshot(interval));
+
+        BinanceAnalysisTools.CandleToolResponse result = tools.getCandles("1d", 2);
+
+        assertThat(result.interval()).isEqualTo("1d");
+        assertThat(result.candles()).hasSize(2);
+    }
+
+    @Test
     void orderFlowCalculatesSellAndNetBaseVolumeFromTakerBuy() {
         IntervalMarketSnapshot interval = market(BinanceKlineInterval.ONE_MINUTE, MarketDataStatus.READY);
         BinanceAnalysisTools tools = new BinanceAnalysisTools(snapshot(interval));
