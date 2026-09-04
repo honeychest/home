@@ -2,6 +2,7 @@ package com.chs.springboot.domain.analysis.service;
 
 import com.chs.springboot.domain.analysis.model.AnalysisTemplate;
 import com.chs.springboot.domain.analysis.repository.AnalysisTemplateRepository;
+import com.chs.springboot.domain.binance.service.BinanceKlineWindow;
 import com.chs.springboot.domain.binance.service.SignalCandleSource;
 import com.chs.springboot.domain.binance.service.SignalSseService;
 import com.chs.springboot.global.monitor.health.HealthHeartbeat;
@@ -51,7 +52,7 @@ class AnalysisDetectionSchedulerTest {
     }
 
     @Test
-    void evaluatesContinuousRecentWindow() {
+    void evaluatesContinuousWindowAfterIngestLag() {
         AnalysisTemplateRepository templates = mock(AnalysisTemplateRepository.class);
         AnalysisDetectionEngine engine = mock(AnalysisDetectionEngine.class);
         SignalSseService sse = mock(SignalSseService.class);
@@ -77,7 +78,7 @@ class AnalysisDetectionSchedulerTest {
     }
 
     private List<SignalCandleSource.SignalCandle> window(boolean complete) {
-        long end = (System.currentTimeMillis() / 60_000L) * 60_000L;
+        long end = BinanceKlineWindow.safeEnd(System.currentTimeMillis());
         long from = end - 1_440L * 60_000L;
         List<SignalCandleSource.SignalCandle> candles = new ArrayList<>(1_440);
         for (int i = 0; i < 1_440; i++) {

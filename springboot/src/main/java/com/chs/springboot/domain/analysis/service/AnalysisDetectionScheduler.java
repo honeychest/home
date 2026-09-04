@@ -6,6 +6,7 @@ package com.chs.springboot.domain.analysis.service;
 import com.chs.springboot.domain.analysis.dto.ConditionTreeDto;
 import com.chs.springboot.domain.analysis.model.AnalysisTemplate;
 import com.chs.springboot.domain.analysis.repository.AnalysisTemplateRepository;
+import com.chs.springboot.domain.binance.service.BinanceKlineWindow;
 import com.chs.springboot.domain.binance.service.SignalCandleSource;
 import com.chs.springboot.domain.binance.service.SignalSseService;
 import com.chs.springboot.global.monitor.health.HealthCheckCatalog;
@@ -49,8 +50,7 @@ public class AnalysisDetectionScheduler {
             return;
         }
 
-        long endMs = Math.floorDiv(System.currentTimeMillis(), SignalCandleSource.Interval.ONE_MINUTE.durationMs())
-                * SignalCandleSource.Interval.ONE_MINUTE.durationMs();
+        long endMs = BinanceKlineWindow.safeEnd(System.currentTimeMillis());
         long fromMs = endMs - LIMIT_COUNT * SignalCandleSource.Interval.ONE_MINUTE.durationMs();
         for (String symbol : SYMBOLS) {
             List<SignalCandleSource.SignalCandle> candles = candleSource.find(
