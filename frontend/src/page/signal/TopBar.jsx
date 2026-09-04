@@ -42,6 +42,7 @@ function CustomHistoryStartInput({ value, maxDate, onChange, inputStyle, wrapper
                 value={datePart}
                 max={maxDate}
                 onChange={(e) => emit(e.target.value, hourPart)}
+                onClick={(e) => e.target.showPicker && e.target.showPicker()}
                 style={inputStyle}
             />
             <input
@@ -55,6 +56,7 @@ function CustomHistoryStartInput({ value, maxDate, onChange, inputStyle, wrapper
                     const clamped = digits === '' ? '' : String(Math.min(23, Number(digits)));
                     emit(datePart, clamped);
                 }}
+                onFocus={(e) => e.target.select()}
                 placeholder="시"
                 style={{ ...inputStyle, flex: '0 0 44px', width: '44px' }}
             />
