@@ -144,12 +144,12 @@ export default function SignalSearchPopup({ doubleClickData, onSearch, onClose, 
                     </div>
                 ))}
 
-                {/* 거래대금 + 허용범위 */}
+                {/* 거래량 + 허용범위 */}
                 <div className="analysis-signal-popup__row analysis-signal-popup__row--volume">
                     <input type="checkbox" checked={useVolFilter}
                         className="analysis-signal-popup__check"
                         onChange={(e) => { if (!e.target.checked && !useRateFilter) return; setUseVolFilter(e.target.checked); }} />
-                    <span className={`analysis-signal-popup__label ${dimIf(useVolFilter)}`}>거래대금</span>
+                    <span className={`analysis-signal-popup__label ${dimIf(useVolFilter)}`}>거래량</span>
                     <input type="number" step="1" min="0"
                         className={`analysis-input analysis-signal-popup__field ${dimIf(useVolFilter)}`}
                         disabled={!useVolFilter}

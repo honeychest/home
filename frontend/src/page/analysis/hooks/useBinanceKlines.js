@@ -5,6 +5,7 @@
 // 5m/15m: 하루치 봉을 1회 요청으로 처리 (limit < 1000)
 import apiClient from '@/api/apiClient.js';
 import externalClient from '@/api/externalClient.js';
+import { normalizeBinanceSymbol } from '../model/analysisPageModel.js';
 
 const BINANCE_KLINE_URL  = 'https://fapi.binance.com/fapi/v1/klines';
 const LIMIT_1M = 720; // 1일 1440분 → 2회 분할
@@ -80,7 +81,7 @@ async function fetchOneDayKlines(symbolUsdt, dateStr, interval) {
 async function fetchDelta(symbol, startMs, endMs, interval) {
   try {
     const res = await apiClient.get('/api/analysis/delta', {
-      params: { symbol, startMs, endMs, interval },
+      params: { symbol: normalizeBinanceSymbol(symbol), startMs, endMs, interval },
     });
     return res.data; // [{ timeMs, delta }]
   } catch (e) {
@@ -91,14 +92,14 @@ async function fetchDelta(symbol, startMs, endMs, interval) {
 
 /**
  * 바이낸스 Kline + 백엔드 delta 병합
- * @param {'BTC'|'ENA'} symbol
+ * @param {'BTCUSDT'|'ENAUSDT'} symbol
  * @param {string} startDateStr 'YYYY-MM-DD'
  * @param {string} endDateStr   'YYYY-MM-DD'
  * @param {'1m'|'5m'|'15m'} interval
  * @returns {Promise<kline[]>} { time(ms), open, high, low, close, volume, delta }
  */
 export async function fetchKlines(symbol, startDateStr, endDateStr, interval = '1m') {
-  const symbolUsdt = symbol.toUpperCase() + 'USDT';
+  const symbolUsdt = normalizeBinanceSymbol(symbol);
   const days       = dateRangeDays(startDateStr, endDateStr);
   const startMs    = dateToMs(startDateStr);
   const endMs      = dateToMs(endDateStr) + 86_400_000;

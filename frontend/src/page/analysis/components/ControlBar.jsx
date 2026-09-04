@@ -20,12 +20,12 @@ export default function ControlBar({
     <div className="analysis-control-bar">
       {/* 심볼 */}
       <div className="analysis-control-bar__group">
-        {['BTC', 'ENA'].map((s) => (
+        {['BTCUSDT', 'ENAUSDT'].map((s) => (
           <button
             key={s}
             className={toggleClass(symbol === s)}
             onClick={() => !loading && onSymbolChange(s)}
-          >{s}</button>
+          >{s.replace('USDT', '')}</button>
         ))}
       </div>
 

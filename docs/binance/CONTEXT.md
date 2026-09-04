@@ -90,12 +90,16 @@
   API로 받아 쓰면 된다.
 
 ## 6. 아직 안 끝난 것 (다음 세션에서 이어감)
-- **kline temp 표 정식화(계획만, 미구현)**: `agg_trade_1m_temp`가 설계상 "임시 검증용"인데
-  2026-08-31 raw tick 수집 중단 이후 사실상 유일한 실시간 kline 원천이 됐고, DB 집계 없이
-  전체 행을 자바로 읽는 구조라 512MB 힙 제약에서 위험하다. 5분봉을 Binance에서 직접 저장
-  (1분 롤업 제거) + 롤업 대신 리필(정기적으로 빠진 구간을 스스로 채움) 방식으로 재설계하는
-  계획을 `docs/binance/kline-temp-retire-plan.md`에 정리해뒀다(2026-09-03).
-  **죽음조건: 이 재설계를 실제로 구현·배포하면 그 계획 문서와 이 항목을 지운다.**
+- **kline 저장 원천 전환은 구현·배포 완료**: `binance_kline_5m`에 Binance 5분봉을 저장하고,
+  `SignalCandleSource`가 cutover 이전 legacy 표와 이후 canonical/temp 표를 인터벌별로 합성한다.
+  `PatternMatchService`와 `AnalysisSearchService`도 이 공통 원천을 사용한다.
+  진행봉은 기존 1분 temp 경로에 남긴다.
+- **현재 세션의 계약 정리는 구현 완료, 배포 전**: 분석 화면·API의 심볼을 전체 형식으로
+  통일하고, 관리자에 `KLINE_5M` 수동 백필 옵션을 추가했다. 새 공통 원천 검색 경로는
+  테스트까지 끝났으며 배포 후 `/api/analysis/search`와 화면을 다시 확인한다.
+- **남은 운영 정리**: `AnalysisDetectionScheduler`의 신선도 지연과 시간창 계약을 정리하고,
+  관리자 gap 조회·롤백 기간·legacy 표 보관 정책을 확정한다. 세부 진행 기록은
+  `docs/binance/kline-temp-retire-plan.md`에 남아 있다.
 - **포지션 데이터 연동**: 현재는 포지션 방향·진입가·레버리지·수량·마진 모드를 받지 않는다.
   연동 전에는 손절가 계산이나 주문 실행을 추가하지 않는다.
 - **전략 검증**: ZigZag와 채널 baseline 자동 선택은 이번 분석 도구로 대체되어 보류됐다.

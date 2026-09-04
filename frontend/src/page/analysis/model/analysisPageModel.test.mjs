@@ -6,8 +6,15 @@ import {
   deltaHighlightThreshold,
   emptyConditionTree,
   mapSearchTimesToIndices,
+  normalizeBinanceSymbol,
   previousUtcDateStr,
 } from './analysisPageModel.js';
+
+test('normalizeBinanceSymbol returns one uppercase USDT symbol', () => {
+  assert.equal(normalizeBinanceSymbol('btc'), 'BTCUSDT');
+  assert.equal(normalizeBinanceSymbol(' BTCUSDT '), 'BTCUSDT');
+  assert.throws(() => normalizeBinanceSymbol(''));
+});
 
 test('buildAnalysisSearchWindow spans whole UTC end date', () => {
   assert.deepEqual(buildAnalysisSearchWindow('2026-05-10', '2026-05-12'), {
@@ -17,15 +24,15 @@ test('buildAnalysisSearchWindow spans whole UTC end date', () => {
 });
 
 test('buildAnalysisSearchRequest appends search window without mutating request body', () => {
-  const requestBody = { symbol: 'BTC', timeframe: '5m' };
+  const requestBody = { symbol: 'BTCUSDT', timeframe: '5m' };
 
   assert.deepEqual(buildAnalysisSearchRequest(requestBody, '2026-05-10', '2026-05-10'), {
-    symbol: 'BTC',
+    symbol: 'BTCUSDT',
     timeframe: '5m',
     fromMs: Date.parse('2026-05-10T00:00:00Z'),
     toMs: Date.parse('2026-05-11T00:00:00Z'),
   });
-  assert.deepEqual(requestBody, { symbol: 'BTC', timeframe: '5m' });
+  assert.deepEqual(requestBody, { symbol: 'BTCUSDT', timeframe: '5m' });
 });
 
 test('mapSearchTimesToIndices keeps only backend matches present in loaded chart data', () => {

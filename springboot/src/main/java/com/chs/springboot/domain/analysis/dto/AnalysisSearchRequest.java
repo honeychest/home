@@ -44,6 +44,7 @@ public class AnalysisSearchRequest {
         private Double rateTolerance;
 
         @JsonProperty("total_volume")
+        // 기존 요청 필드명은 유지하되 값은 화면의 Binance base volume과 같은 단위다.
         @NotNull
         @DecimalMin(value = "0", message = "total_volume must be >= 0")
         private BigDecimal totalVolume;

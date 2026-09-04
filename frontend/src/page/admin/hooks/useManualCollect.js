@@ -3,6 +3,8 @@ import * as adminApi from '../api/adminApi';
 import { ID_BASED, NO_MARKET } from '../constants';
 import { datetimeLocalToMs } from '../utils';
 
+const KLINE_TYPES = new Set(['KLINE_1M', 'KLINE_5M']);
+
 // 수동 수집 + Job 폴링.
 export default function useManualCollect() {
     const [cType, setCType] = useState('KLINE_1M');
@@ -16,7 +18,7 @@ export default function useManualCollect() {
     const pollRef = useRef(null);
 
     const isIdBased = ID_BASED.has(cType);
-    const isKline = cType === 'KLINE_1M';
+    const isKline = KLINE_TYPES.has(cType);
     const noMarket = NO_MARKET.has(cType);
 
     const handleCollect = async () => {
@@ -29,7 +31,7 @@ export default function useManualCollect() {
                 if (cTo)   body.toId   = Number(cTo);
             } else {
                 if (isKline && !cTo) {
-                    throw new Error('KLINE_1M은 From과 To가 모두 필요합니다');
+                    throw new Error(`${cType}은 From과 To가 모두 필요합니다`);
                 }
                 if (cFrom) body.fromMs = datetimeLocalToMs(cFrom);
                 if (cTo)   body.toMs   = datetimeLocalToMs(cTo);

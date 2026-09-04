@@ -1,4 +1,4 @@
-// [AGENT] T4-STEALTH: AggTrade5m JPA Repository | 연관파일: AggTrade5m.java, AggTradeRollupService.java, SignalDataService.java, PatternMatchService.java | 주요메서드: sumEnergyBySymbolAndTimeRange, findBySymbolAndVolumeBetween, findBySymbolAndMarketTypeAndCandleTimeMsAfter, insertIgnoreDuplicate, sumDivergenceBySymbolAndTimeRange, findBySymbolAndTimeRange, findDayCandlesBySymbol, findTopNWithCombinedDelta(volume추가), findByTimeRangeWithCombinedDelta, findByDateRange, findLastNBefore, findDistinctKstDates, findSimilarCandle, findDeltaByTimeRange
+// [AGENT] T4-STEALTH: AggTrade5m JPA Repository | 연관파일: AggTrade5m.java, AggTradeRollupService.java, SignalDataService.java | 주요메서드: sumEnergyBySymbolAndTimeRange, findBySymbolAndVolumeBetween, findBySymbolAndMarketTypeAndCandleTimeMsAfter, insertIgnoreDuplicate, sumDivergenceBySymbolAndTimeRange, findTopNWithCombinedDelta(volume추가), findByTimeRangeWithCombinedDelta, findByDateRange, findLastNBefore, findDistinctKstDates, findDeltaByTimeRange
 package com.chs.springboot.domain.binance.repository;
 
 import com.chs.springboot.domain.binance.model.AggTrade5m;
@@ -69,30 +69,6 @@ public interface AggTrade5mRepository extends JpaRepository<AggTrade5m, Long> {
         @Param("symbol") String symbol,
         @Param("fromMs")  long fromMs,
         @Param("toMs")    long toMs);
-
-    // PatternMatchService 용 — 심볼 전체 히스토리 (최근 2년) 봉 조회
-    @Query(value = """
-        SELECT * FROM agg_trade_5m
-        WHERE symbol = :symbol
-          AND candle_time_ms >= :fromMs
-        ORDER BY candle_time_ms ASC
-        """, nativeQuery = true)
-    List<AggTrade5m> findBySymbolAndTimeRange(
-        @Param("symbol") String symbol,
-        @Param("fromMs")  long fromMs);
-
-    // PatternMatchService 용 — 특정 일봉 하루치(00:00~23:59) 5분봉 조회
-    @Query(value = """
-        SELECT * FROM agg_trade_5m
-        WHERE symbol = :symbol
-          AND candle_time_ms >= :dayStartMs
-          AND candle_time_ms < :dayEndMs
-        ORDER BY candle_time_ms ASC
-        """, nativeQuery = true)
-    List<AggTrade5m> findDayCandlesBySymbol(
-        @Param("symbol")     String symbol,
-        @Param("dayStartMs") long dayStartMs,
-        @Param("dayEndMs")   long dayEndMs);
 
     // getCandles 용 — 최신 N봉 조회 (내림차순, 호출측에서 reverse 필요)
     @Query(value = """
@@ -208,106 +184,6 @@ public interface AggTrade5mRepository extends JpaRepository<AggTrade5m, Long> {
         @Param("marketType") String marketType,
         @Param("fromMs")     long fromMs,
         @Param("toMs")       long toMs);
-
-    // Signal 수동 탐색 — 전봉 대비 등락율 기준 유사 봉 조회 (LAG 서브쿼리)
-    @Query(value = """
-        SELECT candle_time_ms, open_price, high_price, low_price, close_price, total_volume
-        FROM (
-            SELECT candle_time_ms, open_price, high_price, low_price, close_price, total_volume,
-                   LAG(close_price) OVER (ORDER BY candle_time_ms) AS prev_close
-            FROM agg_trade_5m
-            WHERE symbol = :symbol
-              AND market_type = 'FUTURES'
-              AND candle_time_ms >= :fromMs
-              AND candle_time_ms < :toMs
-        ) t
-        WHERE prev_close IS NOT NULL
-          AND (:useRateFilter = 0 OR (close_price - prev_close) / prev_close * 100
-              BETWEEN (:priceChangeRate - :rateTolerance) AND (:priceChangeRate + :rateTolerance))
-          AND (:useVolFilter = 0 OR total_volume BETWEEN :volMin AND :volMax)
-        ORDER BY candle_time_ms DESC
-        LIMIT 1
-        """, nativeQuery = true)
-    List<Object[]> findSimilarCandle(
-        @Param("symbol")          String symbol,
-        @Param("fromMs")          long fromMs,
-        @Param("toMs")            long toMs,
-        @Param("priceChangeRate") double priceChangeRate,
-        @Param("rateTolerance")   double rateTolerance,
-        @Param("volMin")          java.math.BigDecimal volMin,
-        @Param("volMax")          java.math.BigDecimal volMax,
-        @Param("useRateFilter")   int useRateFilter,
-        @Param("useVolFilter")    int useVolFilter);
-
-    // Analysis 수동 탐색 — 범위 내 조건 충족 전체 봉 조회 (LIMIT 없음, ASC)
-    @Query(value = """
-        SELECT candle_time_ms, open_price, high_price, low_price, close_price, total_volume
-        FROM (
-            SELECT candle_time_ms, open_price, high_price, low_price, close_price, total_volume,
-                   LAG(close_price) OVER (ORDER BY candle_time_ms) AS prev_close
-            FROM agg_trade_5m
-            WHERE symbol = :symbol
-              AND market_type = 'FUTURES'
-              AND candle_time_ms >= :fromMs
-              AND candle_time_ms < :toMs
-        ) t
-        WHERE prev_close IS NOT NULL
-          AND (:useRateFilter = 0 OR (close_price - prev_close) / prev_close * 100
-              BETWEEN (:priceChangeRate - :rateTolerance) AND (:priceChangeRate + :rateTolerance))
-          AND (:useVolFilter = 0 OR total_volume BETWEEN :volMin AND :volMax)
-        ORDER BY candle_time_ms ASC
-        """, nativeQuery = true)
-    List<Object[]> findAllSimilarCandles(
-        @Param("symbol")          String symbol,
-        @Param("fromMs")          long fromMs,
-        @Param("toMs")            long toMs,
-        @Param("priceChangeRate") double priceChangeRate,
-        @Param("rateTolerance")   double rateTolerance,
-        @Param("volMin")          java.math.BigDecimal volMin,
-        @Param("volMax")          java.math.BigDecimal volMax,
-        @Param("useRateFilter")   int useRateFilter,
-        @Param("useVolFilter")    int useVolFilter);
-
-    // Analysis 수동 탐색 — 5분봉 3개를 15분봉으로 집계한 뒤 범위 내 조건 충족 전체 봉 조회
-    @Query(value = """
-        WITH candles AS (
-            SELECT
-                FLOOR(candle_time_ms / 900000) * 900000 AS candle_time_ms,
-                SUBSTRING_INDEX(MIN(CONCAT(LPAD(candle_time_ms,20,'0'),'|',open_price)),'|',-1)  AS open_price,
-                MAX(high_price)                                                                   AS high_price,
-                MIN(low_price)                                                                    AS low_price,
-                SUBSTRING_INDEX(MAX(CONCAT(LPAD(candle_time_ms,20,'0'),'|',close_price)),'|',-1) AS close_price,
-                COALESCE(SUM(total_volume), 0)                                                    AS total_volume
-            FROM agg_trade_5m
-            WHERE symbol = :symbol
-              AND market_type = 'FUTURES'
-              AND candle_time_ms >= :fromMs
-              AND candle_time_ms < :toMs
-            GROUP BY FLOOR(candle_time_ms / 900000) * 900000
-        ),
-        with_prev AS (
-            SELECT candle_time_ms, open_price, high_price, low_price, close_price, total_volume,
-                   LAG(close_price) OVER (ORDER BY candle_time_ms) AS prev_close
-            FROM candles
-        )
-        SELECT candle_time_ms, open_price, high_price, low_price, close_price, total_volume
-        FROM with_prev
-        WHERE prev_close IS NOT NULL
-          AND (:useRateFilter = 0 OR (close_price - prev_close) / prev_close * 100
-              BETWEEN (:priceChangeRate - :rateTolerance) AND (:priceChangeRate + :rateTolerance))
-          AND (:useVolFilter = 0 OR total_volume BETWEEN :volMin AND :volMax)
-        ORDER BY candle_time_ms ASC
-        """, nativeQuery = true)
-    List<Object[]> findAllSimilarCandles15m(
-        @Param("symbol")          String symbol,
-        @Param("fromMs")          long fromMs,
-        @Param("toMs")            long toMs,
-        @Param("priceChangeRate") double priceChangeRate,
-        @Param("rateTolerance")   double rateTolerance,
-        @Param("volMin")          java.math.BigDecimal volMin,
-        @Param("volMax")          java.math.BigDecimal volMax,
-        @Param("useRateFilter")   int useRateFilter,
-        @Param("useVolFilter")    int useVolFilter);
 
     @Transactional
     @Modifying

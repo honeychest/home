@@ -28,7 +28,7 @@ import {
 const DELTA_THRESHOLD_STORAGE_KEY = 'analysis.deltaLabelThreshold';
 
 export default function AnalysisPage() {
-  const [symbol,            setSymbol]            = useState('BTC');
+  const [symbol,            setSymbol]            = useState('BTCUSDT');
   const [startDate,         setStartDate]         = useState(fiveDaysAgoStr());
   const [endDate,           setEndDate]           = useState(todayStr());
   const [klineData,         setKlineData]         = useState([]);
@@ -117,7 +117,7 @@ export default function AnalysisPage() {
     if (mountedRef.current) return;
     mountedRef.current = true;
     Promise.all([
-      loadData('BTC', fiveDaysAgoStr(), todayStr()),
+      loadData('BTCUSDT', fiveDaysAgoStr(), todayStr()),
       apiClient.get('/api/analysis/templates')
         .then((r) => {
           const list = Array.isArray(r.data) ? r.data : [];

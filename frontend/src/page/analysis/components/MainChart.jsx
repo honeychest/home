@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, CandlestickSeries, HistogramSeries, createSeriesMarkers, LineStyle } from 'lightweight-charts';
 import { PALETTE } from '../palette.js';
-import { deltaHighlightThreshold } from '../model/analysisPageModel.js';
+import { deltaHighlightThreshold, normalizeBinanceSymbol } from '../model/analysisPageModel.js';
 import SignalSearchPopup from './SignalSearchPopup.jsx';
 
 const DEBOUNCE_MS = 200;
@@ -281,7 +281,7 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
   useEffect(() => {
     if (!symbol) return;
     const wsProtocol  = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const symbolUsdt  = symbol.toUpperCase() + 'USDT';
+    const symbolUsdt  = normalizeBinanceSymbol(symbol);
     const reconnectTimer = { current: null };
     let destroyed = false;
 
@@ -371,7 +371,7 @@ export default function MainChart({ klineData, matchedIndices, paletteLevel, loa
         candle:    { open: candle.open, high: candle.high, low: candle.low, close: candle.close, volume: candle.volume },
         prevClose,
         timeframe: timeframeRef.current,
-        symbol:    symbolRef.current.toUpperCase() + 'USDT',
+        symbol:    normalizeBinanceSymbol(symbolRef.current),
       });
     };
     container.addEventListener('dblclick', handleDblClick);

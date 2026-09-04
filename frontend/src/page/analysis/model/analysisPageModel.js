@@ -1,5 +1,11 @@
 const DAY_MS = 86_400_000;
 
+export function normalizeBinanceSymbol(symbol) {
+  const normalized = String(symbol ?? '').trim().toUpperCase();
+  if (!normalized) throw new Error('symbol is required');
+  return normalized.endsWith('USDT') ? normalized : `${normalized}USDT`;
+}
+
 export function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }

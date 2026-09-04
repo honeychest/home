@@ -1,5 +1,5 @@
 // [AGENT] 역할: 수동 수집/보정 어드민 API | 연관파일: ManualBackfillService.java
-// 엔드포인트: POST /api/admin/backfill/collect(type=AGG_1M|AGG_5M|KLINE_1M|OI), DELETE /api/admin/backfill/flat, GET/POST /api/admin/backfill/flat-correction, GET/POST /api/admin/backfill/outlier-correction, GET /api/admin/backfill/status/{jobId}, GET /api/admin/backfill/jobs
+// 엔드포인트: POST /api/admin/backfill/collect(type=AGG_1M|AGG_5M|KLINE_1M|KLINE_5M|OI), DELETE /api/admin/backfill/flat, GET/POST /api/admin/backfill/flat-correction, GET/POST /api/admin/backfill/outlier-correction, GET /api/admin/backfill/status/{jobId}, GET /api/admin/backfill/jobs
 // 접근 제어: AdminIpInterceptor(/api/admin/**)가 담당
 package com.chs.springboot.domain.binance.controller;
 

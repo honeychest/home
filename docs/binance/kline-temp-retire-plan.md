@@ -5,7 +5,7 @@
 
 작성: Claude (v2에 대한 Codex xhigh 적대적 검수 결과를 반영해 재작성)
 대상 저장소: C:\Users\Tissue\IdeaProjects\lab
-범위: 계획만. 코드 미수정. signal-history 기능(완료됨)과는 무관.
+범위: kline 원천 전환 계획과 진행 기록. signal-history 기능(완료됨)과는 무관.
 
 ## v3에서 바뀐 것 (v2 대비)
 
@@ -25,10 +25,9 @@ v2는 "표 이름 확정 → 마이그레이션 → 백필 → 전환"이라는 
    (무결성 감시), `AnalysisDetectionScheduler`(1분 템플릿 탐지), 그리고 `CandleStreamService`의
    진행봉(IN_PROGRESS) 경로. 아래 "전제 정정"과 "치명 결함" 절이 근거다.
 
-v3는 Codex가 제시한 9단계 실행 순서로 전면 재작성했다. Codex 최종 판단은 보류였으나,
-아래 "결정 완료" 절의 3가지를 사용자가 확정해(2026-09-04) 1단계(계약과 범위 확정)까지
-끝났다 — **조건부 가능**으로 전환. 남은 8개 항목(Codex 최종 판단 절 참고)은 사용자 결정이
-아니라 실행 순서 2~9단계에서 구현으로 풀어야 하는 설계 과제다.
+v3는 Codex가 제시한 9단계 실행 순서로 전면 재작성했다. 사용자가 범위를 확정한 뒤
+1~7단계와 `PatternMatchService`·`AnalysisSearchService`의 공통 원천 전환까지 구현·검증했다.
+현재 남은 것은 관리자 gap 운영과 롤백 기간 검증이다.
 
 ## 정정 — SignalCandleSource에는 4시간 인터벌이 없다
 
@@ -39,13 +38,12 @@ v3는 Codex가 제시한 9단계 실행 순서로 전면 재작성했다. Codex 
 대상(signal의 5분 canonical 전환)과 무관하다.** v2 본문의 "15분·4시간" 서술은 전부 "15분"
 으로 정정하고, 4시간 관련 서술은 삭제한다.
 
-`PatternMatchService`의 `FOUR_HOURS_MS` 상수도 `SignalCandleSource`를 거치지 않는다 — 이
-서비스는 `AggTrade5mRepository.findBySymbolAndTimeRange()`로 **legacy `agg_trade_5m` 표를
-직접**, 심볼당 최근 2년치를 한 번에 읽는다(`PatternMatchService.java:27-50`,
-`AggTrade5mRepository.java:73-82`, market_type 조건 없음). `FOUR_HOURS_MS`는 블록 시작
-계산과 중복 후보 제거에만 쓰인다(`PatternMatchService.java:87-122`).
+검수 당시 `PatternMatchService`는 `AggTrade5mRepository`로 **legacy `agg_trade_5m` 표를
+직접** 읽었고 market_type 조건도 없었다. 현재는 `SignalCandleSource`가 제공하는 선물 가격과
+현물·선물 delta 합성 계약을 사용한다. `FOUR_HOURS_MS`는 블록 시작 계산과 중복 후보 제거에만
+쓰인다.
 
-## 현재 상태 (v1·v2에서 검증됐고 이번 검수에서도 재확인된 사실만 유지)
+## 검수 당시 기준과 현재 상태
 
 - `agg_trade_1m_temp` 원래 계약: "임시 검증용, 레거시 롤업과 연결 안 함"
   (`V10__add_agg_trade_1m_temp.sql:1-2`).
@@ -55,10 +53,9 @@ v3는 Codex가 제시한 9단계 실행 순서로 전면 재작성했다. Codex 
   `binance.agg-trade.legacy-cutover-ms=1788180800000` = 2026-08-31 12:53:20 UTC.
 - **레거시 5분 롤업(`AggTradeRollupService`)은 `binance.agg-trade.save.enabled=false`라
   cutover 이후 더 이상 쓰지 않는다**(`AggTradeRollupService.java:68-69, 412-449`,
-  `application.properties:134-139`). 그런데 `PatternMatchService`와 `AnalysisSearchService`는
-  여전히 이 legacy 표(`agg_trade_1m`/`agg_trade_5m`)를 직접 읽는다 — **cutover 이후로 갈수록
-  이 두 기능의 "최근 구간"이 점점 비어간다는 뜻이고, 이는 v3 계획과 무관하게 이미 진행 중인
-  문제다.** canonical 전환과 별개로 사용자에게 알려야 할 사실.
+  `application.properties:134-139`). 현재 `PatternMatchService`와 `AnalysisSearchService`는
+  `SignalCandleSource`를 통해 cutover 이전 legacy와 이후 canonical/temp를 함께 읽는다.
+  legacy 표는 pre-cutover 과거 데이터 원본으로 계속 보관한다.
 - temp 조회는 `BinanceKlineTempCandleRepository`가 페이지네이션·DB 집계 없이 전체 List를
   반환하고, `BinanceKlineFiveMinuteAggregator`가 자바에서 5분으로 합친다. 512MB 힙·2인스턴스
   제약(`springboot/AGENTS.md`)에서 조회 범위가 길어질수록 위험.
@@ -73,19 +70,15 @@ v3는 Codex가 제시한 9단계 실행 순서로 전면 재작성했다. Codex 
 ## 표 이름 — 확정
 
 **`binance_kline_5m`**(사용자 협의 완료, 2026-09-04). 재협의 단계는 실행 순서에서 제거한다.
-entity·repository·관리자 화면 표기(`KLINE_1M` → `KLINE_5M` 여부 포함)도 착수 전 한 번에
-고정한다(v2가 가안으로 남겨뒀던 것 — Codex 낮음 13 지적).
+entity·repository·관리자 화면 표기(`KLINE_5M`)까지 고정했다.
 
 ## GitNexus 영향 분석에 대한 안내
 
-v2 작성 시 실행한 GitNexus 분석(`SignalCandleSource` 인터페이스만 지키면 나머지는 자유
-재작성 가능, 의존 6곳)은 **이번 검수에서 재검증하지 못했다** — Codex가 재분석을 시도했으나
-Windows 환경에서 `.gitnexus/lbug access denied`·`spawn EPERM`으로 실패했다(색인이 현재
-커밋과도 stale 상태로 보고됨). 대신 Codex가 실제 소스의 import·호출·SQL을 직접 추적해
-아래 "실제 소비자 목록"으로 대체했다 — **다음 세션에서 GitNexus 인덱스를 재생성한 뒤
-(`npx gitnexus analyze`) 한 번 더 교차 검증할 것.**
+이번 정리에서는 GitNexus 색인을 현재 커밋에 맞춰 재생성한 뒤, 변경 대상 심볼별 upstream
+영향 분석을 실행했다. `SignalCandleSource`와 두 repository 인터페이스는 여러 서비스에서
+사용하므로 변경 전 직접 호출자와 테스트를 함께 확인한다.
 
-### 실제 소비자 목록 (직접 추적, GitNexus 대체)
+### 실제 소비자 목록
 
 | 대상 | 방식 | 비고 |
 |---|---|---|
@@ -95,13 +88,11 @@ Windows 환경에서 `.gitnexus/lbug access denied`·`spawn EPERM`으로 실패�
 | `AnalysisDetectionScheduler` | `SignalCandleSource.find()` interval=1분, 최근 1440개 연속성 검사 | 상동 |
 | `AnalysisTemplateService.getDelta` | `SignalCandleSource.find()` interval=15분, **상한 없는 임의 range** | v2가 2단계로만 표시, 범위 무제한이라는 사실 누락 |
 | `SignalCandleAnalysisConverter` | 변환만 | v2와 동일 |
-| `PatternMatchService` | `AggTrade5mRepository`(legacy `agg_trade_5m`) **직접**, `SignalCandleSource` 안 거침 | v2 목록에 전혀 없음 — 치명 2 |
-| `AnalysisSearchService` | `AggTrade1mRepository`+`AggTrade5mRepository`(legacy) **직접** | v2 목록에 전혀 없음 — 치명 3 |
+| `PatternMatchService` | `SignalCandleSource.find()`(legacy/canonical 경계 포함) | 공통 원천 전환 완료 |
+| `AnalysisSearchService` | `SignalCandleSource.find()`(1m/5m/15m, 7일 chunk) | 공통 원천 전환 완료 |
 
-**결론**: `SignalCandleSource` 인터페이스 계약만 지키면 된다는 v2의 전제는 **불완전하다.**
-인터페이스를 우회해 legacy 표를 직접 읽는 소비자(`PatternMatchService`,
-`AnalysisSearchService`)가 있고, 이들은 canonical 전환과 별개로 이미 legacy 데이터
-고갈 문제를 안고 있다. v3 실행 순서 7단계에서 이 둘의 전환 여부를 결정해야 한다.
+**결론**: `SignalCandleSource`가 legacy/canonical 경계를 소유하고, 모든 시그널·분석 소비자가
+그 계약을 사용해야 한다. 과거 원본인 legacy 표는 삭제하지 않고 source 내부에서만 읽는다.
 
 ## 목표 구조 (정정)
 
@@ -112,13 +103,12 @@ Binance REST/WS kline (interval=5m, SPOT+FUTURES 유지 — 확정, "결정 완�
      - 1분(ONE_MINUTE)은 손대지 않는다 — agg_trade_1m_temp 전량 저장·읽기를 그대로 유지
        (치명 1 해결책, 아래 참고). "50분 이하만 REST 직접조회" 설계는 폐기.
      - 5분 COMPLETED는 canonical 읽기로 전환(7단계)
-     - 15분은 SQL GROUP BY로 집계(자바 aggregate() 대체 — 기준선 측정 결과 권장,
-       "미확정 사항" 참고). 완결 3행 조건은 `HAVING COUNT(*)=3`으로 이식
+      - 15분은 source 내부의 자바 `aggregate()`로 canonical 5분 리스트를 집계한다.
+        `AnalysisTemplateService.getDelta()`에는 90일 상한을 둔다
      - IN_PROGRESS(5분·15분)는 canonical이 아니라 기존 temp 1분 기반 부분 집계 경로를
        그대로 쓴다(치명 4 해결책, 아래 참고) — canonical은 완료봉만 저장해 애초에
        진행봉을 만들 수 없다
-  -> PatternMatchService·AnalysisSearchService — canonical 전환 범위에 포함(확정,
-     "결정 완료" 참고)
+  -> PatternMatchService·AnalysisSearchService — SignalCandleSource 공통 원천 사용 완료
 ~~~
 
 ## 치명 결함 (Codex 적대적 검수, 구현 착수 전 반드시 해소)
@@ -140,21 +130,17 @@ Binance REST/WS kline (interval=5m, SPOT+FUTURES 유지 — 확정, "결정 완�
 영향이 없다. 기존 테스트(`DataIntegrityEvaluatorTest`·`AnalysisDetectionSchedulerTest`) 7개
 그대로 통과 확인(회귀 없음, 애초에 코드 변경도 없음).
 
-### 치명 2. PatternMatch(최근 신호)가 legacy 표에 고립된다
+### 치명 2. PatternMatch(최근 신호)가 legacy 표에 고립된다 — [해결, 2026-09-04]
 
-`PatternMatchService`는 `agg_trade_5m`만 읽고, `/api/signal/pattern`·`/api/signal/score`가
-이 서비스를 직접 호출한다(`SignalController.java:97-112`). 이 legacy 표는 이미
-`binance.agg-trade.save.enabled=false`라 cutover 이후 새 행이 없다. canonical 전환 여부와
-무관하게 **최근 패턴 매칭은 이미 서서히 깨지고 있다.** 전환 시 이 서비스를 canonical 5분
-source로 옮길지, 아니면 legacy 기능으로 명시하고 이번 범위에서 제외할지 결정 필요.
+`PatternMatchService`는 `/api/signal/pattern`·`/api/signal/score`에서 호출되며, 이제
+`SignalCandleSource`를 통해 legacy/canonical 경계를 사용한다. 선물 가격과 현물·선물 delta
+합성 계약도 다른 시그널 소비자와 같아졌다.
 
-### 치명 3. 분석 검색도 legacy 표를 계속 읽는다
+### 치명 3. 분석 검색도 legacy 표를 계속 읽는다 — [해결, 2026-09-04]
 
-`AnalysisSearchService`는 `agg_trade_1m`/`agg_trade_5m`를 직접 조회한다
-(`AnalysisSearchService.java:18-68`, `AggTrade5mRepository.java:271-310`,
-`AggTrade1mRepository.java:71-110`). 프론트 `/api/analysis/search`가 이를 호출한다
-(`AnalysisPage.jsx:250-256`). 치명 2와 같은 문제 — cutover 이후 검색 결과가 끊기거나
-과거분까지만 반환된다.
+`AnalysisSearchService`는 1m/5m/15m 모두 `SignalCandleSource.find()`를 사용한다. 7일
+chunk 단위로 읽고 이전 봉을 다음 구간으로 넘겨 가격 변화율 조건을 유지한다. 프론트
+`/api/analysis/search`의 심볼과 캔들 원천도 다른 분석 경로와 같은 계약으로 통일했다.
 
 ### 치명 4. 진행봉(실시간 캔들) 스트림이 사라진다 — [해결, 2026-09-04, 6단계]
 
@@ -258,9 +244,8 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
    `BinanceKline5mRepository`(temp repository와 동일한 쿼리 메서드 2개) 신설. 기존 코드
    어디서도 아직 참조하지 않는 순수 additive라 기존 인스턴스는 이 표의 존재를 몰라도 정상
    기동한다. `compileJava` 통과.
-   **아직 실제 DB에 적용 안 됨** — 로컬 개발 프로필이 prod와 같은 DB를 보므로(Tailscale
-   공유), Flyway는 어느 인스턴스든 다음 재기동 시 자동 적용한다. 배포·재기동은 사용자가
-   원하는 시점에 별도로.
+    **실제 DB 적용 완료** — 배포 후 Flyway 적용과 canonical 표의 4개 조합 적재를 직접
+    확인했다(상세는 아래 진행 상태와 기준선 측정 결과 참고).
 
 5. **[완료, 2026-09-04] writer·sync를 5분 저장으로 구현하되, 정상 tail과 gap 리필을 별도
    상태로 분리한다.**
@@ -311,8 +296,7 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
      이 단계에서 미리 만들 코드가 없다.
    - "50분 이하 REST 경로"는 위에서 설계 자체를 폐기했으므로 이 항목은 대상이 없어짐.
 
-7. **[부분 완료, 2026-09-04] source 읽기 전환 — PatternMatch·AnalysisSearch는 이번 범위에서
-   제외(아래 참고).**
+7. **[구현 완료, 배포 후 확인 필요, 2026-09-04] source 읽기 전환 — PatternMatch·AnalysisSearch 포함.**
 
    착수 전 Codex xhigh 검수(계획 합의)로 발견: canonical 표는 매 회차 최근 48시간
    롤링 윈도우만 유지해서(4단계 참고), cutover~48시간 전 사이 **487개 5분봉이 canonical에
@@ -325,9 +309,13 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
      추출해 재사용(임의 범위, 48시간 상한 검증 포함). `ManualBackfillService`에
      `KLINE_5M` 타입 추가(`POST /api/admin/backfill/collect`, 기존 `KLINE_1M`과 같은
      비동기 job 패턴) — 새 컨트롤러 불필요, 기존 admin API 재사용.
-   - **[미실행] 실제 백필 실행** — 배포 후 4건 호출 필요(아래 "백필 실행 방법" 참고).
-     `legacyEnd(FIVE_MINUTES)=1788180600000` ~ `canonicalMin=1788326700000`, 조합당
-     487개 캔들.
+   - **[완료, 2026-09-04] 실제 백필 실행** — 맥미니 원격 세션이 리더 인스턴스에서 4건 실행,
+     DB 직접 재확인 완료: 4개 조합 전부 정확히 487/487, `binance_kline_5m` 전체가
+     2026-08-31 12:50부터 지금까지 완전히 연속(gap 0). 실행 중 관리자 화면
+     `ManualCollectCard.jsx`에 `KLINE_5M` 옵션이 없어 첫 시도가 실수로 `KLINE_1M`으로
+     들어가 153건 삽입됐으나, 해당 구간이 이미 1분 temp에 전량 있어 무해(INSERT IGNORE로
+      중복 무시) — 확인 완료. `ManualCollectCard.jsx`에 `KLINE_5M` 옵션을 추가하고
+      KLINE_1M·KLINE_5M 공통 시간 범위 검증을 적용했다.
    - **[완료] `BinanceKlineSignalCandleSource` 5분 COMPLETED 읽기를 canonical로 전환**.
      `findTemp()`가 `QueryMode.COMPLETED`면 `findCanonicalFive()`(canonical SPOT+FUTURES
      병합, 기존 `findTempFive()`와 동일 계약 — FUTURES 있어야 캔들 생성, SPOT은 delta에만
@@ -337,20 +325,27 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
    - **[완료] 무제한 조회 위험 완화**: `AnalysisTemplateService.getDelta()`에 5분/15분
      한정 90일 상한 추가(Codex 지적 — canonical 전환 후에도 `getDelta`가 여전히 무제한
      범위를 받아 15분 자바 집계에 넣을 수 있어 512MB 힙 위험). 컨트롤러는 400으로 응답.
-   - **[제외, 별도 과제로 분리] `PatternMatchService`·`AnalysisSearchService` 전환** —
-     Codex 검수 결과 단순 repository 교체가 아니라 별도 read model 설계가 필요할 만큼
-     크다(AggTrade5m 엔티티로 canonical을 억지 변환하면 안 됨, market_type 필터·LAG
-     lookbehind 경계·1분 검색 대상 등 결정할 게 많음). 1단계 "결정 완료"에서 "포함"으로
-     정했던 것을 이번 커밋 범위에서는 미룬다 — 두 서비스는 계속 legacy 표를 그대로 읽는다
-     (지금과 동일한 동작 유지, 회귀 없음). 다음 세션에서 별도로 계획을 다시 짠다.
-   - 검증 endpoint: `/api/signal/pattern`·`/api/signal/score`·`/api/analysis/search`는
-     이번 범위 밖(위 제외 항목). `/api/analysis/delta`·`/ws/candle/5m`·`/ws/candle/15m`는
-     배포 후 확인 필요.
+    - **[완료] `PatternMatchService` 전환** — `SignalCandleSource`의 공통 `SignalCandle`
+      계약을 사용해 legacy/canonical 경계를 source 내부에 둔다. 선물 가격 기준과 현물·선물
+      delta 합산을 기존 source 계약으로 통일하고, market_type 없는 직접 조회를 제거했다.
+    - **[완료] `AnalysisSearchService` 전환** — 1m/5m/15m 모두 `SignalCandleSource.find()`를
+      사용한다. 7일 단위로 나눠 읽고 이전 봉을 다음 구간으로 넘겨 LAG lookbehind 의미를
+      보존한다. 전환 후 호출되지 않는 repository 유사 검색 메서드는 삭제했다.
+    - 검증 endpoint: `/api/signal/pattern`·`/api/signal/score`·`/api/analysis/search`는
+      코드 전환과 회귀 테스트까지 완료했고, 운영 endpoint 확인은 배포 후 진행한다.
+    - **[완료, 2026-09-04] `/api/signal/candles` 5분·15분 실운영 검증** — 맥미니 원격 세션이
+     72시간 범위로 조회: 5분봉 861개(간격 이상 0건, null/0-캔들 0건), 15분봉 286개(동일)
+      — 백필 경계 포함 완전 연속 확인.
+    - **[기존 배포 확인 완료, 새 정리 코드 배포 후 재확인 필요] `/api/analysis/delta`·
+      `/ws/candle/5m`·`/ws/candle/15m`** — 기존 배포에서 delta API는 5분 21개·15분 6개를
+      HTTP 200으로 반환했고 각 간격은 연속이었다. 두 웹소켓 모두 연결 후 메시지를 수신했다.
+      15분 진행봉은 확인 시점에 첫 5분 구간이라 5분 진행값과 같았으며, 새 코드 배포 뒤
+      심볼 계약·검색 경로와 함께 다시 확인한다.
    - 테스트: `BinanceKlineSignalCandleSourceTest`(canonical 병합·SPOT 결측·내부 gap·15분
      완결 조건·findBefore 케이스 추가) + `BinanceKline5mSyncServiceTest`(백필 케이스 6개
      — 경계 정렬·안전지연·in-flight 포함) + `ManualBackfillServiceTest`(KLINE_5M 케이스
-     3개) + `AnalysisTemplateServiceTest`(신규, 90일 상한 4개 케이스). springboot 전체
-     테스트 스위트(434개) 통과.
+      3개) + `AnalysisTemplateServiceTest`(신규, 90일 상한 4개 케이스) + 공통 심볼·검색
+      테스트. springboot 전체 테스트 스위트(438개) 통과.
    - **커밋 전 Codex commit-check(xhigh)로 결함 3건 추가 수정**: (1) 백필이 스케줄러
      tick과 겹쳐 in-flight 충돌이 나도 `expected=0/remainingGap=0`이라 "성공"으로
      잘못 기록되던 것 — `RefillResult`에 `skippedInFlight` 필드 추가, 충돌 시 job을
@@ -389,6 +384,28 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
    rollback artifact가 실제로 최근 구간을 읽는지 확인 → rollback 기간 종료 후 old temp
    보관 정책 확정. 이 순서를 코드/설정 변경 없이 그대로 실행 체크리스트로 쓴다.
 
+10. **[신규, 2026-09-04 추가] 정리(cleanup) — 9단계 안정화 후, 롤백 기간이 끝난 뒤에만.**
+    사용자 요청으로 명시적 단계로 추가. 아직 뭘 지울 수 있는지 확정된 목록이 아니라
+    "이 시점에 다시 훑어봐야 할 것" 체크리스트다 — 지금은 아무것도 지우지 않는다.
+    - **안 쓰는 코드**: PatternMatch·AnalysisSearch 전환 때 확인한
+      `AggTrade5mRepository`/`AggTrade1mRepository`의 legacy 전용 유사 검색 메서드는
+      호출처가 없어 이번 정리에서 삭제했다. `BinanceKlineFiveMinuteAggregator`는
+      IN_PROGRESS(진행봉) 경로에서 계속 쓰이므로 유지한다.
+    - **legacy 표(`agg_trade_1m`/`agg_trade_5m`)**: cutover 이후로는 안 쓰이지만(쓰기가
+      이미 꺼짐), **pre-cutover 과거 데이터의 유일한 원본**이라 단순 삭제는 안 된다.
+      PatternMatch의 "몇 개월~몇 년 치 과거 조회" 요구를 canonical/temp로 대체하지 않는 한
+      계속 보관해야 한다 — 별도 아카이브(콜드 스토리지 이관 등)는 검토 가능해도 즉시 DROP
+      대상 아님.
+    - **`agg_trade_1m_temp`**: v3에서 "유지"로 확정(치명 1 해결책 — `DataIntegrityEvaluator`
+      ·`AnalysisDetectionScheduler`가 1분 데이터로 계속 필요). **삭제 대상 아님** — 이름과
+      실제 역할이 안 맞는 문제(v1 계획서의 원래 문제의식)는 표 이름을 바꾸는 것으로
+      대응할지 이 시점에 다시 판단.
+    - **관리자 화면/도구**: `ManualCollectCard.jsx`에 `KLINE_5M` 옵션을 추가하고
+      KLINE_1M·KLINE_5M 공통 시간 범위 검증을 적용했다. 기존 KLINE_1M은 1분 진행봉
+      원본이므로 임시 표기가 맞다.
+    - **이 계획 문서 자체**: 맨 위 "죽음조건"대로, 이 단계가 끝나면
+      `docs/binance/kline-temp-retire-plan.md`를 지운다(경위는 git 이력에 남음).
+
 ## 기준선 측정 결과 (2026-09-04, `springboot/.env` 로컬 자격으로 공유 DB 직접 조회)
 
 `agg_trade_1m_temp`·`agg_trade_1m`·`agg_trade_5m`에 직접 SELECT(읽기 전용, `python`+`pymysql`)
@@ -422,11 +439,9 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
   대상 범위는 "cutover 이후 경과 일수"에 비례해 계속 늘어난다** — 지금은 5.6일치
   (조합당 약 8,107행)라 자바로 충분하지만, 수개월~1년 뒤에는 legacy SQL 집계보다 훨씬
   커진다(예: 1년 후 조합당 약 365×288≈105,120 5분 행). **결론(자바 vs DB GROUP BY)**:
-  단기적으로는 자바 유지가 안전하지만(완결 3행 검증 로직이 이미 있음), canonical 5분
-  표 전환 시점에 **legacy처럼 SQL 기반 15분 집계로 함께 바꾸는 것을 권장** — 기존
-  `AggTrade5mRepository.findAllSimilarCandles15m()`(SQL GROUP BY, `:271-310`) 패턴을
-  canonical 표에도 적용하고, 부분 bucket 방지 조건(완결 3행)만 SQL의 `HAVING COUNT(*)=3`
-  등으로 이식하면 자바 완결 검증과 동등해진다. 이 결정은 실행 순서 7단계에서 반영한다.
+  단기적으로는 자바 `aggregate()`를 유지하고 `AnalysisTemplateService.getDelta()`에 90일
+  상한을 둔다. 검색 경로는 7일 chunk로 나눠 읽어 범위 전체를 한 번에 적재하지 않는다.
+  SQL GROUP BY 전환은 실제 조회량이 커져 병목이 확인될 때 별도 측정 후 검토한다.
 
 ## 검증 계획
 
@@ -447,34 +462,29 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
 - 1분 표 신설: 저장할 실익이 없음(치명 1의 60분·1440분 요구는 REST 직접 조회 또는 별도
   버퍼로 해결 — 표로 다시 저장하는 것과는 다른 문제).
 
-## 미확정 사항 (구현 착수 전 재확인 필요)
+## 후속 검토 사항
 
-- ~~AnalysisTemplateService.getDelta의 임의 15분 range 실측~~ — **해소(2026-09-04)**, 위
-  "기준선 측정 결과" 참고. 결론(2단계): canonical 15분 집계는 SQL GROUP BY로 전환 권장.
-  **7단계 구현 시 재조정**: 위험도를 낮추려고 이번엔 자바 `aggregate()`를 canonical-소스
-  5분 리스트에 그대로 적용하고, 대신 `getDelta()`에 90일 상한을 걸어 무제한 힙 위험만
-  없앴다(SQL GROUP BY 자체는 안 함 — Codex 검수의 "차선" 옵션 채택). SQL GROUP BY 전환은
-  필요해지면(예: 90일 상한이 실사용에 너무 좁다고 판명되면) 별도로 다시 검토.
+- **15분 SQL GROUP BY 전환**: 현재는 자바 `aggregate()`와 `getDelta()` 90일 상한으로
+  운영한다. 90일 상한이 실제 사용에 좁거나 조회량이 병목으로 확인될 때 별도 측정 후 검토한다.
 - canonical 5분 표의 정확한 컬럼셋과 entity 설계는 실제 migration 작성 시 Binance kline
   REST 응답 필드를 다시 대조해 확정. → 4단계에서 확정 완료.
-- GitNexus 인덱스 재생성 후 위 "실제 소비자 목록"과 교차 검증(현재 Windows 권한 문제로 미수행).
-- **[신규] PatternMatchService·AnalysisSearchService의 canonical/temp 전환 계획** — 7단계
-  검수에서 범위 밖으로 뺐다. 다음 세션에서 별도로: PatternMatch는 history/day 조회를
-  `SignalCandleSource` 기반으로 재설계(AggTrade5m 엔티티로 canonical 억지 변환 금지),
-  AnalysisSearch는 1m/5m/15m 각 분기의 원천과 LAG lookbehind 규칙을 따로 정한다
-  (`codex-review-step7-plan.md` 3절 참고, 세션 스크래치패드 보관).
+- GitNexus 인덱스는 2026-09-04 현재 커밋 기준으로 재생성했고, 변경 전 대상 심볼의 upstream
+  영향 분석을 완료했다. 다음 코드 변경 전에도 같은 절차를 반복한다.
+- **[완료] PatternMatchService·AnalysisSearchService의 canonical/temp 전환** — 두 서비스 모두
+  `SignalCandleSource`를 사용하고, AnalysisSearch는 7일 단위 조회와 구간 간 이전 봉 전달로
+  장기 조회의 힙 적재를 제한한다. 기존 legacy 유사 검색 메서드는 호출처가 없어 삭제했다.
 
 ## Codex 적대적 검수 최종 판단 (2026-09-04) 및 이후 진행 상태
 
 원래 판단은 **보류**였다. 아래 8개 중 사용자 결정이 필요했던 것(2번, 그리고 Codex 목록에는
 없었지만 같은 성격인 SPOT+FUTURES·`KLINE_5M` 표기)은 2026-09-04에 사용자가 확정했다
 (위 "결정 완료"). 나머지는 사용자 결정 사항이 아니라 실행 순서 각 단계가 풀어야 할 설계
-과제이므로, 착수 자체를 막지는 않는다 — **조건부 가능으로 전환, 1~6단계 완료, 7단계
-(source 읽기 전환)부터 진행.**
+과제이므로, 착수 자체를 막지는 않는다 — **조건부 가능으로 전환, 1~7단계 구현 완료.
+운영 배포 확인은 남아 있다.**
 
 1. ~~1분 경로(60분·1440분) 보존 방식~~ — **해결(6단계)**: 새 코드 불필요, ONE_MINUTE
    읽기 경로를 애초에 안 건드리는 구조로 확정.
-2. ~~PatternMatch·AnalysisSearch의 canonical 전환 포함 여부~~ — **결정 완료(포함)**
+2. ~~PatternMatch·AnalysisSearch의 canonical 전환 포함 여부~~ — **해결(7단계)**
 3. ~~진행봉(IN_PROGRESS) 경로 보존 방식~~ — **해결(6단계)**: 7단계에서 IN_PROGRESS를
    canonical로 안 옮기고 기존 1분-temp 경로에 남기기로 확정.
 4. ~~interval 공통 계층(REST client·fetcher·window)의 5분 대응~~ — **완료(3단계)**

@@ -7,6 +7,7 @@ import com.chs.springboot.domain.analysis.dto.TemplateRequestDto;
 import com.chs.springboot.domain.analysis.dto.TemplateResponseDto;
 import com.chs.springboot.domain.analysis.model.AnalysisTemplate;
 import com.chs.springboot.domain.analysis.repository.AnalysisTemplateRepository;
+import com.chs.springboot.domain.binance.model.BinanceSymbolNormalizer;
 import com.chs.springboot.domain.binance.service.SignalCandleSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -69,11 +70,11 @@ public class AnalysisTemplateService {
 
     /**
      * delta 시간범위 조회 — interval에 따라 1m/5m 조회, 15m는 5m에서 집계
-     * @param symbol   'BTC' | 'ENA' → BTCUSDT / ENAUSDT 변환
+     * @param symbol   'BTCUSDT' | 'ENAUSDT' (짧은 심볼도 전체 심볼로 정규화)
      * @param interval '1m' | '5m' | '15m'
      */
     public List<Map<String, Object>> getDelta(String symbol, long startMs, long endMs, String interval) {
-        String dbSymbol = symbol.toUpperCase() + "USDT";
+        String dbSymbol = BinanceSymbolNormalizer.normalize(symbol);
         SignalCandleSource.Interval sourceInterval = SignalCandleSource.Interval.from(interval);
         if (sourceInterval == SignalCandleSource.Interval.FIVE_MINUTES
                 || sourceInterval == SignalCandleSource.Interval.FIFTEEN_MINUTES) {
@@ -133,7 +134,7 @@ public class AnalysisTemplateService {
             long dayStart = day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
             long dayEnd   = dayStart + 86_400_000L;
 
-            String dbSymbol = normalizeSymbol(symbol);
+            String dbSymbol = BinanceSymbolNormalizer.normalize(symbol);
             java.util.List<SignalCandleSource.SignalCandle> rows = candleSource.find(
                     dbSymbol, SignalCandleSource.Interval.FIVE_MINUTES, dayStart, dayEnd,
                     SignalCandleSource.QueryMode.COMPLETED);
@@ -187,11 +188,6 @@ public class AnalysisTemplateService {
         return new TemplateResponseDto(
                 t.getId(), t.getName(), t.getConditions(),
                 t.getPalette(), t.getCreatedAt(), t.getUpdatedAt());
-    }
-
-    private String normalizeSymbol(String symbol) {
-        String normalized = symbol.toUpperCase();
-        return normalized.endsWith("USDT") ? normalized : normalized + "USDT";
     }
 
 }

@@ -46,7 +46,7 @@ signal 페이지 long/short energy·청산 합계에 시작 시각을 직접 지
 검수→구현까지 끝났고 이 세션에서 커밋됨(`SignalController`/`SignalDataService`/`SignalPage`
 /`TopBar` + signal 전용 `datetimeLocal` 모듈). 캔들·OI 차트는 기존 프리셋 그대로 유지.
 
-### 계획 v3 (조건부 가능, 1~6단계+7단계 부분 완료) — kline temp 표 정식화 (다음 세션에서 이어감, 2026-09-04)
+### 계획 v3 (1~7단계 구현 완료, 운영 배포 확인 필요) — kline temp 표 정식화 (다음 세션에서 이어감, 2026-09-04)
 `agg_trade_1m_temp`가 설계상 "임시"인데 2026-08-31 raw tick 중단 이후 사실상 유일한
 실시간 kline 원천이 됨(전체 행을 자바로 읽는 구조라 512MB 힙 제약에서 위험). 표 이름
 `binance_kline_5m` 확정. Codex xhigh 적대적 검수(2026-09-04) 결과 v2는 처음엔 **보류** —
@@ -56,7 +56,7 @@ signal 페이지 long/short energy·청산 합계에 시작 시각을 직접 지
 1분 범위, 진행봉(IN_PROGRESS) 경로도 계획에 없었다). 재작성한 v3(`docs/binance/
 kline-temp-retire-plan.md`)에 9단계 실행 순서를 정리하고, 사용자 결정 필요 3가지
 (PatternMatch·AnalysisSearch 포함 / SPOT+FUTURES 유지 / `KLINE_5M` 표기 변경)를 모두
-확정(가/가/가) — 1단계(계약·범위 확정) 완료, **조건부 가능**으로 전환됨.
+확정(가/가/가) — 1~7단계 구현과 로컬 검증을 완료했으며, **운영 배포 확인이 남아 있다**.
 2단계(기준선 실측)도 완료 — `springboot/.env` 로컬 자격으로 공유 DB 직접 조회(읽기 전용).
 실측 대상은 `BTCUSDT`·`ENAUSDT` × `SPOT`·`FUTURES` 4개 조합뿐이며, legacy
 `agg_trade_1m`/`agg_trade_5m`가 cutover 이후 약 3.44일째 정지 상태임을 확인해 치명 2·3
@@ -109,25 +109,22 @@ read parity 0건 불일치), 기존 1분 temp 회귀 없음.
   (IN_PROGRESS·1분은 기존 temp 경로 그대로). `AnalysisTemplateService.getDelta()`에
   5분/15분 90일 상한 추가(무제한 조회 시 512MB 힙 위험 완화 — Codex 지적, SQL GROUP BY
   전환은 이번엔 보류).
-- **PatternMatchService·AnalysisSearchService 전환은 이번 범위에서 제외** — Codex 검수
-  결과 단순 교체가 아니라 별도 read model 설계가 필요할 만큼 커서(AggTrade5m 억지 변환
-  금지, LAG 경계·1분 검색 대상 등 결정 필요) 다음 세션으로 미룸. 두 서비스는 지금처럼
-  legacy 표를 계속 읽음(회귀 없음).
+- **PatternMatchService·AnalysisSearchService 전환 구현 완료, 배포 후 확인 필요** — 두 서비스 모두
+  `SignalCandleSource`를 사용해 cutover 이전 legacy 표와 이후 canonical/temp 표를 같은
+  계약으로 읽는다. 장기 분석 검색은 7일 단위로 나눠 읽어 힙 적재를 제한하고, 전환 후
+  호출되지 않는 legacy 유사 검색 repository 메서드는 삭제했다.
+- 분석 화면의 심볼은 `BTCUSDT`·`ENAUSDT` 전체 형식으로 통일했고, API 경계에서는 짧은
+  심볼도 한 번 정규화한다. 검색의 거래량 조건은 차트와 같은 base volume 단위를 사용한다.
 - 커밋 전 Codex commit-check(xhigh)로 결함 3건 추가 수정(in-flight 충돌 시 거짓 성공,
   manualBackfillRange 자체 경계 검증 부족, 90일 상한 계산 오버플로).
-- springboot 전체 테스트 스위트(434개) 통과.
+- springboot 전체 테스트 스위트(439개) 통과.
 
 **이 세션에서 추가로 확인됨**: `/api/signal/candles`(5m·15m) 72시간 범위 실운영 조회 —
 5분봉 861개·15분봉 286개 전부 간격 이상·null/0-캔들 0건, 백필 경계 포함 완전 연속. 7단계
 (부분) 작업은 이걸로 실제 검증까지 끝남.
 
 **다음 세션 할 일**:
-1. `/api/analysis/delta`·`/ws/candle/5m`·`/ws/candle/15m` 마저 확인(candles는 끝남).
-2. `ManualCollectCard.jsx`에 `KLINE_5M` 옵션 추가(8단계 항목, 우선순위 낮지만 관리자가
-   또 실수로 KLINE_1M을 누르지 않도록).
-3. `AnalysisDetectionScheduler` 시간창 계약 문제 별도 해결(이번 계획과 분리된 과제).
-4. `PatternMatchService`·`AnalysisSearchService`의 canonical/temp 전환 계획을 새로 짠다
-   (`codex-review-step7-plan.md` 3절 — 세션 스크래치패드, 다음 세션엔 없을 수 있으니
-   필요하면 핵심만 이 문서에 옮겨 적을 것).
-5. 8~9단계(gap 관리자 갱신, dual-write/rollback 검증 후 cutover) 착수.
+1. 새 심볼 계약·공통 원천 전환을 배포한 뒤 `/api/analysis/search`와 관련 화면을 실운영에서 확인.
+2. `AnalysisDetectionScheduler` 시간창 계약 문제 별도 해결.
+3. 8~9단계(gap 관리자 갱신, dual-write/rollback 검증 후 cutover) 착수.
 **죽음조건: 구현·배포가 끝나면 이 절과 `docs/binance/kline-temp-retire-plan.md`를 지운다.**
