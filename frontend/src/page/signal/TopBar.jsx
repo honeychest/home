@@ -22,6 +22,42 @@ const TEMPLATE_SELECT_STYLE = {
     overflow: 'hidden',
 };
 
+function CustomHistoryStartInput({ value, maxDate, onChange, inputStyle, wrapperStyle }) {
+    const datePart = value ? value.slice(0, 10) : '';
+    const hourPart = value ? value.slice(11, 13) : '';
+
+    const emit = (date, hour) => {
+        if (!date) {
+            onChange('');
+            return;
+        }
+        const h = (hour || '0').padStart(2, '0');
+        onChange(`${date}T${h}:00`);
+    };
+
+    return (
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center', ...wrapperStyle }}>
+            <input
+                type="date"
+                value={datePart}
+                max={maxDate}
+                onChange={(e) => emit(e.target.value, hourPart)}
+                style={inputStyle}
+            />
+            <input
+                type="number"
+                min="0"
+                max="23"
+                value={hourPart}
+                onChange={(e) => emit(datePart, e.target.value)}
+                placeholder="시"
+                style={{ ...inputStyle, flex: '0 0 44px', width: '44px' }}
+            />
+            <span style={{ color: 'var(--black-text-muted)', fontSize: '11px' }}>시</span>
+        </div>
+    );
+}
+
 export default function TopBar({
     symbol,
     onSymbolChange,
@@ -99,6 +135,7 @@ export default function TopBar({
         padding: '3px 6px',
     };
     const currentDatetimeLocal = msToDatetimeLocal(Date.now());
+    const currentDateOnly = currentDatetimeLocal.slice(0, 10);
 
     return (
         <>
@@ -225,12 +262,11 @@ export default function TopBar({
                             시작 시각 지정
                         </label>
                         {customHistoryEnabled && (
-                            <input
-                                type="datetime-local"
+                            <CustomHistoryStartInput
                                 value={customHistoryStart}
-                                max={currentDatetimeLocal}
-                                onChange={(e) => onCustomHistoryStartChange(e.target.value)}
-                                style={datetimeInputStyle}
+                                maxDate={currentDateOnly}
+                                onChange={onCustomHistoryStartChange}
+                                inputStyle={datetimeInputStyle}
                             />
                         )}
                     </div>
@@ -281,12 +317,12 @@ export default function TopBar({
             </div>
             {compact && customHistoryEnabled && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', minHeight: '36px', backgroundColor: 'var(--black-topbar-bg)', borderRadius: '8px', padding: '0 10px' }}>
-                    <input
-                        type="datetime-local"
+                    <CustomHistoryStartInput
                         value={customHistoryStart}
-                        max={currentDatetimeLocal}
-                        onChange={(e) => onCustomHistoryStartChange(e.target.value)}
-                        style={{ ...datetimeInputStyle, width: '100%' }}
+                        maxDate={currentDateOnly}
+                        onChange={onCustomHistoryStartChange}
+                        inputStyle={{ ...datetimeInputStyle, flex: 1 }}
+                        wrapperStyle={{ width: '100%' }}
                     />
                 </div>
             )}
