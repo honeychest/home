@@ -32,6 +32,5 @@
 적립 규칙 (frontend/AGENTS.md): 새 효과를 만들면 커밋 전에 이 카탈로그에 등록한다.
 등록 = visualSamples.js 에 항목 1개(key·label·intent·group·shape·example) +
 visualSamples.css 에 클래스·keyframes. 화면 CSS 에 일회성 keyframes 를 만들면 결함.
-recipe 처럼 자체 토큰을 쓰는 도메인은 직접 import 하지 말고 참고·복사로 자기 방식 적용.
 
 샘플 목록은 `visualSamples.js`, 실제 CSS는 `visualSamples.css`에 있습니다.

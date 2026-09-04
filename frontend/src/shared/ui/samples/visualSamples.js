@@ -35,7 +35,7 @@ export const VISUAL_EFFECT_SAMPLES = [
     {
         key: 'sample_status_pulse',
         label: 'Status Pulse',
-        intent: '분석 중 배지 등 상태 라벨의 은은한 깜빡임 (recipe 분석 중에서 적립)',
+        intent: '분석 중 배지 등 상태 라벨의 은은한 깜빡임',
         group: '진행·대기',
         shape: 'pill',
         className: 'sample_status_pulse',
@@ -193,7 +193,7 @@ export const VISUAL_EFFECT_SAMPLES = [
     {
         key: 'sample_tag_in',
         label: 'Tag In',
-        intent: '방금 추가된 태그·칩이 커지며 등장 (recipe 방금 넣음에서 적립)',
+        intent: '방금 추가된 태그·칩이 커지며 등장',
         group: '등장',
         shape: 'pill',
         oneShot: true,
@@ -251,7 +251,7 @@ export const VISUAL_EFFECT_SAMPLES = [
     {
         key: 'sample_sticker_arrive',
         label: 'Sticker Arrive',
-        intent: '아래에서 날아와 쾅 착지(스쿼시) — 새 항목 강조 (recipe 스티커에서 적립)',
+        intent: '아래에서 날아와 쾅 착지(스쿼시) — 새 항목 강조',
         group: '연출',
         shape: 'card',
         oneShot: true,
@@ -261,7 +261,7 @@ export const VISUAL_EFFECT_SAMPLES = [
     {
         key: 'sample_shockwave',
         label: 'Shockwave',
-        intent: '착지 지점에서 퍼지는 충격파 링 — arrive 와 짝 (recipe 스티커에서 적립)',
+        intent: '착지 지점에서 퍼지는 충격파 링 — arrive 와 짝',
         group: '연출',
         shape: 'ring',
         oneShot: true,

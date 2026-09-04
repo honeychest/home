@@ -1,5 +1,4 @@
 // [AGENT] CSS 치수 가드 — "화면에 아무것도 안 보이는" 사고를 커밋 전에 막는다 (frontend 전체 대상).
-// springboot 의 ArchUnit, recipe 의 platformIsolation.test.ts 와 같은 역할이다.
 //
 // 왜 문서가 아니라 테스트인가 (2026-07-25 신설):
 // iOS(사파리·iOS 크롬)에서 추천 카드가 통째로 안 보이는 일이 있었다. 카드에 폭·높이를 둘 다
@@ -80,7 +79,7 @@ describe('CSS 치수 가드 — aspect-ratio 로 치수를 역산하지 않는�
             'aspect-ratio 만으로 치수를 정하면 WebKit(iOS 사파리·iOS 크롬)에서 크기가 0 이 되어\n'
             + '요소가 화면에 아예 안 보입니다 (크롬·PC 에서는 멀쩡해 눈으로 못 잡습니다).\n'
             + '해당 규칙에 width 또는 height 를 함께 적으세요 — 부모가 확정 높이면 height: 100%.\n'
-            + '(2026-07-25 recipe 추천 카드 iOS 실기기 사고. frontend/AGENTS.md "금지" 절 참고)',
+            + '(frontend/AGENTS.md "금지" 절 참고)',
         ).toEqual([]);
     });
 });
