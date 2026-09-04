@@ -7,11 +7,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class HeartbeatWatchdogTest {
 
@@ -88,6 +91,28 @@ class HeartbeatWatchdogTest {
         watchdog(hb, recorder).evaluate();
 
         verify(recorder).record(KEY, HealthStatus.DOWN, "boom");
+    }
+
+    // 2026-09-04: 한 체크의 기록 실패가 나머지 체크·클러스터 발행까지 막던 결함의 회귀 테스트
+    @Test
+    void oneKeyRecordFailure_doesNotBlockOtherKeyOrClusterSnapshot() {
+        String otherKey = "sched-other";
+        HealthHeartbeat hb = heartbeatWith();
+        hb.register(otherKey, new HealthHeartbeat.Spec(10, 30));
+        hb.beat(KEY);
+        hb.beat(otherKey);
+
+        HealthCheckRecorder recorder = mock(HealthCheckRecorder.class);
+        doThrow(new RuntimeException("boom")).when(recorder).record(eq(KEY), any(), any());
+
+        LeaderElectionService leaderElection = mock(LeaderElectionService.class);
+        when(leaderElection.isLeader()).thenReturn(true);
+        HealthClusterSnapshot clusterSnapshot = mock(HealthClusterSnapshot.class);
+
+        new HeartbeatWatchdog(hb, recorder, leaderElection, clusterSnapshot).evaluate();
+
+        verify(recorder).record(eq(otherKey), eq(HealthStatus.UP), isNull());
+        verify(clusterSnapshot).publish();
     }
 
     private static final class MutableClock extends Clock {

@@ -6,12 +6,14 @@ package com.chs.springboot.global.monitor.health;
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
 import com.chs.springboot.global.redis.LeaderElectionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class FeedHealthEvaluator {
@@ -46,7 +48,17 @@ public class FeedHealthEvaluator {
             if (checkKey == null) {
                 continue;
             }
+            record(checkKey, fh);
+        }
+    }
+
+    // 키별 격리(InfraHealthEvaluator/HeartbeatWatchdog와 동일 패턴) — 한 피드의 기록 실패가
+    // 뒤 순서 피드의 평가까지 막지 않게.
+    private void record(String checkKey, FeedHealthRegistry.FeedHealth fh) {
+        try {
             recorder.record(checkKey, fh.status(), buildCause(fh));
+        } catch (Exception e) {
+            log.warn("[FeedHealth] {} 평가/기록 실패: {}", checkKey, e.getMessage());
         }
     }
 

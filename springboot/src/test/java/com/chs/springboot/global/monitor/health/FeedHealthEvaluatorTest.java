@@ -12,6 +12,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -73,6 +74,20 @@ class FeedHealthEvaluatorTest {
 
         // 비리더는 피드를 소유하지 않으므로 스냅샷 조회/기록 자체를 하지 않는다(flapping 방지)
         verifyNoInteractions(registry, recorder);
+    }
+
+    // 2026-09-04: 한 피드의 기록 실패가 나머지 피드 평가까지 막던 결함의 회귀 테스트
+    @Test
+    void oneFeedRecordFailure_doesNotBlockOtherFeed() {
+        when(registry.snapshot()).thenReturn(List.of(
+                feed(FeedHealthConfig.BINANCE_TICKER, HealthStatus.UP, 1L),
+                feed(FeedHealthConfig.UPBIT, HealthStatus.UP, 1L)));
+        doThrow(new RuntimeException("boom"))
+                .when(recorder).record(eq(HealthCheckCatalog.FEED_BINANCE_TICKER.key()), any(), any());
+
+        evaluator.evaluate();
+
+        verify(recorder).record(eq(HealthCheckCatalog.FEED_UPBIT.key()), eq(HealthStatus.UP), anyString());
     }
 
     @Test
