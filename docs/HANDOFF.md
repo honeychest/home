@@ -4,9 +4,9 @@
 > 새 세션(Claude·Codex 무관)은 이 파일이 비어 있지 않으면 먼저 읽고 이어서 작업한다.
 > **끝난 항목은 남기지 않고 지운다** (경위는 git 이력에 있다).
 
-## binance 자동매매 — LLM 시장 분석 다음 작업 (2026-09-02 이어서)
-배경·설계는 `docs/binance/CONTEXT.md` 단일 원본. 오늘 커밋 4개로 멀티 타임프레임
-(1m/5m/15m/4h) 라이브 버퍼 + 로컬 LLM(Mac-mini-LLM) 분석/질의응답 기능을 구현·수정
+## binance 자동매매 — LLM 시장 분석 다음 작업 (2026-09-04 이어서)
+배경·설계는 `docs/binance/CONTEXT.md` 단일 원본. 멀티 타임프레임
+(1m/5m/15m/4h/1d) 라이브 버퍼 + 로컬 LLM(Mac-mini-LLM) 분석/질의응답 기능을 구현·수정
 완료(`5d42b75`·`bebfdf0`·`e2e5543`·`8a32195`). 자동 5분 스케줄은 폐지하고 관리자가
 "분석 요청" 버튼을 눌러야만 LLM을 호출하도록 전환됨(리소스 낭비 우려로 사용자 요청).
 
@@ -22,10 +22,18 @@
 단위테스트 10케이스(MockRestServiceServer)로만 검증됨 — 다음에 리더가 자연 전환될 때
 실제 전달 경로를 한 번 더 확인하면 좋다.
 
+### 완료 — 오늘 세션 운영 확인과 일봉 인터벌 추가 (2026-09-04)
+- `/api/analysis/search` 실제 POST와 분석 화면을 운영에서 확인했다. ENAUSDT 15m·5m·1m과
+  BTCUSDT 1m 요청이 정상 결과를 반환했다.
+- `AnalysisDetectionScheduler`의 시간창을 `BinanceKlineWindow.safeEnd()` 기준으로 보정했다.
+  커밋 `12b88cb`가 push·배포됐고, 안전 경계에서 1440개 연속 봉을 확인했다.
+- 관리자 데이터 gap 검사를 canonical `binance_kline_5m` 기준 `KLINE_5M`으로 전환했다.
+  커밋 `27c6532`가 push·배포됐고, 관리자 화면과 DB shadow 비교에서 누락 0건을 확인했다.
+- LLM 시장 분석에 `BinanceKlineInterval.ONE_DAY`와 `kline_1d` 스트림, 툴·시스템 프롬프트 허용
+  범위를 추가했다. 커밋 `d255115` 완료, Spring Boot 전체 테스트 442개 통과. push·배포 완료.
+
 ### 다음 세션에서 할 일 (사용자가 요청, 다음으로 미룸)
-1. **일봉(1d) 인터벌 추가** — 지금 1m/5m/15m/4h 4개뿐인데 4시간봉으로는 장기 추세 판단에
-   부족하다는 지적. `BinanceKlineInterval`에 일봉을 추가하고 버퍼·툴·화면을 함께 확장한다.
-2. **시간 표시를 KST로 변환** — 화면에 epoch ms(long)가 그대로 노출되는 곳이 남아있다는 지적.
+1. **시간 표시를 KST로 변환** — 화면에 epoch ms(long)가 그대로 노출되는 곳이 남아있다는 지적.
    `formatTime` 헬퍼가 이미 적용된 곳과 안 된 곳을 구분해 확인 필요.
 3. **결론 가독성 개선** — 시스템 프롬프트에 "5줄 이내 결론부터" 지침을 추가했으나, 사용자가
    화면에서 아직 개선을 체감 못함 — 재배포됐으니 다음에 재확인 필요.
@@ -104,27 +112,28 @@ read parity 0건 불일치), 기존 1분 temp 회귀 없음.
   리더 인스턴스에서 4건 실행)** — DB 재확인: 4개 조합 전부 487/487, 표 전체가
   2026-08-31 12:50부터 지금까지 완전 연속. 실행 중 관리자 화면에 `KLINE_5M` 옵션이 없어
   첫 시도가 실수로 `KLINE_1M`(1분 temp)에 153건 들어갔으나 이미 채워진 구간이라 무해
-  확인(INSERT IGNORE) — `ManualCollectCard.jsx`에 옵션 추가는 8단계로 후속 과제화.
+  확인(INSERT IGNORE)했다. `ManualCollectCard.jsx`에는 `KLINE_1M`·`KLINE_5M` 옵션이 이미
+  존재해 추가 수정하지 않았다.
 - `BinanceKlineSignalCandleSource`의 5분 COMPLETED 읽기를 canonical로 전환 완료
   (IN_PROGRESS·1분은 기존 temp 경로 그대로). `AnalysisTemplateService.getDelta()`에
   5분/15분 90일 상한 추가(무제한 조회 시 512MB 힙 위험 완화 — Codex 지적, SQL GROUP BY
   전환은 이번엔 보류).
-- **PatternMatchService·AnalysisSearchService 전환 구현 완료, 배포 후 확인 필요** — 두 서비스 모두
+- **PatternMatchService·AnalysisSearchService 전환과 주요 운영 확인 완료** — 두 서비스 모두
   `SignalCandleSource`를 사용해 cutover 이전 legacy 표와 이후 canonical/temp 표를 같은
   계약으로 읽는다. 장기 분석 검색은 7일 단위로 나눠 읽어 힙 적재를 제한하고, 전환 후
-  호출되지 않는 legacy 유사 검색 repository 메서드는 삭제했다.
+  호출되지 않는 legacy 유사 검색 repository 메서드는 삭제했다. `/api/analysis/search` 실제
+  운영 요청도 정상 결과를 반환하는 것을 확인했다.
 - 분석 화면의 심볼은 `BTCUSDT`·`ENAUSDT` 전체 형식으로 통일했고, API 경계에서는 짧은
   심볼도 한 번 정규화한다. 검색의 거래량 조건은 차트와 같은 base volume 단위를 사용한다.
 - 커밋 전 Codex commit-check(xhigh)로 결함 3건 추가 수정(in-flight 충돌 시 거짓 성공,
   manualBackfillRange 자체 경계 검증 부족, 90일 상한 계산 오버플로).
-- springboot 전체 테스트 스위트(439개) 통과.
+- springboot 전체 테스트 스위트(442개) 통과.
 
 **이 세션에서 추가로 확인됨**: `/api/signal/candles`(5m·15m) 72시간 범위 실운영 조회 —
 5분봉 861개·15분봉 286개 전부 간격 이상·null/0-캔들 0건, 백필 경계 포함 완전 연속. 7단계
 (부분) 작업은 이걸로 실제 검증까지 끝남.
 
 **다음 세션 할 일**:
-1. 새 심볼 계약·공통 원천 전환을 배포한 뒤 `/api/analysis/search`와 관련 화면을 실운영에서 확인.
-2. `AnalysisDetectionScheduler` 시간창 계약 문제 별도 해결.
-3. 8~9단계(gap 관리자 갱신, dual-write/rollback 검증 후 cutover) 착수.
+1. 9단계 dual-write·rollback 검증과 old temp 보관 기간 정책을 확정.
+2. `d255115` push·배포 후 LLM 일봉 인터벌 운영 확인.
 **죽음조건: 구현·배포가 끝나면 이 절과 `docs/binance/kline-temp-retire-plan.md`를 지운다.**

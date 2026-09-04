@@ -26,8 +26,8 @@ v2는 "표 이름 확정 → 마이그레이션 → 백필 → 전환"이라는 
    진행봉(IN_PROGRESS) 경로. 아래 "전제 정정"과 "치명 결함" 절이 근거다.
 
 v3는 Codex가 제시한 9단계 실행 순서로 전면 재작성했다. 사용자가 범위를 확정한 뒤
-1~7단계와 `PatternMatchService`·`AnalysisSearchService`의 공통 원천 전환까지 구현·검증했다.
-현재 남은 것은 관리자 gap 운영과 롤백 기간 검증이다.
+1~8단계와 `PatternMatchService`·`AnalysisSearchService`의 공통 원천 전환까지 구현·운영
+확인했다. 현재 남은 것은 dual-write·롤백 기간 검증과 legacy 표 보관 정책이다.
 
 ## 정정 — SignalCandleSource에는 4시간 인터벌이 없다
 
@@ -195,7 +195,7 @@ chunk 단위로 읽고 이전 봉을 다음 구간으로 넘겨 가격 변화율
   전용, spot 사용 금지" 불변 규칙은 이 사실(delta 계산에는 spot 시세를 함께 쓴다)을 반영해
   문구를 갱신해야 한다 — canonical 전환과 별개로 처리할 문서 정정.
 - **관리자 표기를 `KLINE_1M`에서 `KLINE_5M`으로 바꾼다.** `DataGapAdminService`·
-  `DataGapCard.jsx`·`ManualCollectCard.jsx`를 실행 순서 8단계에서 함께 갱신, alias는
+  `DataGapCard.jsx`·`ManualCollectCard.jsx`에서 실행 순서 8단계로 갱신 완료했고, alias는
   두지 않는다.
 
 ## 짧은 구간(≤50분) 1분 조회 처리안 — [폐기, 2026-09-04, 6단계]
@@ -296,7 +296,7 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
      이 단계에서 미리 만들 코드가 없다.
    - "50분 이하 REST 경로"는 위에서 설계 자체를 폐기했으므로 이 항목은 대상이 없어짐.
 
-7. **[구현 완료, 배포 후 확인 필요, 2026-09-04] source 읽기 전환 — PatternMatch·AnalysisSearch 포함.**
+7. **[구현·주요 운영 확인 완료, 2026-09-04] source 읽기 전환 — PatternMatch·AnalysisSearch 포함.**
 
    착수 전 Codex xhigh 검수(계획 합의)로 발견: canonical 표는 매 회차 최근 48시간
    롤링 윈도우만 유지해서(4단계 참고), cutover~48시간 전 사이 **487개 5분봉이 canonical에
@@ -332,7 +332,8 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
       사용한다. 7일 단위로 나눠 읽고 이전 봉을 다음 구간으로 넘겨 LAG lookbehind 의미를
       보존한다. 전환 후 호출되지 않는 repository 유사 검색 메서드는 삭제했다.
     - 검증 endpoint: `/api/signal/pattern`·`/api/signal/score`·`/api/analysis/search`는
-      코드 전환과 회귀 테스트까지 완료했고, 운영 endpoint 확인은 배포 후 진행한다.
+      코드 전환과 회귀 테스트까지 완료했고, `/api/analysis/search` 실제 운영 요청도 정상
+      결과를 반환하는 것을 확인했다.
     - **[완료, 2026-09-04] `/api/signal/candles` 5분·15분 실운영 검증** — 맥미니 원격 세션이
      72시간 범위로 조회: 5분봉 861개(간격 이상 0건, null/0-캔들 0건), 15분봉 286개(동일)
       — 백필 경계 포함 완전 연속 확인.
@@ -372,13 +373,14 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
    차트 프리셋)가 빈 결과를 반환할 수 있다 — 배포와 백필 실행 사이에 시차가 있으면
    일시적 현상.
 
-8. **gap 관리자·운영 도구를 갱신한다.**
-   `KLINE_1M`→`KLINE_5M` 표기 변경 여부 확정 후 `DataGapAdminService`·
-   `DataGapAdminController`·`DataGapCard.jsx`·`ManualCollectCard.jsx` 함께 갱신. 48시간
-   밖 검사를 유지한다면 chunk 분할·결과 합산을 추가(위 "높음" 참고). gap 탐지와 리필의
-   책임을 분리하고, 관리자 조회마다 Binance를 무제한 호출하지 않도록 운영 제한을 둔다.
+8. **[완료, 2026-09-04] gap 관리자·운영 도구를 갱신한다.**
+   `DataGapAdminService`·`DataGapAdminController`·`DataGapCard.jsx`의 정식 gap 검사를
+   `KLINE_5M`·`binance_kline_5m` 기준으로 전환했다. `ManualCollectCard.jsx`에는 기존
+   `KLINE_1M`·`KLINE_5M` 옵션을 유지했다. 운영 관리자 화면 조회와 DB shadow 비교에서
+   BTCUSDT·ENAUSDT의 SPOT·FUTURES 네 조합 모두 48시간 누락 0건을 확인했다. 48시간 밖
+   검사는 현재 지원하지 않으며, gap 탐지와 리필의 책임은 분리된 상태다.
 
-9. **dual-write·rollback을 검증한 뒤에만 cutover한다.**
+9. **[미완료] dual-write·rollback을 검증한 뒤에만 cutover한다.**
    마이그레이션 배포 → canonical 백필 → old temp/canonical shadow 비교 → canonical+old
    temp 동시 쓰기 유지 → source read feature flag 전환 → 2인스턴스 rolling 상태 확인 →
    rollback artifact가 실제로 최근 구간을 읽는지 확인 → rollback 기간 종료 후 old temp

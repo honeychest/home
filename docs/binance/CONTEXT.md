@@ -1,7 +1,7 @@
 # binance 자동매매 — CONTEXT
 
 > 코드·그래프(GitNexus)가 줄 수 없는 것만 담는다 — 도메인 의미, 불변 규칙, 설계 '이유'.
-> **2026-09-02 기준 PoC(가능성 확인) 단계 — 주문 없는 정보성 분석 도구까지 구현됐다.**
+> **2026-09-04 기준 PoC(가능성 확인) 단계 — 주문 없는 정보성 분석 도구까지 구현됐다.**
 > 이 저장소엔 실시간 바이낸스 인프라와 관리자용 멀티 인터벌 시장 스냅샷·로컬 LLM 분석이 있다.
 > 분석은 `springboot`의 `LiveMarketDataService`가 유지하는 선물 kline 버퍼를 사용하고,
 > `frontend/src/page/admin/test/TradeTestPage.jsx`에서 확인한다.
@@ -11,7 +11,8 @@
 ## 1. 정의
 바이낸스 **선물(futures)** 자동매매. 오너는 선물만 거래하며 spot은 취급하지 않는다.
 현재 단계는 기존 binance 실시간 인프라(kline 수집)를 데이터 소스로 재사용하는 정보성 도구다.
-4개 인터벌의 시장 상태를 로컬 LLM이 읽기 전용 툴로 분석하며, 주문 실행은 향후 별도 단계다.
+5개 인터벌(1m·5m·15m·4h·1d)의 시장 상태를 로컬 LLM이 읽기 전용 툴로 분석하며,
+주문 실행은 향후 별도 단계다.
 
 ## 2. 핵심 제약
 - **spot과 선물은 완전히 다른 API/데이터다.** spot(`api.binance.com`)과 선물
@@ -30,7 +31,7 @@
 
 ## 3. 기존 인프라와 현재 분석 도구 현황 (요약 — 상세는 GitNexus·`docs/generated/be-binance.md`)
 - 실시간 WebSocket kline 수집 + watchdog/재연결 안정화 이미 구축됨 (`BinanceWebSocketStream` 등).
-- `LiveMarketDataService`가 BTCUSDT 선물의 1m·5m·15m·4h 확정봉을 인터벌별 1000개씩
+- `LiveMarketDataService`가 BTCUSDT 선물의 1m·5m·15m·4h·1d 확정봉을 인터벌별 1000개씩
   인메모리로 유지하고, 리더 노드에서만 백필·WebSocket 연결을 수행한다.
 - `BinanceKlineRestClient.fetchLatestClosedFutures`는 선물 서버 시각을 먼저 읽고 진행 중인 봉을
   제외한 뒤에만 `seed`에 넘긴다. 이 경로는 spot 메서드와 시그니처를 공유하지 않는다.
@@ -90,15 +91,22 @@
   API로 받아 쓰면 된다.
 
 ## 6. 아직 안 끝난 것 (다음 세션에서 이어감)
-- **kline 저장 원천 전환은 구현·배포 완료**: `binance_kline_5m`에 Binance 5분봉을 저장하고,
+- **kline 저장 원천 전환은 구현·배포·운영 확인 완료**: `binance_kline_5m`에 Binance 5분봉을 저장하고,
   `SignalCandleSource`가 cutover 이전 legacy 표와 이후 canonical/temp 표를 인터벌별로 합성한다.
   `PatternMatchService`와 `AnalysisSearchService`도 이 공통 원천을 사용한다.
   진행봉은 기존 1분 temp 경로에 남긴다.
-- **현재 세션의 계약 정리는 구현 완료, 배포 전**: 분석 화면·API의 심볼을 전체 형식으로
+- **분석 화면·API 계약 정리와 운영 확인 완료**: 분석 화면·API의 심볼을 전체 형식으로
   통일하고, 관리자에 `KLINE_5M` 수동 백필 옵션을 추가했다. 새 공통 원천 검색 경로는
-  테스트까지 끝났으며 배포 후 `/api/analysis/search`와 화면을 다시 확인한다.
-- **남은 운영 정리**: `AnalysisDetectionScheduler`의 신선도 지연과 시간창 계약을 정리하고,
-  관리자 gap 조회·롤백 기간·legacy 표 보관 정책을 확정한다. 세부 진행 기록은
+  테스트와 `/api/analysis/search` 운영 확인까지 끝났다.
+- **탐지 스케줄러 시간창 보정 완료**: `AnalysisDetectionScheduler`가
+  `BinanceKlineWindow.safeEnd()`를 사용해 정상 수집 지연을 결측으로 오판하지 않도록 했다.
+- **관리자 gap 조회 전환 완료**: `DataGapAdminService`와 화면의 정식 gap 검사를
+  `KLINE_5M`·`binance_kline_5m` 기준으로 전환했고, 운영 화면과 DB shadow 비교에서 누락
+  0건을 확인했다.
+- **LLM 일봉 인터벌 추가는 구현·배포 완료**: `BinanceKlineInterval`에 `1d`를 추가하고
+  라이브 버퍼·`BinanceAnalysisTools`·시스템 프롬프트를 확장했다. 커밋은 `d255115`이며
+  Spring Boot 전체 테스트 442개가 통과했다.
+- **남은 운영 정리**: dual-write·롤백 기간과 legacy 표 보관 정책을 확정한다. 세부 진행 기록은
   `docs/binance/kline-temp-retire-plan.md`에 남아 있다.
 - **포지션 데이터 연동**: 현재는 포지션 방향·진입가·레버리지·수량·마진 모드를 받지 않는다.
   연동 전에는 손절가 계산이나 주문 실행을 추가하지 않는다.

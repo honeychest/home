@@ -45,11 +45,16 @@ function CustomHistoryStartInput({ value, maxDate, onChange, inputStyle, wrapper
                 style={inputStyle}
             />
             <input
-                type="number"
-                min="0"
-                max="23"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
                 value={hourPart}
-                onChange={(e) => emit(datePart, e.target.value)}
+                onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 2);
+                    const clamped = digits === '' ? '' : String(Math.min(23, Number(digits)));
+                    emit(datePart, clamped);
+                }}
                 placeholder="시"
                 style={{ ...inputStyle, flex: '0 0 44px', width: '44px' }}
             />
