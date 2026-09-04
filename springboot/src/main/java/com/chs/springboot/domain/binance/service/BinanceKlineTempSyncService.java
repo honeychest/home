@@ -89,11 +89,15 @@ public class BinanceKlineTempSyncService {
 
     public void syncNow(long nowMs) {
         for (AggTradeCollectStatus status : statusRepository.findByEnabledTrue()) {
+            long startedAt = System.currentTimeMillis();
             try {
                 syncSymbol(status, nowMs);
+                log.info("[BinanceKlineTemp] {} {} 동기화 완료 elapsedMs={}",
+                        status.getSymbol(), status.getMarketType(), System.currentTimeMillis() - startedAt);
             } catch (Exception e) {
-                log.warn("[BinanceKlineTemp] {} {} 실패: {}",
-                        status.getSymbol(), status.getMarketType(), e.getMessage());
+                log.warn("[BinanceKlineTemp] {} {} 실패(elapsedMs={}): {}",
+                        status.getSymbol(), status.getMarketType(),
+                        System.currentTimeMillis() - startedAt, e.getMessage());
             }
         }
     }

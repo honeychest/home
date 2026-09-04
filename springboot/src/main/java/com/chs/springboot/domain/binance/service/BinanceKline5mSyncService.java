@@ -85,16 +85,18 @@ public class BinanceKline5mSyncService {
             return;
         }
         for (AggTradeCollectStatus status : statuses) {
+            long startedAt = System.currentTimeMillis();
             try {
                 RefillResult result = refillNow(status.getSymbol(), status.getMarketType(), clock.millis());
-                if (result.remainingGap() > 0) {
-                    log.info("[BinanceKline5m] {} {} 리필 후 남은 gap={} (fetched={} inserted={} leaderLostMidRun={})",
-                            status.getSymbol(), status.getMarketType(), result.remainingGap(),
-                            result.fetched(), result.inserted(), result.leaderLostMidRun());
-                }
+                log.info("[BinanceKline5m] {} {} 리필 완료 elapsedMs={} expected={} fetched={} inserted={} "
+                                + "presentAfter={} remainingGap={} leaderLostMidRun={}",
+                        status.getSymbol(), status.getMarketType(), System.currentTimeMillis() - startedAt,
+                        result.expected(), result.fetched(), result.inserted(),
+                        result.presentAfter(), result.remainingGap(), result.leaderLostMidRun());
             } catch (Exception e) {
-                log.warn("[BinanceKline5m] {} {} 리필 실패: {}",
-                        status.getSymbol(), status.getMarketType(), e.getMessage());
+                log.warn("[BinanceKline5m] {} {} 리필 실패(elapsedMs={}): {}",
+                        status.getSymbol(), status.getMarketType(),
+                        System.currentTimeMillis() - startedAt, e.getMessage());
             }
         }
     }
