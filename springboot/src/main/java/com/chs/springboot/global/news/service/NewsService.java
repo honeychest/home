@@ -6,6 +6,7 @@ import com.chs.springboot.global.monitor.health.HealthCheckRecorder;
 import com.chs.springboot.global.monitor.health.HealthHeartbeat;
 import com.chs.springboot.global.monitor.health.HealthStatus;
 import com.chs.springboot.global.news.dto.NewsItem;
+import com.chs.springboot.global.redis.LeaderElectionService;
 import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndFeed;
 import com.rometools.rome.io.SyndFeedInput;
@@ -46,16 +47,25 @@ public class NewsService {
     private static final String EXT_KEY = HealthCheckCatalog.EXT_NEWS_RSS.key();
     private final HealthHeartbeat healthHeartbeat;
     private final HealthCheckRecorder healthCheckRecorder;
+    private final LeaderElectionService leaderElection;
 
-    public NewsService(HealthHeartbeat healthHeartbeat, HealthCheckRecorder healthCheckRecorder) {
+    public NewsService(HealthHeartbeat healthHeartbeat, HealthCheckRecorder healthCheckRecorder,
+                        LeaderElectionService leaderElection) {
         this.healthHeartbeat = healthHeartbeat;
         this.healthCheckRecorder = healthCheckRecorder;
+        this.leaderElection = leaderElection;
     }
 
     // 앱 시작 시 1회 즉시 수집, 이후 5분마다 반복
     // fixedDelay: 이전 실행 완료 후 5분 뒤 재실행 (RSS 서버 부하 방지)
     @Scheduled(fixedDelay = 5 * 60 * 1000)
     public void refresh() {
+        // 앱 2인스턴스 — 리더만 실행(다른 스케줄러와 동일 패턴). 무가드로 두면 두 인스턴스가
+        // 각자 health_check_event 를 갱신해 대시보드에 반복 열림/닫힘이 찍힌다(2026-09-04 실측).
+        if (!leaderElection.isLeader()) {
+            return;
+        }
+
         List<NewsItem> collected = new ArrayList<>();
         int okCount = 0;
         String lastError = null;
