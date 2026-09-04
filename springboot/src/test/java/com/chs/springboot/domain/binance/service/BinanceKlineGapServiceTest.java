@@ -2,9 +2,10 @@ package com.chs.springboot.domain.binance.service;
 
 import com.chs.springboot.domain.binance.model.AggTradeCollectStatus;
 import com.chs.springboot.domain.binance.model.BinanceKline;
-import com.chs.springboot.domain.binance.model.BinanceKlineTempCandle;
+import com.chs.springboot.domain.binance.model.BinanceKline5m;
+import com.chs.springboot.domain.binance.model.BinanceKlineInterval;
 import com.chs.springboot.domain.binance.repository.AggTradeCollectStatusRepository;
-import com.chs.springboot.domain.binance.repository.BinanceKlineTempCandleRepository;
+import com.chs.springboot.domain.binance.repository.BinanceKline5mRepository;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -25,30 +26,31 @@ import static org.mockito.Mockito.when;
 class BinanceKlineGapServiceTest {
 
     private final AggTradeCollectStatusRepository statusRepository = mock(AggTradeCollectStatusRepository.class);
-    private final BinanceKlineTempCandleRepository tempRepository = mock(BinanceKlineTempCandleRepository.class);
+    private final BinanceKline5mRepository canonicalRepository = mock(BinanceKline5mRepository.class);
     private final BinanceKlineRangeFetcher rangeFetcher = mock(BinanceKlineRangeFetcher.class);
-    private final Clock clock = Clock.fixed(Instant.ofEpochMilli(2L * 86_400_000L + 300_000L), ZoneOffset.UTC);
+    private final Clock clock = Clock.fixed(Instant.ofEpochMilli(2L * 86_400_000L + 900_000L), ZoneOffset.UTC);
 
     @Test
     void groupsOnlyConsecutiveMissingKlinesAndUsesExclusiveEnd() {
         when(statusRepository.findByEnabledTrue()).thenReturn(List.of(status("BTCUSDT", "SPOT")));
-        when(tempRepository.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
-                eq("BTCUSDT"), eq("SPOT"), eq(0L), eq(240_000L)))
-                .thenReturn(List.of(candle(60_000L)));
-        when(rangeFetcher.fetch("BTCUSDT", "SPOT", 0L, 240_000L))
+        when(canonicalRepository.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
+                eq("BTCUSDT"), eq("SPOT"), eq(0L), eq(1_200_000L)))
+                .thenReturn(List.of(candle(300_000L)));
+        when(rangeFetcher.fetch("BTCUSDT", "SPOT", 0L, 1_200_000L))
                 .thenReturn(new BinanceKlineRangeFetcher.RangeResult(
-                        List.of(kline(0L), kline(60_000L), kline(120_000L), kline(180_000L)), false, 1));
+                        List.of(kline(0L), kline(300_000L), kline(600_000L), kline(900_000L)), false, 1));
 
         List<Map<String, Object>> result = new BinanceKlineGapService(
-                statusRepository, tempRepository, rangeFetcher, clock)
-                .findGaps(null, 0L, 240_000L);
+                statusRepository, canonicalRepository, rangeFetcher, clock)
+                .findGaps(null, 0L, 1_200_000L);
 
         assertEquals(2, result.size());
         assertEquals(0L, result.get(0).get("gap_start_ms"));
-        assertEquals(60_000L, result.get(0).get("gap_end_ms"));
+        assertEquals(300_000L, result.get(0).get("gap_end_ms"));
         assertEquals(1, result.get(0).get("missing_candles"));
-        assertEquals(120_000L, result.get(1).get("gap_start_ms"));
-        assertEquals(240_000L, result.get(1).get("gap_end_ms"));
+        assertEquals(600_000L, result.get(1).get("gap_start_ms"));
+        assertEquals(1_200_000L, result.get(1).get("gap_end_ms"));
+        assertEquals(2, result.get(1).get("missing_candles"));
         assertEquals("GAP", result.get(1).get("status"));
     }
 
@@ -56,16 +58,16 @@ class BinanceKlineGapServiceTest {
     void reportsEmptyAndPartialFailuresInsteadOfReturningAnEmptyGapList() {
         when(statusRepository.findByEnabledTrue()).thenReturn(List.of(
                 status("BTCUSDT", "SPOT"), status("ENAUSDT", "FUTURES")));
-        when(tempRepository.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
-                anyLongString(), anyLongString(), eq(0L), eq(60_000L))).thenReturn(List.of());
-        when(rangeFetcher.fetch("BTCUSDT", "SPOT", 0L, 60_000L))
+        when(canonicalRepository.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
+                anyLongString(), anyLongString(), eq(0L), eq(300_000L))).thenReturn(List.of());
+        when(rangeFetcher.fetch("BTCUSDT", "SPOT", 0L, 300_000L))
                 .thenReturn(new BinanceKlineRangeFetcher.RangeResult(List.of(), true, 1));
-        when(rangeFetcher.fetch("ENAUSDT", "FUTURES", 0L, 60_000L))
+        when(rangeFetcher.fetch("ENAUSDT", "FUTURES", 0L, 300_000L))
                 .thenThrow(new IllegalStateException("page did not advance"));
 
         List<Map<String, Object>> result = new BinanceKlineGapService(
-                statusRepository, tempRepository, rangeFetcher, clock)
-                .findGaps(null, 0L, 60_000L);
+                statusRepository, canonicalRepository, rangeFetcher, clock)
+                .findGaps(null, 0L, 300_000L);
 
         assertEquals(2, result.size());
         assertEquals("ERROR", result.get(0).get("status"));
@@ -75,13 +77,13 @@ class BinanceKlineGapServiceTest {
     @Test
     void defaultsToTwoDaysAndRejectsLongOrUnsafeRanges() {
         when(statusRepository.findByEnabledTrue()).thenReturn(List.of(status("BTCUSDT", "SPOT")));
-        long safeEnd = BinanceKlineWindow.safeEnd(clock.millis());
-        when(tempRepository.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
+        long safeEnd = BinanceKlineWindow.safeEnd(clock.millis(), BinanceKlineInterval.FIVE_MINUTES);
+        when(canonicalRepository.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
                 eq("BTCUSDT"), eq("SPOT"), anyLong(), anyLong())).thenReturn(List.of());
         when(rangeFetcher.fetch(eq("BTCUSDT"), eq("SPOT"), anyLong(), anyLong()))
-                .thenReturn(new BinanceKlineRangeFetcher.RangeResult(List.of(kline(safeEnd - 60_000L)), false, 1));
+                .thenReturn(new BinanceKlineRangeFetcher.RangeResult(List.of(kline(safeEnd - 300_000L)), false, 1));
         BinanceKlineGapService service = new BinanceKlineGapService(
-                statusRepository, tempRepository, rangeFetcher, clock);
+                statusRepository, canonicalRepository, rangeFetcher, clock);
 
         service.findGaps(null, null, null);
         org.mockito.Mockito.verify(rangeFetcher).fetch(
@@ -91,7 +93,7 @@ class BinanceKlineGapServiceTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.findGaps(null, 0L, 49L * 60L * 60L * 1000L));
         assertThrows(IllegalArgumentException.class,
-                () -> service.findGaps(null, 0L, safeEnd + 60_000L));
+                () -> service.findGaps(null, 0L, safeEnd + 300_000L));
     }
 
     private static String anyLongString() {
@@ -106,8 +108,8 @@ class BinanceKlineGapServiceTest {
         return status;
     }
 
-    private BinanceKlineTempCandle candle(long timeMs) {
-        BinanceKlineTempCandle candle = new BinanceKlineTempCandle();
+    private BinanceKline5m candle(long timeMs) {
+        BinanceKline5m candle = new BinanceKline5m();
         candle.setCandleTimeMs(timeMs);
         return candle;
     }

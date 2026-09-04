@@ -12,8 +12,8 @@ export default function DataGapCard({ dataGap, collectLoading, collectError }) {
         handleCheck, handleBulkCollect,
     } = dataGap;
 
-    const displayLimit = activeCheck?.type === 'KLINE_1M'
-        ? 'KLINE_1M 행 개수 제한 없음, 범위는 최대 48시간'
+    const displayLimit = activeCheck?.type === 'KLINE_5M'
+        ? 'KLINE_5M 행 개수 제한 없음, 범위는 최대 48시간'
         : `기존 갭 최대 ${GAP_ROW_DISPLAY_LIMIT}건 표시`;
 
     return (

@@ -30,4 +30,16 @@ describe('mergeGapRanges', () => {
             { gap_start_ms: 240_000, gap_end_ms: 300_000 },
         ]);
     });
+
+    it('merges canonical five-minute ranges on five-minute boundaries', () => {
+        const rows = [
+            { gap_start_ms: 600_000, gap_end_ms: 900_000 },
+            { gap_start_ms: 0, gap_end_ms: 300_000 },
+            { gap_start_ms: 300_000, gap_end_ms: 600_000 },
+        ];
+
+        expect(mergeGapRanges(rows, 300_000)).toEqual([
+            { start: 0, end: 900_000 },
+        ]);
+    });
 });

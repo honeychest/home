@@ -2,7 +2,7 @@
 
 export const CHECKS = [
     { type: 'RAW_AGG_TRADE', label: 'Raw AggTrade (레거시, 7일)', days: 7,    desc: 'agg_trade_id 연속성 갭 · 최근 7일' },
-    { type: 'KLINE_1M',      label: 'Kline 1분봉 (48시간)', days: 2, desc: 'Binance kline candle_time 누락 - 최근 48시간' },
+    { type: 'KLINE_5M',      label: 'Kline 5분봉 (정식, 48시간)', days: 2, desc: 'Binance kline 5분봉 candle_time 누락 - 최근 48시간' },
     { type: 'AGG_1M',        label: '1분봉',               days: null, desc: 'candle_time_ms 1분 간격 초과' },
     { type: 'AGG_5M',        label: '5분봉',               days: null, desc: 'candle_time_ms 5분 간격 초과' },
     { type: 'OI',            label: 'Open Interest',      days: null, desc: '10분 이상 공백' },

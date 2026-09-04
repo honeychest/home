@@ -60,6 +60,7 @@ export default function useDataGap({ setJobs, defaultSymbol }) {
         if (selectedRows.size === 0 || !activeCheck) return;
         const selected = [...selectedRows].map(i => rows[i]).filter(isRowSelectable);
         const isIdBasedType = ID_BASED.has(activeCheck.type);
+        const intervalMs = activeCheck.type === 'KLINE_5M' ? 300_000 : 60_000;
 
         // symbol+market_type 그룹핑
         const groups = {};
@@ -79,7 +80,7 @@ export default function useDataGap({ setJobs, defaultSymbol }) {
                     body.fromId = Math.min(...g.rows.map(r => Number(r.gap_start_id)));
                     body.toId   = Math.max(...g.rows.map(r => Number(r.gap_end_id)));
                 } else {
-                    for (const range of mergeGapRanges(g.rows)) {
+                    for (const range of mergeGapRanges(g.rows, intervalMs)) {
                         await adminApi.postBackfillCollect({
                             ...body,
                             fromMs: range.start,

@@ -29,7 +29,7 @@ public class DataGapAdminController {
         return ResponseEntity.ok(Map.of("canAccess", true));
     }
 
-    /** 누락 구간 조회 — type: RAW_AGG_TRADE | AGG_1M | AGG_5M | KLINE_1M | FORCE_ORDER | OI */
+    /** 누락 구간 조회 — type: RAW_AGG_TRADE | AGG_1M | AGG_5M | KLINE_5M | FORCE_ORDER | OI */
     @GetMapping("/check")
     public ResponseEntity<?> check(
             @RequestParam String type,

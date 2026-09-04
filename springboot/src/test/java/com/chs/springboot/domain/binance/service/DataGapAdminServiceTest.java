@@ -22,7 +22,7 @@ class DataGapAdminServiceTest {
 
         DataGapAdminService service = new DataGapAdminService(jdbcTemplate, klineGapService);
 
-        assertEquals(expected, service.checkGap("KLINE_1M", 2, null, null));
+        assertEquals(expected, service.checkGap("KLINE_5M", 2, null, null));
         verify(klineGapService).findGaps(2, null, null);
     }
 }
