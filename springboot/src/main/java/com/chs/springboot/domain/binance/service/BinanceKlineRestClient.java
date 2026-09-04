@@ -15,7 +15,6 @@ import java.util.List;
 @Component
 public class BinanceKlineRestClient {
 
-    private static final String INTERVAL = "1m";
     private static final int PAGE_LIMIT = 1000;
     private static final int LATEST_CANDLE_MAX_LIMIT = 1000;
 
@@ -99,11 +98,21 @@ public class BinanceKlineRestClient {
         }
     }
 
+    /** 1분봉 조회(기존 호출부 호환 — interval 생략 시 1분으로 고정된다). */
     public List<BinanceKline> fetchPage(
             String symbol,
             String marketType,
             long startTimeMs,
             long endTimeMsExclusive) {
+        return fetchPage(symbol, marketType, startTimeMs, endTimeMsExclusive, BinanceKlineInterval.ONE_MINUTE);
+    }
+
+    public List<BinanceKline> fetchPage(
+            String symbol,
+            String marketType,
+            long startTimeMs,
+            long endTimeMsExclusive,
+            BinanceKlineInterval interval) {
         if (endTimeMsExclusive <= startTimeMs) {
             return List.of();
         }
@@ -124,7 +133,7 @@ public class BinanceKlineRestClient {
                 .uri(uriBuilder -> uriBuilder
                         .path(path)
                         .queryParam("symbol", symbol)
-                        .queryParam("interval", INTERVAL)
+                        .queryParam("interval", interval.label())
                         .queryParam("startTime", startTimeMs)
                         .queryParam("endTime", endTimeMsExclusive - 1L)
                         .queryParam("limit", PAGE_LIMIT)

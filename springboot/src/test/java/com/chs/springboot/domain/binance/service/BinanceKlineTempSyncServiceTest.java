@@ -2,6 +2,7 @@ package com.chs.springboot.domain.binance.service;
 
 import com.chs.springboot.domain.binance.model.AggTradeCollectStatus;
 import com.chs.springboot.domain.binance.model.BinanceKline;
+import com.chs.springboot.domain.binance.model.BinanceKlineInterval;
 import com.chs.springboot.domain.binance.model.BinanceKlineTempCandle;
 import com.chs.springboot.domain.binance.repository.AggTradeCollectStatusRepository;
 import com.chs.springboot.domain.binance.repository.BinanceKlineTempCandleRepository;
@@ -54,7 +55,7 @@ class BinanceKlineTempSyncServiceTest {
         when(tempCandleRepository.findMaxCandleTimeMsBySymbolAndMarketType("BTCUSDT", "SPOT"))
                 .thenReturn(Optional.of(60_000L));
         BinanceKline kline = kline(120_000L);
-        when(restClient.fetchPage(eq("BTCUSDT"), eq("SPOT"), eq(120_000L), eq(180_000L)))
+        when(restClient.fetchPage(eq("BTCUSDT"), eq("SPOT"), eq(120_000L), eq(180_000L), eq(BinanceKlineInterval.ONE_MINUTE)))
                 .thenReturn(List.of(kline));
         when(tempWriter.insertIgnore(eq("BTCUSDT"), eq("SPOT"), any())).thenReturn(1);
 
@@ -62,7 +63,7 @@ class BinanceKlineTempSyncServiceTest {
                 leaderElectionService, statusRepository, tempCandleRepository, restClient, tempWriter)
                 .syncNow(309_999L);
 
-        verify(restClient).fetchPage("BTCUSDT", "SPOT", 120_000L, 180_000L);
+        verify(restClient).fetchPage("BTCUSDT", "SPOT", 120_000L, 180_000L, BinanceKlineInterval.ONE_MINUTE);
         verify(tempWriter).insertIgnore(eq("BTCUSDT"), eq("SPOT"), any());
         verify(tempCandleRepository, never()).findMaxCandleTimeMsBySymbolAndMarketType("BTCUSDT", "FUTURES");
     }
@@ -115,7 +116,7 @@ class BinanceKlineTempSyncServiceTest {
         long nowMs = 100L * BinanceKlineWindow.HOUR_MS + 1_234L;
         long safeEnd = BinanceKlineWindow.safeEnd(nowMs);
         long cappedStart = safeEnd - BinanceKlineRangeFetcher.MAX_RANGE_MS;
-        when(restClient.fetchPage(eq("BTCUSDT"), eq("SPOT"), eq(cappedStart), eq(safeEnd)))
+        when(restClient.fetchPage(eq("BTCUSDT"), eq("SPOT"), eq(cappedStart), eq(safeEnd), eq(BinanceKlineInterval.ONE_MINUTE)))
                 .thenReturn(List.of(kline(cappedStart)));
         when(tempWriter.insertIgnore(eq("BTCUSDT"), eq("SPOT"), any())).thenReturn(1);
 
@@ -123,7 +124,7 @@ class BinanceKlineTempSyncServiceTest {
                 leaderElectionService, statusRepository, tempCandleRepository, restClient, tempWriter)
                 .syncNow(nowMs);
 
-        verify(restClient).fetchPage("BTCUSDT", "SPOT", cappedStart, safeEnd);
+        verify(restClient).fetchPage("BTCUSDT", "SPOT", cappedStart, safeEnd, BinanceKlineInterval.ONE_MINUTE);
     }
 
     @Test

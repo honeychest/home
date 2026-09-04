@@ -64,6 +64,19 @@ class BinanceKlineRestClientTest {
     }
 
     @Test
+    void fetchPageWithFiveMinuteIntervalSendsFiveMinuteLabel() {
+        server.expect(requestTo("https://spot.test/api/v3/klines?symbol=BTCUSDT&interval=5m&startTime=0&endTime=299999&limit=1000"))
+                .andExpect(method(GET))
+                .andExpect(queryParam("interval", equalTo("5m")))
+                .andRespond(withSuccess(
+                        "[[0,\"1\",\"2\",\"0.5\",\"1.5\",\"10\",299999,\"15\",3,\"5\",\"7.5\",\"0\"]]",
+                        org.springframework.http.MediaType.APPLICATION_JSON));
+
+        assertEquals(1, client.fetchPage("BTCUSDT", "SPOT", 0L, 300_000L, BinanceKlineInterval.FIVE_MINUTES).size());
+        server.verify();
+    }
+
+    @Test
     void latestClosedFuturesUsesFuturesServerTimeAndExcludesInProgressCandle() {
         server.expect(requestTo("https://futures.test/fapi/v1/time"))
                 .andExpect(method(GET))

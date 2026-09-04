@@ -132,11 +132,47 @@ signal 페이지 long/short energy·청산 합계에 시작 시각을 직접 지
 검수→구현까지 끝났고 이 세션에서 커밋됨(`SignalController`/`SignalDataService`/`SignalPage`
 /`TopBar` + signal 전용 `datetimeLocal` 모듈). 캔들·OI 차트는 기존 프리셋 그대로 유지.
 
-### 계획만 완료 — kline temp 표 정식화 (다음 세션에서 이어감)
+### 계획 v3 (조건부 가능, 1~6단계 완료) — kline temp 표 정식화 (다음 세션에서 이어감, 2026-09-04)
 `agg_trade_1m_temp`가 설계상 "임시"인데 2026-08-31 raw tick 중단 이후 사실상 유일한
-실시간 kline 원천이 됨(전체 행을 자바로 읽는 구조라 512MB 힙 제약에서 위험). 5분 네이티브
-저장 + 롤업 대신 리필 방식으로 재설계하는 계획을 `docs/binance/kline-temp-retire-plan.md`에
-정리함(GitNexus로 확인: 지켜야 할 경계는 `SignalCandleSource` 인터페이스뿐, 그 아래는
-자유롭게 재작성 가능). **다음 세션 할 일**: 표 이름 확정(가안 `binance_kline_5m` 권장,
-계획 문서 참고) → 구현 착수.
+실시간 kline 원천이 됨(전체 행을 자바로 읽는 구조라 512MB 힙 제약에서 위험). 표 이름
+`binance_kline_5m` 확정. Codex xhigh 적대적 검수(2026-09-04) 결과 v2는 처음엔 **보류** —
+`SignalCandleSource` 인터페이스만 지키면 된다는 v2의 GitNexus 기반 전제가 불완전했다(이
+인터페이스를 우회해 legacy 표를 직접 읽는 `PatternMatchService`·`AnalysisSearchService`를
+놓쳤고, `DataIntegrityEvaluator`(60분)·`AnalysisDetectionScheduler`(1440분)가 요구하는
+1분 범위, 진행봉(IN_PROGRESS) 경로도 계획에 없었다). 재작성한 v3(`docs/binance/
+kline-temp-retire-plan.md`)에 9단계 실행 순서를 정리하고, 사용자 결정 필요 3가지
+(PatternMatch·AnalysisSearch 포함 / SPOT+FUTURES 유지 / `KLINE_5M` 표기 변경)를 모두
+확정(가/가/가) — 1단계(계약·범위 확정) 완료, **조건부 가능**으로 전환됨.
+2단계(기준선 실측)도 완료 — `springboot/.env` 로컬 자격으로 공유 DB 직접 조회(읽기 전용).
+실측 대상은 `BTCUSDT`·`ENAUSDT` × `SPOT`·`FUTURES` 4개 조합뿐이며, legacy
+`agg_trade_1m`/`agg_trade_5m`가 cutover 이후 약 3.44일째 정지 상태임을 확인해 치명 2·3
+(PatternMatch·AnalysisSearch 고립)이 실측으로 재확인됨. 15분 AnalysisTemplate delta는
+자바 집계 대신 SQL GROUP BY 전환을 권장하는 결론으로 "미확정 사항" 해소.
+3단계(interval 공통 계층)도 완료 — `BinanceKlineRestClient`·`BinanceKlineRangeFetcher`·
+`BinanceKlineWindow`에 `BinanceKlineInterval`(기존 enum, `FIVE_MINUTES` 이미 있음)을 받는
+오버로드를 additive로 추가, 기존 1분 경로는 시그니처·동작 변경 없음. 테스트 4개 클래스
+(계획엔 3종만 적혀 있었으나 `BinanceKlineTempSyncServiceTest`도 mock stub 갱신 필요해서
+같이 처리) 29개 전부 통과, compile 통과.
+4단계(마이그레이션+repository)도 완료 — `V11__add_binance_kline_5m.sql` + `BinanceKline5m`
+entity + `BinanceKline5mRepository` 신설, 순수 additive라 기존 코드 영향 없음. **아직 실제
+DB엔 적용 안 됨**(로컬·prod가 같은 DB를 봐서 다음 재기동 때 Flyway가 자동 적용 — 배포·재기동
+시점은 사용자가 정함).
+5단계(writer·sync)도 완료 — `BinanceKline5mWriter`+`BinanceKline5mSyncService` 신설.
+"tail vs gap 별도 경로"가 아니라 "매 회차 최근 48시간 전체를 리필"하는 단일 경로로 구현
+(RefillResult 5개 지표, gap 병합, 회차당 20-range 상한, range마다 리더 재확인, 429/5xx
+재시도, manualRefill 팔로워 차단). 커밋 전 Codex commit-check(xhigh)로 결함 2건 추가 수정
+(상태 조회 실패 격리, 쓰기 직전 리더 재확인). 테스트 11개 신규 통과, binance 도메인 전체
+207개 회귀 없음. **스케줄러는 아직 실질적으로 아무 일도 안 함**(binance_kline_5m 표가 실제
+DB에 없어서 — 4단계 참고, 배포 전까지는 무해).
+6단계(1분·진행봉 경로 보존)도 완료 — 검증만 하고 **새 코드는 안 씀**: `DataIntegrityEvaluator`
+·`AnalysisDetectionScheduler`가 `Interval.ONE_MINUTE`만 쓰는 걸 재확인(이번 v3가 ONE_MINUTE
+읽기 경로를 애초에 안 건드려서 구조적으로 무영향, 기존 테스트 7개 그대로 통과), 진행봉은
+7단계에서 IN_PROGRESS를 canonical로 안 옮기고 지금 1분-temp 경로에 남기기로 확정. "50분
+이하만 REST" 옛 설계는 폐기(1분 temp 전량 유지로 대체).
+**다음 세션 할 일**: v3 실행 순서 7단계(source 읽기 전환 — canonical shadow read 비교 →
+`BinanceKlineSignalCandleSource`의 5분 COMPLETED 읽기를 canonical로 전환(IN_PROGRESS·1분은
+유지) → PatternMatchService·AnalysisSearchService를 canonical로 옮김 → 전환 후 6개
+엔드포인트 확인)부터 착수. **주의**: 이 단계부터는 실제 데이터가 존재해야 shadow read
+비교가 가능한데, `binance_kline_5m`는 아직 실제 DB에 없다(4단계) — 배포·마이그레이션
+적용 후에나 실제 데이터로 검증 가능. 착수 전에 배포 여부를 사용자와 확인할 것.
 **죽음조건: 구현·배포가 끝나면 이 절과 `docs/binance/kline-temp-retire-plan.md`를 지운다.**

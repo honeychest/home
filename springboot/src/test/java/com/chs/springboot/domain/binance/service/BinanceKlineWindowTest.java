@@ -1,5 +1,6 @@
 package com.chs.springboot.domain.binance.service;
 
+import com.chs.springboot.domain.binance.model.BinanceKlineInterval;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,5 +37,29 @@ class BinanceKlineWindowTest {
         BinanceKlineWindow window = BinanceKlineWindow.fromLastCandle(99L * BinanceKlineWindow.INTERVAL_MS, nowMs, 48L);
 
         assertTrue(window.isEmpty());
+    }
+
+    @Test
+    void fiveMinuteIntervalScalesSafeDelayToTenMinutes() {
+        long fiveMinMs = BinanceKlineInterval.FIVE_MINUTES.intervalMs();
+        long nowMs = 48L * BinanceKlineWindow.HOUR_MS + 12_345L;
+
+        long safeEnd = BinanceKlineWindow.safeEnd(nowMs, BinanceKlineInterval.FIVE_MINUTES);
+
+        long expectedBoundary = Math.floorDiv(nowMs, fiveMinMs) * fiveMinMs;
+        assertEquals(expectedBoundary - 2 * fiveMinMs, safeEnd);
+    }
+
+    @Test
+    void fiveMinuteIntervalStartsAfterTheLastStoredCandle() {
+        long fiveMinMs = BinanceKlineInterval.FIVE_MINUTES.intervalMs();
+        long nowMs = 102L * fiveMinMs + 9_999L;
+
+        BinanceKlineWindow window = BinanceKlineWindow.fromLastCandle(
+                98L * fiveMinMs, nowMs, 48L, BinanceKlineInterval.FIVE_MINUTES);
+
+        assertEquals(99L * fiveMinMs, window.startTimeMs());
+        assertEquals(100L * fiveMinMs, window.endTimeMsExclusive());
+        assertTrue(window.nextPageStart(99L * fiveMinMs, BinanceKlineInterval.FIVE_MINUTES) > window.startTimeMs());
     }
 }
