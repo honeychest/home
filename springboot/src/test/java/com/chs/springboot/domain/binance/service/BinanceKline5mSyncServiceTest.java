@@ -87,6 +87,122 @@ class BinanceKline5mSyncServiceTest {
     }
 
     @Test
+    void manualBackfillRangeThrowsWhenInstanceIsNotLeader() {
+        LeaderElectionService leaderElectionService = mock(LeaderElectionService.class);
+        when(leaderElectionService.isLeader()).thenReturn(false);
+        BinanceKline5mSyncService service = new BinanceKline5mSyncService(
+                leaderElectionService, mock(AggTradeCollectStatusRepository.class),
+                mock(BinanceKline5mRepository.class), mock(BinanceKlineRangeFetcher.class),
+                mock(BinanceKline5mWriter.class), FIXED_CLOCK);
+
+        assertThrowsIllegalState(() -> service.manualBackfillRange("BTCUSDT", "SPOT", 0L, INTERVAL_MS));
+    }
+
+    @Test
+    void manualBackfillRangeRejectsRangesLongerThan48Hours() {
+        LeaderElectionService leaderElectionService = mock(LeaderElectionService.class);
+        when(leaderElectionService.isLeader()).thenReturn(true);
+        BinanceKline5mSyncService service = new BinanceKline5mSyncService(
+                leaderElectionService, mock(AggTradeCollectStatusRepository.class),
+                mock(BinanceKline5mRepository.class), mock(BinanceKlineRangeFetcher.class),
+                mock(BinanceKline5mWriter.class), FIXED_CLOCK);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () ->
+                service.manualBackfillRange("BTCUSDT", "SPOT", 0L, BinanceKlineRangeFetcher.MAX_RANGE_MS + INTERVAL_MS));
+    }
+
+    @Test
+    void manualBackfillRangeRejectsRangeNotOnFiveMinuteBoundary() {
+        LeaderElectionService leaderElectionService = mock(LeaderElectionService.class);
+        when(leaderElectionService.isLeader()).thenReturn(true);
+        BinanceKline5mSyncService service = new BinanceKline5mSyncService(
+                leaderElectionService, mock(AggTradeCollectStatusRepository.class),
+                mock(BinanceKline5mRepository.class), mock(BinanceKlineRangeFetcher.class),
+                mock(BinanceKline5mWriter.class), FIXED_CLOCK);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () ->
+                service.manualBackfillRange("BTCUSDT", "SPOT", 60_000L, 360_000L)); // 1분 경계 — 5분 아님
+    }
+
+    @Test
+    void manualBackfillRangeRejectsEndTimeAfterSafeEnd() {
+        LeaderElectionService leaderElectionService = mock(LeaderElectionService.class);
+        when(leaderElectionService.isLeader()).thenReturn(true);
+        BinanceKline5mSyncService service = new BinanceKline5mSyncService(
+                leaderElectionService, mock(AggTradeCollectStatusRepository.class),
+                mock(BinanceKline5mRepository.class), mock(BinanceKlineRangeFetcher.class),
+                mock(BinanceKline5mWriter.class), FIXED_CLOCK);
+
+        long safeEnd = BinanceKlineWindow.safeEnd(FIXED_CLOCK.millis(), BinanceKlineInterval.FIVE_MINUTES);
+        // 아직 완료되지 않았을 수 있는 구간(safeEnd 이후)을 백필하려 하면 거부해야 한다.
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () ->
+                service.manualBackfillRange("BTCUSDT", "SPOT", safeEnd - INTERVAL_MS, safeEnd + INTERVAL_MS));
+    }
+
+    @Test
+    void manualBackfillRangeReportsSkippedInFlightInsteadOfFalseSuccess() throws InterruptedException {
+        LeaderElectionService leaderElectionService = mock(LeaderElectionService.class);
+        when(leaderElectionService.isLeader()).thenReturn(true);
+        BinanceKline5mRepository candleRepository = mock(BinanceKline5mRepository.class);
+        BinanceKlineRangeFetcher rangeFetcher = mock(BinanceKlineRangeFetcher.class);
+        BinanceKline5mWriter writer = mock(BinanceKline5mWriter.class);
+
+        long fromMs = 1_000L * INTERVAL_MS;
+        long toMsExclusive = fromMs + INTERVAL_MS;
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        when(rangeFetcher.fetch(eq("BTCUSDT"), eq("SPOT"), anyLong(), anyLong())).thenAnswer(invocation -> {
+            entered.countDown();
+            release.await(2, java.util.concurrent.TimeUnit.SECONDS);
+            return new BinanceKlineRangeFetcher.RangeResult(List.of(kline(fromMs)), false, 1);
+        });
+
+        BinanceKline5mSyncService service = new BinanceKline5mSyncService(
+                leaderElectionService, mock(AggTradeCollectStatusRepository.class), candleRepository,
+                rangeFetcher, writer, FIXED_CLOCK);
+        Thread first = new Thread(() -> service.manualBackfillRange("BTCUSDT", "SPOT", fromMs, toMsExclusive));
+        first.start();
+        entered.await(1, java.util.concurrent.TimeUnit.SECONDS);
+
+        BinanceKline5mSyncService.RefillResult second =
+                service.manualBackfillRange("BTCUSDT", "SPOT", fromMs, toMsExclusive);
+
+        assertTrue(second.skippedInFlight());
+        release.countDown();
+        first.join(2_000L);
+    }
+
+    @Test
+    void manualBackfillRangeFillsAnArbitraryPastRange() {
+        LeaderElectionService leaderElectionService = mock(LeaderElectionService.class);
+        when(leaderElectionService.isLeader()).thenReturn(true);
+        BinanceKline5mRepository candleRepository = mock(BinanceKline5mRepository.class);
+        BinanceKlineRangeFetcher rangeFetcher = mock(BinanceKlineRangeFetcher.class);
+        BinanceKline5mWriter writer = mock(BinanceKline5mWriter.class);
+
+        long fromMs = 1_000L * INTERVAL_MS;
+        long toMsExclusive = fromMs + 3 * INTERVAL_MS;
+        when(candleRepository.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
+                eq("BTCUSDT"), eq("SPOT"), anyLong(), anyLong()))
+                .thenReturn(List.of());
+        List<BinanceKline> filled = List.of(
+                kline(fromMs), kline(fromMs + INTERVAL_MS), kline(fromMs + 2 * INTERVAL_MS));
+        when(rangeFetcher.fetch("BTCUSDT", "SPOT", fromMs, toMsExclusive))
+                .thenReturn(new BinanceKlineRangeFetcher.RangeResult(filled, false, 1));
+        when(writer.insertIgnore(eq("BTCUSDT"), eq("SPOT"), any())).thenReturn(3);
+
+        BinanceKline5mSyncService.RefillResult result = new BinanceKline5mSyncService(
+                leaderElectionService, mock(AggTradeCollectStatusRepository.class), candleRepository,
+                rangeFetcher, writer, FIXED_CLOCK)
+                .manualBackfillRange("BTCUSDT", "SPOT", fromMs, toMsExclusive);
+
+        assertEquals(3, result.expected());
+        assertEquals(3, result.fetched());
+        assertEquals(3, result.inserted());
+        verify(rangeFetcher).fetch("BTCUSDT", "SPOT", fromMs, toMsExclusive);
+    }
+
+    @Test
     void refillNowFillsASingleGapAndReportsFullAccounting() {
         LeaderElectionService leaderElectionService = mock(LeaderElectionService.class);
         when(leaderElectionService.isLeader()).thenReturn(true);

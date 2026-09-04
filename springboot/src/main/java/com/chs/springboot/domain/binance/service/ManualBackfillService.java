@@ -1,9 +1,10 @@
 // [AGENT] 역할: 수동 수집/보정 서비스 — 비동기 Job 관리, 타입별 Binance REST 호출, FUTURES flat/outlier 캔들 보정 | 연관파일: ManualBackfillController.java
-// 지원 타입: AGG_1M/5M(fromMs~toMs rollup), KLINE_1M(임시 1m add-only), OI(REST 호출), flat-correction(1m klines + 5m 재롤업), outlier-correction(raw 기준 1m/5m 재생성)
+// 지원 타입: AGG_1M/5M(fromMs~toMs rollup), KLINE_1M(임시 1m add-only), KLINE_5M(canonical 5m add-only 백필), OI(REST 호출), flat-correction(1m klines + 5m 재롤업), outlier-correction(raw 기준 1m/5m 재생성)
 // 재발방지: raw 존재 1분은 kline fallback 저장 제외, id-zero/kline-like 1m/5m 기존 row는 raw/1s 기반 rollup으로 교체
 // Job 상태: RUNNING → DONE | ERROR / ConcurrentHashMap 저장 (앱 재시작 시 초기화)
 package com.chs.springboot.domain.binance.service;
 
+import com.chs.springboot.domain.binance.model.BinanceKlineInterval;
 import com.chs.springboot.global.chs;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,11 +67,15 @@ public class ManualBackfillService {
     private String futuresBaseUrl;
 
     // JdbcTemplate 중에서 이름이 batchJdbcTemplate인 Bean을 주입해달라는 요청
+    private final BinanceKline5mSyncService kline5mSyncService;
+
     public ManualBackfillService(
             JdbcTemplate batchJdbcTemplate,
-            BinanceKlineTempSyncService klineTempSyncService) {
+            BinanceKlineTempSyncService klineTempSyncService,
+            BinanceKline5mSyncService kline5mSyncService) {
         this.batchJdbcTemplate = batchJdbcTemplate;
         this.klineTempSyncService = klineTempSyncService;
+        this.kline5mSyncService = kline5mSyncService;
     }
 
     // ─── Job Record ──────────────────────────────────────────────────────────
@@ -104,6 +109,7 @@ public class ManualBackfillService {
                     case "AGG_1M"        -> collectRollup1m(symbol, marketType, fromMs, toMs);
                     case "AGG_5M"        -> collectRollup5m(symbol, marketType, fromMs, toMs);
                     case "KLINE_1M"      -> collectKline1m(symbol, marketType, fromMs, toMs);
+                    case "KLINE_5M"      -> collectKline5m(symbol, marketType, fromMs, toMs);
                     case "OI"            -> collectOi(symbol, fromMs, toMs);
                     default -> throw new IllegalArgumentException("Unknown type: " + type);
                 };
@@ -138,6 +144,25 @@ public class ManualBackfillService {
         }
         if (result.firstPageEmpty()) {
             throw new IllegalStateException("KLINE_1M Binance 응답이 비어 있어 백필하지 못했습니다");
+        }
+        return result.inserted();
+    }
+
+    /** canonical binance_kline_5m 과거 구간 백필(예: 표 생성 시점과 legacy 5분 경계 사이의 격차). */
+    private int collectKline5m(String symbol, String marketType, Long fromMs, Long toMs) {
+        if (fromMs == null || toMs == null) {
+            throw new IllegalArgumentException("KLINE_5M은 fromMs와 toMs가 필수입니다");
+        }
+        BinanceKlineRangeFetcher.validateBoundedRange(fromMs, toMs, BinanceKlineInterval.FIVE_MINUTES);
+        BinanceKline5mSyncService.RefillResult result = kline5mSyncService
+                .manualBackfillRange(symbol, marketType, fromMs, toMs);
+        if (result.skippedInFlight()) {
+            throw new IllegalStateException("같은 심볼/마켓의 KLINE_5M 리필이 이미 실행 중입니다");
+        }
+        if (result.remainingGap() > 0) {
+            throw new IllegalStateException(
+                    "KLINE_5M 백필 후에도 " + result.remainingGap() + "개 캔들이 남았습니다"
+                            + "(expected=" + result.expected() + " presentAfter=" + result.presentAfter() + ")");
         }
         return result.inserted();
     }

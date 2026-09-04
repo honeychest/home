@@ -311,17 +311,71 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
      이 단계에서 미리 만들 코드가 없다.
    - "50분 이하 REST 경로"는 위에서 설계 자체를 폐기했으므로 이 항목은 대상이 없어짐.
 
-7. **source 읽기 전환과 legacy 소비자 전환을 순서대로 진행한다.**
-   **COMPLETED 5분만 canonical로 라우팅하고, IN_PROGRESS(5분·15분)와 1분(ONE_MINUTE)은
-   지금의 1분-temp 기반 경로를 그대로 남긴다**(6단계에서 확정된 제약 — `QueryMode`+
-   `Interval` 조합별 분기 하나로 충분, 새 in-progress source 불필요).
-   canonical 5분 shadow read를 old temp aggregate와 같은 입력 범위에서 먼저 비교 →
-   `BinanceKlineSignalCandleSource`의 5분 읽기 전환(15분 집계는 SQL GROUP BY로 전환 —
-   기준선 측정 결과 권장안. `HAVING COUNT(*)=3` 등으로 완결 3행 조건을 SQL에 이식) →
-   PatternMatchService·
-   AnalysisSearchService를 canonical로 옮김(1단계에서 포함 확정됨) → 전환 뒤
-   `/api/signal/pattern`·`/api/signal/score`·`/api/analysis/search`·`/api/analysis/delta`·
-   `/ws/candle/5m`·`/ws/candle/15m`를 post-cutover 시각 기준으로 각각 확인.
+7. **[부분 완료, 2026-09-04] source 읽기 전환 — PatternMatch·AnalysisSearch는 이번 범위에서
+   제외(아래 참고).**
+
+   착수 전 Codex xhigh 검수(계획 합의)로 발견: canonical 표는 매 회차 최근 48시간
+   롤링 윈도우만 유지해서(4단계 참고), cutover~48시간 전 사이 **487개 5분봉이 canonical에
+   없었다**(legacy 5분 표는 있음, temp 1분 표에서도 커버됨). 검수 결과 (A) 착수 전
+   백필을 먼저 하기로 확정(REST 호출 4~12건 수준, 안전) — 하이브리드 폴백(B)은 복잡도만
+   늘고 되돌리기도 더 비싸 기각.
+
+   - **[완료] 백필 진입점 신설**: `BinanceKline5mSyncService.manualBackfillRange()` —
+     기존 `refillNow()`의 gap-merge/재시도/leader 안전성 로직을 `refillRange()`로 공통
+     추출해 재사용(임의 범위, 48시간 상한 검증 포함). `ManualBackfillService`에
+     `KLINE_5M` 타입 추가(`POST /api/admin/backfill/collect`, 기존 `KLINE_1M`과 같은
+     비동기 job 패턴) — 새 컨트롤러 불필요, 기존 admin API 재사용.
+   - **[미실행] 실제 백필 실행** — 배포 후 4건 호출 필요(아래 "백필 실행 방법" 참고).
+     `legacyEnd(FIVE_MINUTES)=1788180600000` ~ `canonicalMin=1788326700000`, 조합당
+     487개 캔들.
+   - **[완료] `BinanceKlineSignalCandleSource` 5분 COMPLETED 읽기를 canonical로 전환**.
+     `findTemp()`가 `QueryMode.COMPLETED`면 `findCanonicalFive()`(canonical SPOT+FUTURES
+     병합, 기존 `findTempFive()`와 동일 계약 — FUTURES 있어야 캔들 생성, SPOT은 delta에만
+     가산)를, `IN_PROGRESS`면 기존 `findTempFive()`(1분 temp 기반)를 그대로 쓰도록 분기.
+     15분은 자바 `aggregate()`를 canonical-소스 5분 리스트에 그대로 적용(SQL GROUP BY
+     전환은 이번엔 보류 — 아래 "미확정 사항 갱신" 참고).
+   - **[완료] 무제한 조회 위험 완화**: `AnalysisTemplateService.getDelta()`에 5분/15분
+     한정 90일 상한 추가(Codex 지적 — canonical 전환 후에도 `getDelta`가 여전히 무제한
+     범위를 받아 15분 자바 집계에 넣을 수 있어 512MB 힙 위험). 컨트롤러는 400으로 응답.
+   - **[제외, 별도 과제로 분리] `PatternMatchService`·`AnalysisSearchService` 전환** —
+     Codex 검수 결과 단순 repository 교체가 아니라 별도 read model 설계가 필요할 만큼
+     크다(AggTrade5m 엔티티로 canonical을 억지 변환하면 안 됨, market_type 필터·LAG
+     lookbehind 경계·1분 검색 대상 등 결정할 게 많음). 1단계 "결정 완료"에서 "포함"으로
+     정했던 것을 이번 커밋 범위에서는 미룬다 — 두 서비스는 계속 legacy 표를 그대로 읽는다
+     (지금과 동일한 동작 유지, 회귀 없음). 다음 세션에서 별도로 계획을 다시 짠다.
+   - 검증 endpoint: `/api/signal/pattern`·`/api/signal/score`·`/api/analysis/search`는
+     이번 범위 밖(위 제외 항목). `/api/analysis/delta`·`/ws/candle/5m`·`/ws/candle/15m`는
+     배포 후 확인 필요.
+   - 테스트: `BinanceKlineSignalCandleSourceTest`(canonical 병합·SPOT 결측·내부 gap·15분
+     완결 조건·findBefore 케이스 추가) + `BinanceKline5mSyncServiceTest`(백필 케이스 6개
+     — 경계 정렬·안전지연·in-flight 포함) + `ManualBackfillServiceTest`(KLINE_5M 케이스
+     3개) + `AnalysisTemplateServiceTest`(신규, 90일 상한 4개 케이스). springboot 전체
+     테스트 스위트(434개) 통과.
+   - **커밋 전 Codex commit-check(xhigh)로 결함 3건 추가 수정**: (1) 백필이 스케줄러
+     tick과 겹쳐 in-flight 충돌이 나도 `expected=0/remainingGap=0`이라 "성공"으로
+     잘못 기록되던 것 — `RefillResult`에 `skippedInFlight` 필드 추가, 충돌 시 job을
+     명시적 ERROR로(기존 `BinanceKlineTempSyncService.RangeSyncResult.skippedInFlight()`
+     와 같은 패턴). (2) `manualBackfillRange()` 자체가 5분 경계·48시간 상한·"아직 안전
+     지연 이전(진행 중인 봉)" 검증을 스스로 하도록 보강(이전엔 컨트롤러 쪽에만 있어
+     다른 호출부에서 우회 가능했음). (3) `AnalysisTemplateService`의 90일 상한 계산을
+     `Math.subtractExact`로 오버플로 안전하게.
+   - **[운영 절차, 코드 아님]** KLINE_5M 관리자 백필은 **리더 인스턴스에서만** 성공한다
+     (팔로워면 즉시 예외 — 리더 자동 전달 경로는 이번엔 안 만듦, 기존 KLINE_1M도 이
+     기능 없음. 1회성 백필이라 운영자가 직접 리더를 확인하고 요청하면 됨. 상시 기능이
+     필요해지면 `BinanceAnalysisLeaderForwarder`와 같은 패턴을 재사용해 별도로 추가).
+
+   **백필 실행 방법** (배포 후, **리더 인스턴스**에 admin IP 허용 필요):
+   ```
+   POST /api/admin/backfill/collect
+   {"type":"KLINE_5M","symbol":"BTCUSDT","marketType":"FUTURES",
+    "fromMs":1788180600000,"toMs":1788326700000}
+   ```
+   위 body의 symbol/marketType만 바꿔 4번(BTCUSDT·ENAUSDT × FUTURES·SPOT) 호출.
+   `GET /api/admin/backfill/status/{jobId}`로 `DONE`(inserted=487) 확인. 팔로워로 가면
+   `ERROR`(리더가 아니라는 메시지) — 그 경우 다른 인스턴스로 재시도.
+   백필이 실제로 끝나기 전까지는 최근 48시간보다 오래된 5분봉 조회(예: 프론트 168h/336h
+   차트 프리셋)가 빈 결과를 반환할 수 있다 — 배포와 백필 실행 사이에 시차가 있으면
+   일시적 현상.
 
 8. **gap 관리자·운영 도구를 갱신한다.**
    `KLINE_1M`→`KLINE_5M` 표기 변경 여부 확정 후 `DataGapAdminService`·
@@ -396,10 +450,19 @@ v1·v2가 제안했던 "50분 이하만 REST 직접조회, 그 이상은 저장 
 ## 미확정 사항 (구현 착수 전 재확인 필요)
 
 - ~~AnalysisTemplateService.getDelta의 임의 15분 range 실측~~ — **해소(2026-09-04)**, 위
-  "기준선 측정 결과" 참고. 결론: canonical 15분 집계는 SQL GROUP BY로 전환 권장.
+  "기준선 측정 결과" 참고. 결론(2단계): canonical 15분 집계는 SQL GROUP BY로 전환 권장.
+  **7단계 구현 시 재조정**: 위험도를 낮추려고 이번엔 자바 `aggregate()`를 canonical-소스
+  5분 리스트에 그대로 적용하고, 대신 `getDelta()`에 90일 상한을 걸어 무제한 힙 위험만
+  없앴다(SQL GROUP BY 자체는 안 함 — Codex 검수의 "차선" 옵션 채택). SQL GROUP BY 전환은
+  필요해지면(예: 90일 상한이 실사용에 너무 좁다고 판명되면) 별도로 다시 검토.
 - canonical 5분 표의 정확한 컬럼셋과 entity 설계는 실제 migration 작성 시 Binance kline
-  REST 응답 필드를 다시 대조해 확정.
+  REST 응답 필드를 다시 대조해 확정. → 4단계에서 확정 완료.
 - GitNexus 인덱스 재생성 후 위 "실제 소비자 목록"과 교차 검증(현재 Windows 권한 문제로 미수행).
+- **[신규] PatternMatchService·AnalysisSearchService의 canonical/temp 전환 계획** — 7단계
+  검수에서 범위 밖으로 뺐다. 다음 세션에서 별도로: PatternMatch는 history/day 조회를
+  `SignalCandleSource` 기반으로 재설계(AggTrade5m 엔티티로 canonical 억지 변환 금지),
+  AnalysisSearch는 1m/5m/15m 각 분기의 원천과 LAG lookbehind 규칙을 따로 정한다
+  (`codex-review-step7-plan.md` 3절 참고, 세션 스크래치패드 보관).
 
 ## Codex 적대적 검수 최종 판단 (2026-09-04) 및 이후 진행 상태
 

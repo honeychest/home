@@ -1,8 +1,10 @@
 package com.chs.springboot.domain.binance.service;
 
+import com.chs.springboot.domain.binance.model.BinanceKline5m;
 import com.chs.springboot.domain.binance.model.BinanceKlineTempCandle;
 import com.chs.springboot.domain.binance.repository.AggTrade1mRepository;
 import com.chs.springboot.domain.binance.repository.AggTrade5mRepository;
+import com.chs.springboot.domain.binance.repository.BinanceKline5mRepository;
 import com.chs.springboot.domain.binance.repository.BinanceKlineTempCandleRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -21,6 +23,7 @@ class BinanceKlineSignalCandleSourceTest {
 
     private static final String SYMBOL = "BTCUSDT";
     private static final long MINUTE_MS = 60_000L;
+    private static final long FIVE_MINUTE_MS = 300_000L;
 
     @Test
     void combinesSpotAndFuturesDeltaAndUsesFuturesPrice() {
@@ -75,49 +78,103 @@ class BinanceKlineSignalCandleSourceTest {
     }
 
     @Test
-    void requiresFiveCompleteMinutesButAllowsPartialInProgressBucket() {
+    void completedFiveMinuteReadsFromCanonicalAndCombinesSpotDelta() {
         long now = System.currentTimeMillis();
-        long bucket = (now / 300_000L - 2) * 300_000L;
-        List<BinanceKlineTempCandle> futures = java.util.stream.LongStream.range(0, 5)
-                .mapToObj(i -> temp("FUTURES", bucket + i * MINUTE_MS, 100 + (int) i, 10, 7, 70))
-                .toList();
-        BinanceKlineSignalCandleSource source = source(0, List.of(), futures);
+        long bucket = (now / FIVE_MINUTE_MS - 2) * FIVE_MINUTE_MS;
+        BinanceKline5m future = canonical("FUTURES", bucket, 100, 10, 7, 70);
+        BinanceKline5m spot = canonical("SPOT", bucket, 90, 4, 1, 10);
+        BinanceKlineSignalCandleSource source = source(0, List.of(), List.of(), List.of(spot), List.of(future));
 
-        List<SignalCandleSource.SignalCandle> complete = source.find(
+        List<SignalCandleSource.SignalCandle> candles = source.find(
                 SYMBOL, SignalCandleSource.Interval.FIVE_MINUTES, bucket, now,
                 SignalCandleSource.QueryMode.COMPLETED);
-        assertThat(complete).hasSize(1);
-        assertThat(complete.get(0).baseVolume()).isEqualByComparingTo("50");
-        assertThat(complete.get(0).delta()).isEqualByComparingTo("20");
 
-        BinanceKlineSignalCandleSource incompleteSource = source(0, List.of(), futures.subList(0, 4));
-        assertThat(incompleteSource.find(SYMBOL, SignalCandleSource.Interval.FIVE_MINUTES, bucket, now,
-                SignalCandleSource.QueryMode.COMPLETED)).isEmpty();
-
-        BinanceKlineSignalCandleSource partialSource = source(0, List.of(), futures.subList(0, 1));
-        assertThat(partialSource.find(SYMBOL, SignalCandleSource.Interval.FIVE_MINUTES, bucket, now,
-                SignalCandleSource.QueryMode.IN_PROGRESS)).hasSize(1);
+        assertThat(candles).hasSize(1);
+        SignalCandleSource.SignalCandle candle = candles.get(0);
+        assertThat(candle.openPrice()).isEqualByComparingTo("100");
+        assertThat(candle.baseVolume()).isEqualByComparingTo("10");
+        assertThat(candle.delta()).isEqualByComparingTo("2");
     }
 
     @Test
-    void aggregatesThreeCompleteFiveMinuteBucketsIntoFifteenMinutes() {
+    void completedFiveMinuteKeepsFuturesCandleWhenSpotRowIsMissing() {
+        long now = System.currentTimeMillis();
+        long bucket = (now / FIVE_MINUTE_MS - 2) * FIVE_MINUTE_MS;
+        BinanceKline5m future = canonical("FUTURES", bucket, 100, 10, 7, 70);
+        BinanceKlineSignalCandleSource source = source(0, List.of(), List.of(), List.of(), List.of(future));
+
+        List<SignalCandleSource.SignalCandle> candles = source.find(
+                SYMBOL, SignalCandleSource.Interval.FIVE_MINUTES, bucket, now,
+                SignalCandleSource.QueryMode.COMPLETED);
+
+        assertThat(candles).hasSize(1);
+        assertThat(candles.get(0).delta()).isEqualByComparingTo("4");
+    }
+
+    @Test
+    void completedFiveMinuteHasNoCandleWhenCanonicalBucketIsMissing() {
+        long now = System.currentTimeMillis();
+        long bucket = (now / FIVE_MINUTE_MS - 2) * FIVE_MINUTE_MS;
+        BinanceKlineSignalCandleSource source = source(0, List.of(), List.of(), List.of(), List.of());
+
+        List<SignalCandleSource.SignalCandle> candles = source.find(
+                SYMBOL, SignalCandleSource.Interval.FIVE_MINUTES, bucket, now,
+                SignalCandleSource.QueryMode.COMPLETED);
+
+        assertThat(candles).isEmpty();
+    }
+
+    @Test
+    void inProgressFiveMinuteStillUsesPartialTempAggregationNotCanonical() {
+        long now = System.currentTimeMillis();
+        long bucket = (now / 300_000L - 2) * 300_000L;
+        List<BinanceKlineTempCandle> futures = List.of(temp("FUTURES", bucket, 100, 10, 7, 70));
+        // canonical에는 아무것도 없어도(완료봉만 저장) IN_PROGRESS는 temp 부분집계로 값을 낸다.
+        BinanceKlineSignalCandleSource source = source(0, List.of(), futures, List.of(), List.of());
+
+        List<SignalCandleSource.SignalCandle> candles = source.find(
+                SYMBOL, SignalCandleSource.Interval.FIVE_MINUTES, bucket, now,
+                SignalCandleSource.QueryMode.IN_PROGRESS);
+
+        assertThat(candles).hasSize(1);
+    }
+
+    @Test
+    void aggregatesThreeCompleteCanonicalFiveMinuteBucketsIntoFifteenMinutes() {
         long now = System.currentTimeMillis();
         long bucket = (now / 900_000L - 2) * 900_000L;
-        List<BinanceKlineTempCandle> futures = java.util.stream.LongStream.range(0, 15)
-                .mapToObj(i -> temp("FUTURES", bucket + i * MINUTE_MS, 100 + (int) i, 2, 1, 5))
-                .toList();
-        List<BinanceKlineTempCandle> spot = java.util.stream.LongStream.range(0, 15)
-                .mapToObj(i -> temp("SPOT", bucket + i * MINUTE_MS, 90 + (int) i, 4, 1, 5))
-                .toList();
-        BinanceKlineSignalCandleSource source = source(0, spot, futures);
+        List<BinanceKline5m> futures = List.of(
+                canonical("FUTURES", bucket, 100, 2, 1, 5),
+                canonical("FUTURES", bucket + FIVE_MINUTE_MS, 101, 2, 1, 5),
+                canonical("FUTURES", bucket + 2 * FIVE_MINUTE_MS, 102, 2, 1, 5));
+        List<BinanceKline5m> spot = List.of(
+                canonical("SPOT", bucket, 90, 4, 1, 5),
+                canonical("SPOT", bucket + FIVE_MINUTE_MS, 91, 4, 1, 5),
+                canonical("SPOT", bucket + 2 * FIVE_MINUTE_MS, 92, 4, 1, 5));
+        BinanceKlineSignalCandleSource source = source(0, List.of(), List.of(), spot, futures);
 
         List<SignalCandleSource.SignalCandle> candles = source.find(
                 SYMBOL, SignalCandleSource.Interval.FIFTEEN_MINUTES, bucket, now,
                 SignalCandleSource.QueryMode.COMPLETED);
 
         assertThat(candles).hasSize(1);
-        assertThat(candles.get(0).baseVolume()).isEqualByComparingTo("30");
-        assertThat(candles.get(0).delta()).isEqualByComparingTo("-30");
+        assertThat(candles.get(0).baseVolume()).isEqualByComparingTo("6");
+    }
+
+    @Test
+    void fifteenMinuteBucketIsIncompleteWhenOneCanonicalFiveMinuteRowIsMissing() {
+        long now = System.currentTimeMillis();
+        long bucket = (now / 900_000L - 2) * 900_000L;
+        List<BinanceKline5m> futures = List.of(
+                canonical("FUTURES", bucket, 100, 2, 1, 5),
+                canonical("FUTURES", bucket + 2 * FIVE_MINUTE_MS, 102, 2, 1, 5));
+        BinanceKlineSignalCandleSource source = source(0, List.of(), List.of(), List.of(), futures);
+
+        List<SignalCandleSource.SignalCandle> candles = source.find(
+                SYMBOL, SignalCandleSource.Interval.FIFTEEN_MINUTES, bucket, now,
+                SignalCandleSource.QueryMode.COMPLETED);
+
+        assertThat(candles).isEmpty();
     }
 
     @Test
@@ -145,10 +202,8 @@ class BinanceKlineSignalCandleSourceTest {
     void usesFixedFiveAndFifteenMinuteFloorForCutover() {
         long fiveBoundary = 1_700_000_100_000L;
         long cutover = fiveBoundary + 4 * MINUTE_MS + 123L;
-        List<BinanceKlineTempCandle> futures = java.util.stream.LongStream.range(0, 5)
-                .mapToObj(i -> temp("FUTURES", fiveBoundary + i * MINUTE_MS, 200, 2, 1, 5))
-                .toList();
-        BinanceKlineSignalCandleSource fiveSource = source(cutover, List.of(), futures);
+        List<BinanceKline5m> futures = List.of(canonical("FUTURES", fiveBoundary, 200, 2, 1, 5));
+        BinanceKlineSignalCandleSource fiveSource = source(cutover, List.of(), List.of(), List.of(), futures);
         when(sourceAgg5m(fiveSource).findByTimeRangeWithCombinedDelta(
                 SYMBOL, fiveBoundary - 300_000L, fiveBoundary)).thenReturn(List.of());
 
@@ -159,10 +214,12 @@ class BinanceKlineSignalCandleSourceTest {
 
         long fifteenBoundary = (1_700_000_000_000L / 900_000L) * 900_000L;
         long fifteenCutover = fifteenBoundary + 8 * MINUTE_MS + 123L;
-        List<BinanceKlineTempCandle> fifteenFutures = java.util.stream.LongStream.range(0, 15)
-                .mapToObj(i -> temp("FUTURES", fifteenBoundary + i * MINUTE_MS, 220, 2, 1, 5))
-                .toList();
-        BinanceKlineSignalCandleSource fifteenSource = source(fifteenCutover, List.of(), fifteenFutures);
+        List<BinanceKline5m> fifteenFutures = List.of(
+                canonical("FUTURES", fifteenBoundary, 220, 2, 1, 5),
+                canonical("FUTURES", fifteenBoundary + FIVE_MINUTE_MS, 221, 2, 1, 5),
+                canonical("FUTURES", fifteenBoundary + 2 * FIVE_MINUTE_MS, 222, 2, 1, 5));
+        BinanceKlineSignalCandleSource fifteenSource =
+                source(fifteenCutover, List.of(), List.of(), List.of(), fifteenFutures);
         assertThat(fifteenSource.find(SYMBOL, SignalCandleSource.Interval.FIFTEEN_MINUTES,
                 fifteenBoundary, fifteenBoundary + 900_000L, SignalCandleSource.QueryMode.COMPLETED))
                 .extracting(SignalCandleSource.SignalCandle::timeMs)
@@ -186,19 +243,50 @@ class BinanceKlineSignalCandleSourceTest {
                 .containsExactly(firstMinute + MINUTE_MS);
     }
 
+    @Test
+    void findBeforeReadsCompletedCandlesFromCanonical() {
+        long now = System.currentTimeMillis();
+        long bucket = (now / FIVE_MINUTE_MS - 5) * FIVE_MINUTE_MS;
+        List<BinanceKline5m> futures = List.of(
+                canonical("FUTURES", bucket, 100, 2, 1, 5),
+                canonical("FUTURES", bucket + FIVE_MINUTE_MS, 101, 2, 1, 5));
+        BinanceKlineSignalCandleSource source = source(0, List.of(), List.of(), List.of(), futures);
+
+        List<SignalCandleSource.SignalCandle> candles = source.findBefore(
+                SYMBOL, SignalCandleSource.Interval.FIVE_MINUTES, bucket + 2 * FIVE_MINUTE_MS, 5,
+                SignalCandleSource.QueryMode.COMPLETED);
+
+        assertThat(candles).extracting(SignalCandleSource.SignalCandle::timeMs)
+                .containsExactly(bucket, bucket + FIVE_MINUTE_MS);
+    }
+
     private BinanceKlineSignalCandleSource source(
             long cutover,
             List<BinanceKlineTempCandle> spot,
             List<BinanceKlineTempCandle> futures) {
+        return source(cutover, spot, futures, List.of(), List.of());
+    }
+
+    private BinanceKlineSignalCandleSource source(
+            long cutover,
+            List<BinanceKlineTempCandle> spot,
+            List<BinanceKlineTempCandle> futures,
+            List<BinanceKline5m> canonicalSpot,
+            List<BinanceKline5m> canonicalFutures) {
         AggTrade1mRepository agg1m = mock(AggTrade1mRepository.class);
         AggTrade5mRepository agg5m = mock(AggTrade5mRepository.class);
         BinanceKlineTempCandleRepository temp = mock(BinanceKlineTempCandleRepository.class);
+        BinanceKline5mRepository canonical = mock(BinanceKline5mRepository.class);
         when(temp.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
                 eq(SYMBOL), eq("SPOT"), anyLong(), anyLong())).thenReturn(spot);
         when(temp.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
                 eq(SYMBOL), eq("FUTURES"), anyLong(), anyLong())).thenReturn(futures);
+        when(canonical.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
+                eq(SYMBOL), eq("SPOT"), anyLong(), anyLong())).thenReturn(canonicalSpot);
+        when(canonical.findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
+                eq(SYMBOL), eq("FUTURES"), anyLong(), anyLong())).thenReturn(canonicalFutures);
         BinanceKlineSignalCandleSource source = new BinanceKlineSignalCandleSource(
-                agg1m, agg5m, temp);
+                agg1m, agg5m, temp, canonical);
         ReflectionTestUtils.setField(source, "legacyCutoverMs", cutover);
         return source;
     }
@@ -230,6 +318,24 @@ class BinanceKlineSignalCandleSourceTest {
         candle.setMarketType(market);
         candle.setCandleTimeMs(time);
         candle.setCloseTimeMs(time + MINUTE_MS - 1);
+        candle.setOpenPrice(BigDecimal.valueOf(price));
+        candle.setHighPrice(BigDecimal.valueOf(price + 2L));
+        candle.setLowPrice(BigDecimal.valueOf(price - 1L));
+        candle.setClosePrice(BigDecimal.valueOf(price + 1L));
+        candle.setVolume(BigDecimal.valueOf(volume));
+        candle.setQuoteVolume(BigDecimal.valueOf(takerQuote));
+        candle.setTradeCount(1L);
+        candle.setTakerBuyBaseVolume(BigDecimal.valueOf(takerBase));
+        candle.setTakerBuyQuoteVolume(BigDecimal.valueOf(takerQuote));
+        return candle;
+    }
+
+    private BinanceKline5m canonical(String market, long time, int price, int volume, int takerBase, int takerQuote) {
+        BinanceKline5m candle = new BinanceKline5m();
+        candle.setSymbol(SYMBOL);
+        candle.setMarketType(market);
+        candle.setCandleTimeMs(time);
+        candle.setCloseTimeMs(time + FIVE_MINUTE_MS - 1);
         candle.setOpenPrice(BigDecimal.valueOf(price));
         candle.setHighPrice(BigDecimal.valueOf(price + 2L));
         candle.setLowPrice(BigDecimal.valueOf(price - 1L));

@@ -132,7 +132,7 @@ signal 페이지 long/short energy·청산 합계에 시작 시각을 직접 지
 검수→구현까지 끝났고 이 세션에서 커밋됨(`SignalController`/`SignalDataService`/`SignalPage`
 /`TopBar` + signal 전용 `datetimeLocal` 모듈). 캔들·OI 차트는 기존 프리셋 그대로 유지.
 
-### 계획 v3 (조건부 가능, 1~6단계 완료) — kline temp 표 정식화 (다음 세션에서 이어감, 2026-09-04)
+### 계획 v3 (조건부 가능, 1~6단계+7단계 부분 완료) — kline temp 표 정식화 (다음 세션에서 이어감, 2026-09-04)
 `agg_trade_1m_temp`가 설계상 "임시"인데 2026-08-31 raw tick 중단 이후 사실상 유일한
 실시간 kline 원천이 됨(전체 행을 자바로 읽는 구조라 512MB 힙 제약에서 위험). 표 이름
 `binance_kline_5m` 확정. Codex xhigh 적대적 검수(2026-09-04) 결과 v2는 처음엔 **보류** —
@@ -169,10 +169,45 @@ DB에 없어서 — 4단계 참고, 배포 전까지는 무해).
 읽기 경로를 애초에 안 건드려서 구조적으로 무영향, 기존 테스트 7개 그대로 통과), 진행봉은
 7단계에서 IN_PROGRESS를 canonical로 안 옮기고 지금 1분-temp 경로에 남기기로 확정. "50분
 이하만 REST" 옛 설계는 폐기(1분 temp 전량 유지로 대체).
-**다음 세션 할 일**: v3 실행 순서 7단계(source 읽기 전환 — canonical shadow read 비교 →
-`BinanceKlineSignalCandleSource`의 5분 COMPLETED 읽기를 canonical로 전환(IN_PROGRESS·1분은
-유지) → PatternMatchService·AnalysisSearchService를 canonical로 옮김 → 전환 후 6개
-엔드포인트 확인)부터 착수. **주의**: 이 단계부터는 실제 데이터가 존재해야 shadow read
-비교가 가능한데, `binance_kline_5m`는 아직 실제 DB에 없다(4단계) — 배포·마이그레이션
-적용 후에나 실제 데이터로 검증 가능. 착수 전에 배포 여부를 사용자와 확인할 것.
+**이 세션에서 실제로 배포됨(6865d5b, f48e080)** — 배포 후 DB 직접 조회로 확인: V11
+마이그레이션 성공 적용, `binance_kline_5m`에 4개 조합 각 576개(48시간) 정상 채워짐(shadow
+read parity 0건 불일치), 기존 1분 temp 회귀 없음.
+
+**배포 중 별도로 발견·해결한 것(kline_5m과 무관, 기존 설계 문제)**: 배포 직후
+`AnalysisDetectionScheduler`가 BTCUSDT·ENAUSDT "1440개 결측/불연속" WARN을 계속 찍는
+현상 발견 → 맥미니 원격 세션 + Codex(진단 2라운드, effort=high)로 근본 원인 규명:
+1분 temp 수집기의 설계상 신선도 지연(3~5분, 안전지연 2분+tick 위상)과
+`AnalysisDetectionScheduler`의 "지금 이 순간 기준 정확히 1440개" 요구가 애초에 계약
+불일치였던 것 — 내부 결측은 없음, 오탐. kline_5m 작업과 무관하다고 Codex가 결론(리더
+강제전환·1분 경로 추가조사 모두 근거 없음이라 기각). **후속 과제로 별도 분리**: 이
+탐지기의 시간창 정의를 손봐야 함(신선도 지연을 계약으로 인정하거나 창 정의를 바꾸거나) —
+이번 계획 문서 범위 밖.
+
+7단계(source 읽기 전환)도 **부분 완료** — 착수 전 Codex xhigh 계획 검수로
+`binance_kline_5m`이 최근 48시간 롤링 윈도우만 유지해 cutover~48시간전 사이 487개
+캔들이 비어있는 걸 발견, 백필부터 하기로 결정(하이브리드 폴백은 기각).
+- `BinanceKline5mSyncService.manualBackfillRange()` 신설(기존 리필 로직 `refillRange()`로
+  공통 추출·재사용) + `ManualBackfillService`에 `KLINE_5M` 타입 추가(기존 admin API 재사용,
+  새 컨트롤러 없음). **아직 실행 안 함** — 배포 후 4번 호출 필요(계획 문서 7단계 절 참고).
+- `BinanceKlineSignalCandleSource`의 5분 COMPLETED 읽기를 canonical로 전환 완료
+  (IN_PROGRESS·1분은 기존 temp 경로 그대로). `AnalysisTemplateService.getDelta()`에
+  5분/15분 90일 상한 추가(무제한 조회 시 512MB 힙 위험 완화 — Codex 지적, SQL GROUP BY
+  전환은 이번엔 보류).
+- **PatternMatchService·AnalysisSearchService 전환은 이번 범위에서 제외** — Codex 검수
+  결과 단순 교체가 아니라 별도 read model 설계가 필요할 만큼 커서(AggTrade5m 억지 변환
+  금지, LAG 경계·1분 검색 대상 등 결정 필요) 다음 세션으로 미룸. 두 서비스는 지금처럼
+  legacy 표를 계속 읽음(회귀 없음).
+- 커밋 전 Codex commit-check(xhigh)로 결함 3건 추가 수정(in-flight 충돌 시 거짓 성공,
+  manualBackfillRange 자체 경계 검증 부족, 90일 상한 계산 오버플로).
+- springboot 전체 테스트 스위트(434개) 통과.
+
+**다음 세션 할 일**:
+1. 이번 커밋(아직 미완료 — 아래 "지금 커밋 대상" 참고) 배포 후 백필 4건 실행
+   (`POST /api/admin/backfill/collect`, type=KLINE_5M, 계획 문서 7단계 절의 정확한
+   fromMs/toMs 참고) → `/api/analysis/delta`·`/ws/candle/5m`·`/ws/candle/15m` 확인.
+2. `AnalysisDetectionScheduler` 시간창 계약 문제 별도 해결(이번 계획과 분리된 과제).
+3. `PatternMatchService`·`AnalysisSearchService`의 canonical/temp 전환 계획을 새로 짠다
+   (`codex-review-step7-plan.md` 3절 — 세션 스크래치패드, 다음 세션엔 없을 수 있으니
+   필요하면 핵심만 이 문서에 옮겨 적을 것).
+4. 8~9단계(gap 관리자 갱신, dual-write/rollback 검증 후 cutover) 착수.
 **죽음조건: 구현·배포가 끝나면 이 절과 `docs/binance/kline-temp-retire-plan.md`를 지운다.**

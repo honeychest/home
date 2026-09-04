@@ -63,6 +63,10 @@ public class AnalysisTemplateService {
         templateRepository.deleteById(id);
     }
 
+    /** 5분/15분 delta 조회 상한 — 15분은 canonical 5분 행을 자바에서 묶어 집계하므로
+     * 요청 범위가 무제한이면 512MB 힙에서 위험(kline-temp-retire-plan.md 7단계 검수 참고). */
+    private static final long MAX_FIVE_OR_FIFTEEN_MINUTE_DELTA_RANGE_MS = 90L * 24 * 60 * 60 * 1000;
+
     /**
      * delta 시간범위 조회 — interval에 따라 1m/5m 조회, 15m는 5m에서 집계
      * @param symbol   'BTC' | 'ENA' → BTCUSDT / ENAUSDT 변환
@@ -71,6 +75,10 @@ public class AnalysisTemplateService {
     public List<Map<String, Object>> getDelta(String symbol, long startMs, long endMs, String interval) {
         String dbSymbol = symbol.toUpperCase() + "USDT";
         SignalCandleSource.Interval sourceInterval = SignalCandleSource.Interval.from(interval);
+        if (sourceInterval == SignalCandleSource.Interval.FIVE_MINUTES
+                || sourceInterval == SignalCandleSource.Interval.FIFTEEN_MINUTES) {
+            validateFiveOrFifteenMinuteRange(startMs, endMs);
+        }
         return candleSource.find(dbSymbol, sourceInterval, startMs, endMs, SignalCandleSource.QueryMode.COMPLETED)
             .stream().map(c -> {
             Map<String, Object> m = new HashMap<>();
@@ -79,6 +87,22 @@ public class AnalysisTemplateService {
             m.put("delta",   c.delta().doubleValue());
             return m;
         }).toList();
+    }
+
+    /** long 오버플로로 90일 상한이 우회되지 않게 {@link Math#subtractExact}로 뺄셈한다. */
+    private void validateFiveOrFifteenMinuteRange(long startMs, long endMs) {
+        if (endMs < startMs) {
+            throw new IllegalArgumentException("delta 조회 범위는 startMs가 endMs보다 작아야 합니다");
+        }
+        long rangeMs;
+        try {
+            rangeMs = Math.subtractExact(endMs, startMs);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("5분/15분 delta 조회 범위는 최대 90일입니다");
+        }
+        if (rangeMs > MAX_FIVE_OR_FIFTEEN_MINUTE_DELTA_RANGE_MS) {
+            throw new IllegalArgumentException("5분/15분 delta 조회 범위는 최대 90일입니다");
+        }
     }
 
     /**

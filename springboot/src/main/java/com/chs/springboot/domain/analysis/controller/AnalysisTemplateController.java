@@ -52,13 +52,17 @@ public class AnalysisTemplateController {
     }
 
     @GetMapping("/delta")
-    public ResponseEntity<List<Map<String, Object>>> getDelta(
+    public ResponseEntity<?> getDelta(
             @RequestParam String symbol,
             @RequestParam long startMs,
             @RequestParam long endMs,
             @RequestParam(defaultValue = "1m") String interval) {
         log.debug("[AnalysisTemplateController] /delta symbol={} startMs={} endMs={} interval={}", symbol, startMs, endMs, interval);
-        return ResponseEntity.ok(templateService.getDelta(symbol, startMs, endMs, interval));
+        try {
+            return ResponseEntity.ok(templateService.getDelta(symbol, startMs, endMs, interval));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/search")

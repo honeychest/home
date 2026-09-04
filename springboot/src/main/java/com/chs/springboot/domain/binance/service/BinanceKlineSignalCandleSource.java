@@ -1,9 +1,11 @@
 package com.chs.springboot.domain.binance.service;
 
+import com.chs.springboot.domain.binance.model.BinanceKline5m;
 import com.chs.springboot.domain.binance.model.BinanceKlineFiveMinute;
 import com.chs.springboot.domain.binance.model.BinanceKlineTempCandle;
 import com.chs.springboot.domain.binance.repository.AggTrade1mRepository;
 import com.chs.springboot.domain.binance.repository.AggTrade5mRepository;
+import com.chs.springboot.domain.binance.repository.BinanceKline5mRepository;
 import com.chs.springboot.domain.binance.repository.BinanceKlineTempCandleRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,6 +39,7 @@ public class BinanceKlineSignalCandleSource implements SignalCandleSource {
     private final AggTrade1mRepository agg1mRepository;
     private final AggTrade5mRepository agg5mRepository;
     private final BinanceKlineTempCandleRepository tempCandleRepository;
+    private final BinanceKline5mRepository canonicalRepository;
     private final BinanceKlineFiveMinuteAggregator fiveMinuteAggregator = new BinanceKlineFiveMinuteAggregator();
 
     @Value("${binance.agg-trade.legacy-cutover-ms:0}")
@@ -45,10 +48,12 @@ public class BinanceKlineSignalCandleSource implements SignalCandleSource {
     public BinanceKlineSignalCandleSource(
             AggTrade1mRepository agg1mRepository,
             AggTrade5mRepository agg5mRepository,
-            BinanceKlineTempCandleRepository tempCandleRepository) {
+            BinanceKlineTempCandleRepository tempCandleRepository,
+            BinanceKline5mRepository canonicalRepository) {
         this.agg1mRepository = agg1mRepository;
         this.agg5mRepository = agg5mRepository;
         this.tempCandleRepository = tempCandleRepository;
+        this.canonicalRepository = canonicalRepository;
     }
 
     @Override
@@ -215,13 +220,70 @@ public class BinanceKlineSignalCandleSource implements SignalCandleSource {
             return combineTempOneMinute(symbol, fromMs, toMsExclusive);
         }
         long queryFrom = Math.floorDiv(fromMs, interval.durationMs()) * interval.durationMs();
-        List<SignalCandle> five = findTempFive(symbol, queryFrom, toMsExclusive, mode);
+        // COMPLETED 5분/15분은 canonical(binance_kline_5m)로 읽는다 — 완료봉만 저장하므로
+        // IN_PROGRESS는 기존 1분-temp 기반 부분집계 경로를 그대로 쓴다(치명4 해결책, v3 6단계).
+        List<SignalCandle> five = mode == QueryMode.COMPLETED
+                ? findCanonicalFive(symbol, queryFrom, toMsExclusive)
+                : findTempFive(symbol, queryFrom, toMsExclusive, mode);
         if (interval == Interval.FIVE_MINUTES) {
             return five.stream().filter(c -> c.timeMs() >= fromMs).toList();
         }
         return aggregate(five, interval, FIVE_MINUTE_MS, mode).stream()
                 .filter(c -> c.timeMs() >= fromMs)
                 .toList();
+    }
+
+    /**
+     * canonical 5분 표에서 SPOT+FUTURES를 합성한다. temp 기반 {@link #findTempFive}와 계약이
+     * 같다 — FUTURES 행이 있어야 캔들을 만들고(가격·OHLC·volume은 FUTURES 기준), SPOT 행이
+     * 있으면 delta에만 더한다. canonical은 완료봉만 저장하므로 완결 조건 검사가 필요 없다.
+     */
+    private List<SignalCandle> findCanonicalFive(String symbol, long fromMs, long toMsExclusive) {
+        if (toMsExclusive <= fromMs) {
+            return List.of();
+        }
+        Map<Long, BinanceKline5m> spotByTime = byCanonicalTime(canonicalRows(symbol, "SPOT", fromMs, toMsExclusive));
+        List<BinanceKline5m> futureRows = canonicalRows(symbol, "FUTURES", fromMs, toMsExclusive);
+
+        List<SignalCandle> result = new ArrayList<>(futureRows.size());
+        for (BinanceKline5m future : futureRows) {
+            long timeMs = future.getCandleTimeMs();
+            BinanceKline5m spot = spotByTime.get(timeMs);
+            BigDecimal delta = canonicalDelta(future);
+            if (spot != null) {
+                delta = delta.add(canonicalDelta(spot));
+            }
+            result.add(new SignalCandle(
+                    symbol,
+                    timeMs,
+                    future.getOpenPrice(),
+                    future.getHighPrice(),
+                    future.getLowPrice(),
+                    future.getClosePrice(),
+                    future.getQuoteVolume(),
+                    future.getVolume(),
+                    delta));
+        }
+        result.sort(Comparator.comparingLong(SignalCandle::timeMs));
+        return result;
+    }
+
+    private List<BinanceKline5m> canonicalRows(String symbol, String marketType, long fromMs, long toMsExclusive) {
+        return canonicalRepository
+                .findBySymbolAndMarketTypeAndCandleTimeMsGreaterThanEqualAndCandleTimeMsLessThanOrderByCandleTimeMsAsc(
+                        symbol, marketType, fromMs, toMsExclusive);
+    }
+
+    private Map<Long, BinanceKline5m> byCanonicalTime(List<BinanceKline5m> rows) {
+        Map<Long, BinanceKline5m> result = new LinkedHashMap<>();
+        for (BinanceKline5m row : rows) {
+            result.put(row.getCandleTimeMs(), row);
+        }
+        return result;
+    }
+
+    private BigDecimal canonicalDelta(BinanceKline5m candle) {
+        return candle.getTakerBuyBaseVolume().multiply(BigDecimal.valueOf(2)).subtract(candle.getVolume());
     }
 
     private List<SignalCandle> combineTempOneMinute(String symbol, long fromMs, long toMsExclusive) {

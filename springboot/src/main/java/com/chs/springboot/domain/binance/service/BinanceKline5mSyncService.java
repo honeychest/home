@@ -89,10 +89,11 @@ public class BinanceKline5mSyncService {
             try {
                 RefillResult result = refillNow(status.getSymbol(), status.getMarketType(), clock.millis());
                 log.info("[BinanceKline5m] {} {} 리필 완료 elapsedMs={} expected={} fetched={} inserted={} "
-                                + "presentAfter={} remainingGap={} leaderLostMidRun={}",
+                                + "presentAfter={} remainingGap={} leaderLostMidRun={} skippedInFlight={}",
                         status.getSymbol(), status.getMarketType(), System.currentTimeMillis() - startedAt,
                         result.expected(), result.fetched(), result.inserted(),
-                        result.presentAfter(), result.remainingGap(), result.leaderLostMidRun());
+                        result.presentAfter(), result.remainingGap(), result.leaderLostMidRun(),
+                        result.skippedInFlight());
             } catch (Exception e) {
                 log.warn("[BinanceKline5m] {} {} 리필 실패(elapsedMs={}): {}",
                         status.getSymbol(), status.getMarketType(),
@@ -104,6 +105,7 @@ public class BinanceKline5mSyncService {
     /**
      * 관리자 수동 트리거 전용 진입점 — 팔로워 인스턴스가 직접 writer를 호출하지 못하게
      * 리더 여부를 먼저 확인한다(비리더면 예외 — 실제 리더로 전달할지는 호출부가 결정).
+     * 최근 48시간 롤링 윈도우만 다시 확인한다 — 과거 구간 백필은 {@link #manualBackfillRange}.
      */
     public RefillResult manualRefill(String symbol, String marketType, long nowMs) {
         if (!leaderElectionService.isLeader()) {
@@ -114,22 +116,49 @@ public class BinanceKline5mSyncService {
     }
 
     /**
+     * 관리자 수동 백필 전용 진입점 — 임의의 과거 [fromMs, toMsExclusive) 구간을 채운다
+     * (예: canonical 표 생성 시점과 legacy 5분 표 경계 사이의 최초 이력 격차).
+     * 리더 여부 확인, in-flight 가드, 429/5xx 재시도, 쓰기 직전 리더 재확인을 리필과
+     * 동일하게 재사용한다. 요청 범위가 {@link BinanceKlineRangeFetcher#MAX_RANGE_MS}(48시간)
+     * 를 넘으면 거부한다 — 더 큰 백필이 필요해지면 호출부가 48시간 단위로 나눠 호출한다.
+     */
+    public RefillResult manualBackfillRange(String symbol, String marketType, long fromMs, long toMsExclusive) {
+        if (!leaderElectionService.isLeader()) {
+            throw new IllegalStateException(
+                    "이 인스턴스는 리더가 아니라 binance_kline_5m 백필을 직접 실행할 수 없습니다");
+        }
+        // 호출부(관리자 API)가 검증을 빠뜨려도 core 진입점 스스로 5분 경계·48시간 상한·
+        // "아직 안 끝난 봉을 완료봉으로 저장하지 않기"를 보장한다(defense in depth).
+        BinanceKlineRangeFetcher.validateBoundedRange(fromMs, toMsExclusive, BinanceKlineInterval.FIVE_MINUTES);
+        long safeEnd = BinanceKlineWindow.safeEnd(clock.millis(), BinanceKlineInterval.FIVE_MINUTES);
+        if (toMsExclusive > safeEnd) {
+            throw new IllegalArgumentException(
+                    "백필 종료 시각은 아직 안전 지연(10분) 이전이어야 합니다 — 진행 중인 봉을 완료봉으로 저장할 수 없습니다");
+        }
+        return refillRange(symbol, marketType, fromMs, toMsExclusive);
+    }
+
+    /**
      * 최근 48시간의 "있어야 할" 5분봉 시각 집합과 DB에 있는 집합을 비교해 빠진 구간만
      * 다시 채운다. in-flight 가드는 중복 HTTP 호출을 줄이기 위한 효율 최적화이며
      * 정합성은 DB UK가 보장한다.
      */
     RefillResult refillNow(String symbol, String marketType, long nowMs) {
-        long intervalMs = BinanceKlineInterval.FIVE_MINUTES.intervalMs();
         long toMsExclusive = BinanceKlineWindow.safeEnd(nowMs, BinanceKlineInterval.FIVE_MINUTES);
         long fromMs = Math.max(0L, toMsExclusive - BinanceKlineRangeFetcher.MAX_RANGE_MS);
+        return refillRange(symbol, marketType, fromMs, toMsExclusive);
+    }
+
+    private RefillResult refillRange(String symbol, String marketType, long fromMs, long toMsExclusive) {
+        long intervalMs = BinanceKlineInterval.FIVE_MINUTES.intervalMs();
         if (toMsExclusive <= fromMs) {
-            return new RefillResult(0, 0, 0, 0, 0, false);
+            return new RefillResult(0, 0, 0, 0, 0, false, false);
         }
 
         String key = symbol + "|" + marketType;
         if (!inFlightSymbols.add(key)) {
             log.info("[BinanceKline5m] {} 리필이 이미 실행 중이라 건너뜁니다", key);
-            return new RefillResult(0, 0, 0, 0, 0, false);
+            return new RefillResult(0, 0, 0, 0, 0, false, true);
         }
         try {
             TreeSet<Long> expected = expectedTimes(fromMs, toMsExclusive, intervalMs);
@@ -168,7 +197,8 @@ public class BinanceKline5mSyncService {
 
             TreeSet<Long> presentAfter = storedTimes(symbol, marketType, fromMs, toMsExclusive);
             int remainingGap = expected.size() - presentAfter.size();
-            return new RefillResult(expected.size(), fetched, inserted, presentAfter.size(), remainingGap, leaderLostMidRun);
+            return new RefillResult(
+                    expected.size(), fetched, inserted, presentAfter.size(), remainingGap, leaderLostMidRun, false);
         } finally {
             inFlightSymbols.remove(key);
         }
@@ -257,6 +287,7 @@ public class BinanceKline5mSyncService {
             int inserted,
             int presentAfter,
             int remainingGap,
-            boolean leaderLostMidRun) {
+            boolean leaderLostMidRun,
+            boolean skippedInFlight) {
     }
 }
