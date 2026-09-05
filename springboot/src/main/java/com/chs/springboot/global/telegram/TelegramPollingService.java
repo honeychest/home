@@ -110,8 +110,18 @@ public class TelegramPollingService {
             if (n >= 3) {
                 healthHeartbeat.fail(HEALTH_KEY, cause);
             }
-            log.warn("Telegram polling error (연속 {}회): {}", n, cause);
+            log.warn("Telegram polling error (연속 {}회): {}", n, cause, maskedForLog(e));
         }
+    }
+
+    /**
+     * 로그 기록용 예외 — 타입/스택트레이스/중첩 cause는 그대로 보존하되 최상위 메시지의 토큰만 마스킹한다.
+     * 예외 e를 그대로 넘기면 최상위 메시지(요청 URL)에 봇 토큰이 그대로 찍히므로 직접 넘기지 않는다.
+     */
+    private static Throwable maskedForLog(Exception e) {
+        Throwable masked = new Throwable(e.getClass().getName() + ": " + maskToken(e), e.getCause());
+        masked.setStackTrace(e.getStackTrace());
+        return masked;
     }
 
     /** 타임아웃 지정 RestTemplate 생성 — 무한 대기(행)를 최대 10초 내 실패로 전환해 연속 실패 카운터가 감지하게 함 */
