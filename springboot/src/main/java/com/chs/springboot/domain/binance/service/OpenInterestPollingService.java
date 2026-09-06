@@ -54,11 +54,12 @@ public class OpenInterestPollingService {
 
                 JsonNode node = objectMapper.readTree(response);
                 String oiValue = node.get("openInterest").asText();
-                // 1분 경계로 내림 — (symbol, collected_at_ms) 유니크 키와 짝을 이뤄 1분에 한 행이 남는다.
-                // 예전에는 5분 경계였고, 그 탓에 1분마다 폴링하면서도 5번 중 4번이 유니크 키에 막혀 버려졌다.
-                // 그 결과 OI 차트가 5분 간격이 되어 5분·30분 구간에서 1분봉 캔들과 밀도가 어긋났다 (2026-09-06).
-                // 과거 구간은 OiBackfillService 가 바이낸스 5m klines 로 채우므로 계속 5분 격자다 — 1분 격자는 이 시점 이후만.
-                long timestamp = node.get("time").asLong() / 60_000L * 60_000L;
+                // 5분 경계로 내림 — (symbol, collected_at_ms) 유니크 키와 짝을 이뤄 5분에 한 행만 남는다.
+                // 1분마다 폴링하지만 5번 중 4번은 유니크 키에 막혀 버려진다. 의도된 동작이다.
+                // 2026-09-06 에 1분 경계로 바꿨다가 되돌렸다 — 5분·30분 구간에서 1분봉 캔들과 밀도는 맞았지만,
+                // 백필이 바이낸스 5m klines 로만 과거를 채울 수 있어 과거는 영원히 5분 격자로 남고
+                // 전환 시점에 격자가 어긋나는 것을 택하지 않았다.
+                long timestamp = node.get("time").asLong() / 300_000L * 300_000L;
 
                 // 현재가 조회
                 BigDecimal price = null;
