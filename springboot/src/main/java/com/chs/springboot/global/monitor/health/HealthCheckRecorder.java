@@ -5,6 +5,7 @@
 //  - markOk : 진행 중 이벤트가 있으면 resolvedAt 을 찍어 닫는다 (없으면 무동작)
 package com.chs.springboot.global.monitor.health;
 
+import com.chs.springboot.global.monitor.SourceEnvNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
@@ -40,14 +41,16 @@ public class HealthCheckRecorder {
     private void markFail(String checkKey, HealthStatus status, String severity, String cause) {
         HealthEventStatus eventStatus = HealthEventStatus.fromFailure(status);
         LocalDateTime now = LocalDateTime.now();
-        HealthCheckEvent open = repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(checkKey);
+        String currentSourceEnv = normalizedSourceEnv();
+        HealthCheckEvent open = repository.findTopByCheckKeyAndSourceEnvAndResolvedAtIsNullOrderByLastFailedAtDesc(
+                checkKey, currentSourceEnv);
         HealthEventStatus previousStatus = open == null ? null : open.getStatus();
         if (open == null) {
             open = new HealthCheckEvent();
             open.setCheckKey(checkKey);
             open.setFirstFailedAt(now);
             open.setCreatedAt(now);
-            open.setSourceEnv(normalizedSourceEnv());
+            open.setSourceEnv(currentSourceEnv);
         }
         open.setStatus(eventStatus);
         open.setSeverity(severity);
@@ -65,7 +68,9 @@ public class HealthCheckRecorder {
     /** 정상 복구를 기록. 진행 중 이벤트가 있으면 닫는다. */
     @Transactional
     public void markOk(String checkKey) {
-        HealthCheckEvent open = repository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(checkKey);
+        String currentSourceEnv = normalizedSourceEnv();
+        HealthCheckEvent open = repository.findTopByCheckKeyAndSourceEnvAndResolvedAtIsNullOrderByLastFailedAtDesc(
+                checkKey, currentSourceEnv);
         if (open == null) {
             return;
         }
@@ -81,16 +86,6 @@ public class HealthCheckRecorder {
     }
 
     private String normalizedSourceEnv() {
-        if (sourceEnv == null || sourceEnv.isBlank()) {
-            return "local";
-        }
-        String normalized = sourceEnv.toLowerCase().trim();
-        if (normalized.contains("prod")) {
-            return "prod";
-        }
-        if (normalized.contains("local")) {
-            return "local";
-        }
-        return normalized.split(",")[0].trim();
+        return SourceEnvNormalizer.normalize(sourceEnv);
     }
 }

@@ -6,6 +6,10 @@ FROM azul/zulu-openjdk-alpine:17
 # 2. 작업 디렉토리 설정
 WORKDIR /app
 
+# CI 빌드 커밋을 실행 이미지에 기록해 배포 대상과 실행 파일을 대조한다.
+ARG BUILD_REVISION=unknown
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
+
 # 3. 빌드된 JAR 파일을 컨테이너 내부로 복사
 # 빌드 시 생성되는 파일명인 chsproject.jar를 사용합니다.
 COPY build/libs/chsproject.jar app.jar

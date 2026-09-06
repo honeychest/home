@@ -16,7 +16,7 @@ x-logging: &default-logging
     max-file: "3"
 
 x-common: &common
-  image: localhost:5010/chsproject-docker:latest
+  image: localhost:5010/chsproject-docker:${IMAGE_TAG:-latest}
   env_file:
     - .env
   networks:

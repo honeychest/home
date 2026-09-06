@@ -1,6 +1,7 @@
 // [AGENT] 임계 지속 초과 알림 + 쿨다운 + AlertHistory 저장
 package com.chs.springboot.global.monitor.service;
 
+import com.chs.springboot.global.monitor.SourceEnvNormalizer;
 import com.chs.springboot.global.config.service.AppConfigService;
 import com.chs.springboot.global.monitor.dto.MetricSnapshot;
 import com.chs.springboot.global.monitor.entity.AlertHistory;
@@ -146,7 +147,7 @@ public class AlertService {
             history.setDurationSec(feed.secondsSinceLastMessage() == null ? 0 : Math.toIntExact(feed.secondsSinceLastMessage()));
             history.setSeverity(status == HealthStatus.DOWN ? AlertHistory.Severity.CRITICAL : AlertHistory.Severity.WARN);
             history.setSentAt(LocalDateTime.now());
-            history.setSourceEnv(normalizedSourceEnv());
+            history.setSourceEnv(SourceEnvNormalizer.normalize(sourceEnv));
             history.setMemo("[%s] %s / lastMessageAt=%s / receivedCount=%d"
                     .formatted(feedId, status.name(), feed.lastMessageAtEpochMs(), feed.receivedCount()));
             alertHistoryRepository.save(history);
@@ -205,25 +206,12 @@ public class AlertService {
             h.setDurationSec(durationSec);
             h.setSeverity(AlertHistory.Severity.CRITICAL);
             h.setSentAt(LocalDateTime.now());
-            h.setSourceEnv(normalizedSourceEnv());
+            h.setSourceEnv(SourceEnvNormalizer.normalize(sourceEnv));
             alertHistoryRepository.save(h);
         } catch (Exception e) {
             log.warn("AlertService send/store failed: {}", e.getMessage());
         }
     }
 
-    private String normalizedSourceEnv() {
-        if (sourceEnv == null || sourceEnv.isBlank()) {
-            return "local";
-        }
-        String normalized = sourceEnv.toLowerCase().trim();
-        if (normalized.contains("prod")) {
-            return "prod";
-        }
-        if (normalized.contains("local")) {
-            return "local";
-        }
-        return normalized.split(",")[0].trim();
-    }
 }
 

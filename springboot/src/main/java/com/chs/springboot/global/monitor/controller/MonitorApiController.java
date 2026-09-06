@@ -1,6 +1,7 @@
 // [AGENT] 모니터링 관련 REST API (access-request, allowed-ips, alert-history, ping, visitor-logs, visitor-log-record)
 package com.chs.springboot.global.monitor.controller;
 
+import com.chs.springboot.global.monitor.SourceEnvNormalizer;
 import com.chs.springboot.global.monitor.entity.AlertHistory;
 import com.chs.springboot.global.monitor.entity.IpAuditLog;
 import com.chs.springboot.global.monitor.entity.VisitorLog;
@@ -157,7 +158,8 @@ public class MonitorApiController {
         LocalDateTime fromDt = from != null ? from.atStartOfDay() : null;
         LocalDateTime toDt = to != null ? to.atTime(LocalTime.MAX) : null;
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 200));
-        Page<AlertHistory> result = alertHistoryRepository.findByFilters(normalizedSourceEnv(), fromDt, toDt, type, pageable);
+        Page<AlertHistory> result = alertHistoryRepository.findByFilters(
+                SourceEnvNormalizer.normalize(sourceEnv), fromDt, toDt, type, pageable);
         return ResponseEntity.ok(result);
     }
 
@@ -221,18 +223,5 @@ public class MonitorApiController {
                 """.formatted(ip, requestId, requestId, requestId, requestId, requestId).trim();
     }
 
-    private String normalizedSourceEnv() {
-        if (sourceEnv == null || sourceEnv.isBlank()) {
-            return "local";
-        }
-        String normalized = sourceEnv.toLowerCase().trim();
-        if (normalized.contains("prod")) {
-            return "prod";
-        }
-        if (normalized.contains("local")) {
-            return "local";
-        }
-        return normalized.split(",")[0].trim();
-    }
 }
 

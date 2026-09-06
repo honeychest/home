@@ -5,6 +5,7 @@ package com.chs.springboot.global.monitor.health;
 
 import com.chs.springboot.global.monitor.feed.FeedHealthRegistry;
 import com.chs.springboot.global.monitor.service.MetricCollectorService;
+import com.chs.springboot.global.monitor.SourceEnvNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -28,12 +29,16 @@ public class HealthCheckService {
     private final MetricCollectorService metricCollectorService;
     private final HealthClusterSnapshot healthClusterSnapshot;
 
+    @Value("${monitor.alert-history.source-env:${spring.profiles.active:local}}")
+    private String sourceEnv;
+
     // 현재 정상이어도 이 시간 안에 복구된 장애가 있으면 '최근이상' 흔적을 표시(클릭 없이 인지). 0 이하면 비활성.
     @Value("${monitor.health.recent-window-hours:24}")
     private int recentWindowHours;
 
     /** 보드에 표시할 전체 체크 목록 */
     public List<HealthCheckView> getChecks() {
+        String currentSourceEnv = normalizedSourceEnv();
         Map<String, FeedHealthRegistry.FeedHealth> feeds = new HashMap<>();
         for (FeedHealthRegistry.FeedHealth f : feedHealthRegistry.snapshot()) {
             feeds.put(f.feedId(), f);
@@ -41,7 +46,7 @@ public class HealthCheckService {
         HealthSource.ClusterView cluster = HealthSource.ClusterView.from(
                 healthClusterSnapshot.read().orElse(null));
         HealthSource.Ports ports = new HealthSource.Ports(
-                feeds, healthHeartbeat, metricCollectorService, eventRepository, cluster);
+                feeds, healthHeartbeat, metricCollectorService, eventRepository, cluster, currentSourceEnv);
 
         LocalDateTime recentCutoff = recentWindowHours > 0
                 ? LocalDateTime.now().minusHours(recentWindowHours) : null;
@@ -52,7 +57,8 @@ public class HealthCheckService {
 
             List<HealthCheckView.Failure> recent = new ArrayList<>();
             String recoveredAt = null; // 창 안에서 복구된 가장 최근 시각(최신순 조회라 첫 매치가 최신)
-            for (HealthCheckEvent e : eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(c.key())) {
+            for (HealthCheckEvent e : eventRepository.findTop3ByCheckKeyAndSourceEnvOrderByLastFailedAtDesc(
+                    c.key(), currentSourceEnv)) {
                 recent.add(new HealthCheckView.Failure(
                         fmt(e.getLastFailedAt()), e.getStatus(), e.getCause(), fmt(e.getResolvedAt())
                 ));
@@ -82,12 +88,16 @@ public class HealthCheckService {
 
     /** 최근 실패 이력 (최신순 100건) — 컨트롤러 직렬화용 타입드 뷰로 변환해 반환 */
     public List<HealthEventView> getRecentEvents() {
-        return eventRepository.findTop100ByOrderByLastFailedAtDesc().stream()
+        return eventRepository.findTop100BySourceEnvOrderByLastFailedAtDesc(normalizedSourceEnv()).stream()
                 .map(e -> new HealthEventView(
                         e.getCheckKey(), e.getStatus(), e.getSeverity(), e.getCause(),
                         fmt(e.getFirstFailedAt()), fmt(e.getLastFailedAt()), fmt(e.getResolvedAt())
                 ))
                 .toList();
+    }
+
+    private String normalizedSourceEnv() {
+        return SourceEnvNormalizer.normalize(sourceEnv);
     }
 
     private static String fmt(java.time.LocalDateTime t) {

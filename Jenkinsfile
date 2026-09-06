@@ -63,8 +63,11 @@ pipeline {
             steps {
                 sh '''
                     cd $WORKSPACE/springboot
-                    ./gradlew bootJar --no-daemon
-                    docker build -t ${REGISTRY}/chsproject-docker:${GIT_SHORT} .
+                    ./gradlew clean test bootJar --no-daemon
+                    test -f build/libs/chsproject.jar
+                    javap -classpath build/classes/java/main -c -p com.chs.springboot.global.monitor.health.HealthCheckRecorder | grep -q 'findTopByCheckKeyAndSourceEnv'
+                    jar tf build/libs/chsproject.jar | grep -q 'BOOT-INF/classes/com/chs/springboot/global/monitor/health/HealthCheckRecorder.class'
+                    docker build --build-arg BUILD_REVISION=${GIT_SHORT} -t ${REGISTRY}/chsproject-docker:${GIT_SHORT} .
                     docker tag ${REGISTRY}/chsproject-docker:${GIT_SHORT} ${REGISTRY}/chsproject-docker:latest
                     docker push ${REGISTRY}/chsproject-docker:${GIT_SHORT}
                     docker push ${REGISTRY}/chsproject-docker:latest
@@ -83,7 +86,7 @@ pipeline {
                 }
             }
             steps {
-                sh '/Users/honey/devcontext/project/lab/springboot/deploy-back-only.sh'
+                sh 'IMAGE_TAG="${GIT_SHORT}" /Users/honey/devcontext/project/lab/springboot/deploy-back-only.sh'
             }
         }
 

@@ -100,7 +100,7 @@ public enum HealthSource {
     INFRA {         // InfraHealthProbe 능동 프로브가 적립한 open 이벤트 기반 (UP 아니면 DOWN)
         @Override
         Judgement judge(HealthCheckCatalog check, Ports ports) {
-            return judgeFromEvents(check.key(), ports.events());
+            return judgeFromEvents(check.key(), ports.events(), ports.sourceEnv());
         }
 
         @Override
@@ -112,7 +112,7 @@ public enum HealthSource {
     EVENT {         // 능동 평가기·호출지점 push 가 적립한 open 이벤트 유무
         @Override
         Judgement judge(HealthCheckCatalog check, Ports ports) {
-            return judgeFromEvents(check.key(), ports.events());
+            return judgeFromEvents(check.key(), ports.events(), ports.sourceEnv());
         }
 
         @Override
@@ -130,7 +130,8 @@ public enum HealthSource {
             HealthHeartbeat heartbeat,
             MetricCollectorService metrics,
             HealthCheckEventRepository events,
-            ClusterView cluster
+            ClusterView cluster,
+            String sourceEnv
     ) { }
 
     /**
@@ -185,9 +186,9 @@ public enum HealthSource {
 
     // 평가기·호출지점 push 가 이벤트로 적립한 결과를 읽는다(INFRA·EVENT 소스 공용).
     // 미복구(open) 이벤트 있으면 그 상태, 없으면 정상(UP). "알려진 실패 없음" 낙관 표시.
-    private static Judgement judgeFromEvents(String key, HealthCheckEventRepository events) {
+    private static Judgement judgeFromEvents(String key, HealthCheckEventRepository events, String sourceEnv) {
         HealthCheckEvent open =
-                events.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(key);
+                events.findTopByCheckKeyAndSourceEnvAndResolvedAtIsNullOrderByLastFailedAtDesc(key, sourceEnv);
         if (open == null) {
             return new Judgement(HealthStatus.UP, "정상");
         }

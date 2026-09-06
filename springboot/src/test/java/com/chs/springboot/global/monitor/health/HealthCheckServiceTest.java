@@ -116,8 +116,8 @@ class HealthCheckServiceTest {
         HealthCheckEvent open = new HealthCheckEvent();
         open.setStatus(HealthEventStatus.DEGRADED);
         open.setCause("gap 2개");
-        when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
-                HealthCheckCatalog.DATA_CANDLE_GAP.key())).thenReturn(open);
+        when(eventRepository.findTopByCheckKeyAndSourceEnvAndResolvedAtIsNullOrderByLastFailedAtDesc(
+                HealthCheckCatalog.DATA_CANDLE_GAP.key(), "local")).thenReturn(open);
 
         assertThat(statusOf(HealthCheckCatalog.DATA_CANDLE_GAP.key())).isEqualTo(HealthStatus.DEGRADED);
     }
@@ -127,8 +127,8 @@ class HealthCheckServiceTest {
         HealthCheckEvent open = new HealthCheckEvent();
         open.setStatus(HealthEventStatus.DOWN);
         open.setCause("flat 40%");
-        when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
-                HealthCheckCatalog.DATA_QUALITY.key())).thenReturn(open);
+        when(eventRepository.findTopByCheckKeyAndSourceEnvAndResolvedAtIsNullOrderByLastFailedAtDesc(
+                HealthCheckCatalog.DATA_QUALITY.key(), "local")).thenReturn(open);
 
         assertThat(statusOf(HealthCheckCatalog.DATA_QUALITY.key())).isEqualTo(HealthStatus.DOWN);
     }
@@ -144,8 +144,8 @@ class HealthCheckServiceTest {
         HealthCheckEvent open = new HealthCheckEvent();
         open.setStatus(HealthEventStatus.DOWN);
         open.setCause("송신 실패");
-        when(eventRepository.findTopByCheckKeyAndResolvedAtIsNullOrderByLastFailedAtDesc(
-                HealthCheckCatalog.EXT_LLM.key())).thenReturn(open);
+        when(eventRepository.findTopByCheckKeyAndSourceEnvAndResolvedAtIsNullOrderByLastFailedAtDesc(
+                HealthCheckCatalog.EXT_LLM.key(), "local")).thenReturn(open);
 
         assertThat(statusOf(HealthCheckCatalog.EXT_LLM.key())).isEqualTo(HealthStatus.DOWN);
     }
@@ -160,7 +160,7 @@ class HealthCheckServiceTest {
         e.setCause("연결 실패");
         e.setFirstFailedAt(java.time.LocalDateTime.of(2026, 7, 4, 10, 0, 0));
         e.setLastFailedAt(java.time.LocalDateTime.of(2026, 7, 4, 10, 5, 0));
-        when(eventRepository.findTop100ByOrderByLastFailedAtDesc()).thenReturn(List.of(e));
+        when(eventRepository.findTop100BySourceEnvOrderByLastFailedAtDesc("local")).thenReturn(List.of(e));
 
         List<HealthEventView> events = service.getRecentEvents();
 
@@ -223,7 +223,7 @@ class HealthCheckServiceTest {
         recovered.setStatus(HealthEventStatus.DOWN);
         recovered.setLastFailedAt(LocalDateTime.now().minusHours(1));
         recovered.setResolvedAt(LocalDateTime.now().minusMinutes(50));
-        when(eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(eq(key)))
+        when(eventRepository.findTop3ByCheckKeyAndSourceEnvOrderByLastFailedAtDesc(eq(key), eq("local")))
                 .thenReturn(List.of(recovered));
 
         HealthCheckView v = viewOf(key);
@@ -241,7 +241,7 @@ class HealthCheckServiceTest {
         old.setStatus(HealthEventStatus.DOWN);
         old.setLastFailedAt(LocalDateTime.now().minusDays(2)); // 창 밖
         old.setResolvedAt(LocalDateTime.now().minusDays(2));
-        when(eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(eq(key)))
+        when(eventRepository.findTop3ByCheckKeyAndSourceEnvOrderByLastFailedAtDesc(eq(key), eq("local")))
                 .thenReturn(List.of(old));
 
         HealthCheckView v = viewOf(key);
@@ -258,7 +258,7 @@ class HealthCheckServiceTest {
     }
 
     private HealthStatus statusOf(String key) {
-        when(eventRepository.findTop3ByCheckKeyOrderByLastFailedAtDesc(anyKey()))
+        when(eventRepository.findTop3ByCheckKeyAndSourceEnvOrderByLastFailedAtDesc(anyKey(), eq("local")))
                 .thenReturn(List.of());
         List<HealthCheckView> checks = service.getChecks();
         return checks.stream()
