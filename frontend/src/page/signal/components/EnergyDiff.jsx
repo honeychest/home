@@ -41,6 +41,9 @@ export default function EnergyDiff({ longEnergy, shortEnergy, longLiqTotal, shor
 
     if (!energyDiff && !liqDiff) return null;
 
+    // 라벨은 "어느 쪽이 청산됐나", 부호·색은 "그래서 시장이 어느 쪽 우세인가" — 둘은 반대 방향을 가리킨다.
+    const liqLabel = liqDiff?.longDominant ? '숏청산' : '롱청산';
+
     return (
         <div
             style={{
@@ -57,7 +60,7 @@ export default function EnergyDiff({ longEnergy, shortEnergy, longLiqTotal, shor
             {energyDiff && liqDiff && (
                 <span style={{ width: '1px', height: '16px', backgroundColor: 'var(--black-border-subtle)' }} />
             )}
-            <DiffItem label="청산" diff={liqDiff} />
+            <DiffItem label={liqLabel} diff={liqDiff} />
         </div>
     );
 }
