@@ -117,7 +117,7 @@ public class LeaderElectionService {
             }
             healthHeartbeat.beat(HEALTH_KEY); // election 루프 정상 갱신(Redis 도달)
         } catch (Exception e) {
-            log.error("Leader election error lease={} error={}", SERVER_LEADER_LEASE, e.getMessage());
+            log.error("Leader election error lease={} error={}", SERVER_LEADER_LEASE, e.getMessage(), e);
             healthHeartbeat.fail(HEALTH_KEY, e.getMessage());
             updateLeadership(false, currentEpoch);
         }
