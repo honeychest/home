@@ -4,8 +4,9 @@
 import TradingViewWidget from './TradingViewWidget.jsx';
 import MiniChartPlaceholder from './MiniChartPlaceholder.jsx';
 import DivergenceBar from './DivergenceBar.jsx';
+import EnergyDiff from './EnergyDiff.jsx';
 
-export default function MainCore({ symbol, longEnergy, shortEnergy, fundingRate, oiData = [], candleHistory = [], candleType, timeRange, displayCount, rangeMs, onCandleTime, onCandleUpdate }) {
+export default function MainCore({ symbol, longEnergy, shortEnergy, longLiqTotal, shortLiqTotal, fundingRate, oiData = [], candleHistory = [], candleType, timeRange, displayCount, rangeMs, onCandleTime, onCandleUpdate }) {
     const getFundingBorder = () => {
         if (!fundingRate) return {};
 
@@ -51,7 +52,11 @@ export default function MainCore({ symbol, longEnergy, shortEnergy, fundingRate,
                 <TradingViewWidget symbol={symbol} />
             </div>
 
-            <DivergenceBar candleHistory={candleHistory} rangeMs={rangeMs} />
+            {/* 아래 MiniChartPlaceholder 와 같은 3등분 — EnergyDiff 가 가운데 Signal 게이지 정중앙 위에 오게 한다 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                <DivergenceBar candleHistory={candleHistory} rangeMs={rangeMs} />
+                <EnergyDiff longEnergy={longEnergy} shortEnergy={shortEnergy} longLiqTotal={longLiqTotal} shortLiqTotal={shortLiqTotal} />
+            </div>
 
             <div style={{ flex: '40%' }}>
                 <MiniChartPlaceholder oiData={oiData} symbol={symbol} candleHistory={candleHistory} candleType={candleType} timeRange={timeRange} displayCount={displayCount} rangeMs={rangeMs} onCandleTime={onCandleTime} onCandleUpdate={onCandleUpdate} longEnergy={longEnergy} shortEnergy={shortEnergy} />

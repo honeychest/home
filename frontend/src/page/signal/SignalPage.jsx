@@ -40,9 +40,13 @@ const TIME_RANGES = [
 ];
 const getDataRange    = (range) => TIME_RANGES.find((r) => r.value === range)?.dataRange    ?? '5m';
 const getDisplayCount = (range) => TIME_RANGES.find((r) => r.value === range)?.displayCount ?? 90;
+const getCandleType   = (range) => TIME_RANGES.find((r) => r.value === range)?.candleType   ?? '5m';
 
-// OI 차트와 동일한 캔들 타입 — 비교 기준 통일 (변경 시 여기만 수정)
-const CHART_CANDLE_TYPE = '5m';
+// rangeMs(다이버전스 판정 창 · OI 차트 슬라이싱)의 환산 단위.
+// 캔들 간격이 구간마다 달라져도 이 값은 5분으로 고정한다 — 캔들 간격과 함께 움직이면
+// FUTURES 차트 · 다이버전스 · OI 차트 세 곳이 동시에 달라지기 때문이다.
+// 이 값과 버튼 라벨이 어긋나 있는 것은 알려진 문제이며 별도 회차로 다룬다 (2026-09-06).
+const RANGE_UNIT_MS = 300_000;
 const HISTORY_INPUT_ERROR = '시작 시각을 확인해 주세요.';
 const HISTORY_LOAD_ERROR = '에너지 내역을 불러오지 못했습니다.';
 
@@ -196,7 +200,7 @@ export default function SignalPage() {
         }
     }, [selectedTemplateId]);
 
-    const candleType  = CHART_CANDLE_TYPE;
+    const candleType  = getCandleType(timeRange);
     const candleRange = timeRange;
     useEffect(() => {
         setRuntimeState((prev) => ({ ...prev, candleHistory: [] }));
@@ -264,8 +268,7 @@ export default function SignalPage() {
     };
 
     const displayCount  = getDisplayCount(timeRange);
-    const candleUnitMs  = candleType === '1m' ? 60_000 : 300_000;
-    const rangeMs       = displayCount * candleUnitMs;
+    const rangeMs       = displayCount * RANGE_UNIT_MS;
 
     const commonProps = {
         symbol,
@@ -360,6 +363,8 @@ export default function SignalPage() {
                     symbol={symbol}
                     longEnergy={runtimeState.longEnergy}
                     shortEnergy={runtimeState.shortEnergy}
+                    longLiqTotal={runtimeState.longLiqTotal}
+                    shortLiqTotal={runtimeState.shortLiqTotal}
                     fundingRate={commonProps.fundingRate}
                     oiData={runtimeState.oiDataHistory}
                     candleHistory={runtimeState.candleHistory}
