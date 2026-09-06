@@ -28,25 +28,34 @@ import {
 } from './model/signalRuntimeModel.js';
 import { datetimeLocalToMs } from './model/datetimeLocal.js';
 
-// value: 타임라인 식별자 | dataRange: 에너지·청산·OI 조회 범위 | displayCount: 차트 표시 기준 범위
+// value: 타임라인 식별자 | dataRange: 에너지·청산·OI·캔들 조회 범위 | candleType: 캔들 간격(1m/5m)
+// 화면에 보이는 모든 창(FUTURES 차트 · 다이버전스 판정 · OI 차트)은 dataRange 하나에서 나온다.
+// 예전에 있던 displayCount(봉 개수)는 라벨과 무관한 값이라 창이 최대 150배까지 어긋났었다 (2026-09-06 제거).
 const TIME_RANGES = [
-    { value: '1m',  label: '1분',   dataRange: '1m',  candleType: '1m', displayCount: 30  },
-    { value: '5m',  label: '5분',   dataRange: '5m',  candleType: '1m', displayCount: 60  },
-    { value: '30m', label: '30분',  dataRange: '30m', candleType: '1m', displayCount: 90  },
-    { value: '4h',  label: '4시간', dataRange: '4h',  candleType: '5m', displayCount: 432 },
-    { value: '48h',  label: '48시간',  dataRange: '48h',  candleType: '5m', displayCount: 1728 },
-    { value: '168h', label: '168시간', dataRange: '168h', candleType: '5m', displayCount: 6048 },
-    { value: '336h', label: '336시간', dataRange: '336h', candleType: '5m', displayCount: 12096 },
+    { value: '5m',  label: '5분',   dataRange: '5m',  candleType: '1m' },
+    { value: '30m', label: '30분',  dataRange: '30m', candleType: '1m' },
+    { value: '4h',  label: '4시간', dataRange: '4h',  candleType: '5m' },
+    { value: '1d',  label: '1일',   dataRange: '1d',  candleType: '5m' },
+    { value: '3d',  label: '3일',   dataRange: '3d',  candleType: '5m' },
+    { value: '7d',  label: '7일',   dataRange: '7d',  candleType: '5m' },
 ];
-const getDataRange    = (range) => TIME_RANGES.find((r) => r.value === range)?.dataRange    ?? '5m';
-const getDisplayCount = (range) => TIME_RANGES.find((r) => r.value === range)?.displayCount ?? 90;
-const getCandleType   = (range) => TIME_RANGES.find((r) => r.value === range)?.candleType   ?? '5m';
+const getDataRange  = (range) => TIME_RANGES.find((r) => r.value === range)?.dataRange  ?? '4h';
+const getCandleType = (range) => TIME_RANGES.find((r) => r.value === range)?.candleType ?? '5m';
 
-// rangeMs(다이버전스 판정 창 · OI 차트 슬라이싱)의 환산 단위.
-// 캔들 간격이 구간마다 달라져도 이 값은 5분으로 고정한다 — 캔들 간격과 함께 움직이면
-// FUTURES 차트 · 다이버전스 · OI 차트 세 곳이 동시에 달라지기 때문이다.
-// 이 값과 버튼 라벨이 어긋나 있는 것은 알려진 문제이며 별도 회차로 다룬다 (2026-09-06).
-const RANGE_UNIT_MS = 300_000;
+// 범위 문자열(m/h/d)을 ms 로. 규칙의 원본은 서버 SignalDataService.parseRangeToMs 이고 여기는 같은 규칙을 따른다.
+const parseRangeToMs = (range) => {
+    const num  = parseInt(range, 10);
+    switch (range.slice(-1)) {
+        case 'm': return num * 60_000;
+        case 'h': return num * 3_600_000;
+        default:  return num * 86_400_000;
+    }
+};
+
+// 저장된 값이 표에서 사라진 구간(예전의 1m·48h·336h)일 수 있어 반드시 표와 대조한다.
+const DEFAULT_TIME_RANGE = TIME_RANGES[Math.floor(TIME_RANGES.length / 2)].value;
+const resolveTimeRange = (stored) =>
+    TIME_RANGES.some((r) => r.value === stored) ? stored : DEFAULT_TIME_RANGE;
 const HISTORY_INPUT_ERROR = '시작 시각을 확인해 주세요.';
 const HISTORY_LOAD_ERROR = '에너지 내역을 불러오지 못했습니다.';
 
@@ -54,7 +63,7 @@ export default function SignalPage() {
     const [theme] = usePageTheme('signal');
     const themeClass = theme !== 'black' ? `theme-${theme}` : '';
     const [symbol, setSymbol] = useState('BTCUSDT');
-    const [timeRange, setTimeRange] = useState(() => localStorage.getItem('signal_timeRange') || TIME_RANGES[Math.floor(TIME_RANGES.length / 2)].value);
+    const [timeRange, setTimeRange] = useState(() => resolveTimeRange(localStorage.getItem('signal_timeRange')));
     const [customHistoryEnabled, setCustomHistoryEnabled] = useState(() => localStorage.getItem('signal_customHistoryEnabled') === 'true');
     const [customHistoryStart, setCustomHistoryStart] = useState(() => localStorage.getItem('signal_customHistoryStart') || '');
     const [historyError, setHistoryError] = useState('');
@@ -137,7 +146,7 @@ export default function SignalPage() {
     }, [symbol, timeRange, customHistoryEnabled, customHistoryStart]);
 
     // OI 히스토리: timeRange 이상 데이터 로드 (최소 120h 보장) → 클라이언트에서 rangeMs 기준 슬라이싱
-    const LARGE_OI_RANGES = new Set(['168h', '336h']);
+    const LARGE_OI_RANGES = new Set(['7d']);
     useEffect(() => {
         const loadOiHistory = async () => {
             try {
@@ -267,8 +276,7 @@ export default function SignalPage() {
         }, 300);
     };
 
-    const displayCount  = getDisplayCount(timeRange);
-    const rangeMs       = displayCount * RANGE_UNIT_MS;
+    const rangeMs       = parseRangeToMs(getDataRange(timeRange));
 
     const commonProps = {
         symbol,
@@ -370,7 +378,6 @@ export default function SignalPage() {
                     candleHistory={runtimeState.candleHistory}
                     candleType={candleType}
                     timeRange={timeRange}
-                    displayCount={displayCount}
                     rangeMs={rangeMs}
                     onCandleTime={(time) => setRuntimeState((prev) => ({ ...prev, latestCandleTime: time }))}
                     onCandleUpdate={handleCandleUpdate}

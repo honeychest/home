@@ -1,5 +1,5 @@
 // [AGENT] OI 라인 차트 — Lightweight Charts (증감 반영)
-// rangeMs 기준 클라이언트 슬라이싱: TIME_RANGES displayCount × candleUnit ms
+// rangeMs 기준 클라이언트 슬라이싱: 선택한 범위(TIME_RANGES.dataRange)를 ms 로 환산한 값
 import { createChart, AreaSeries } from 'lightweight-charts';
 import { useEffect, useRef } from 'react';
 

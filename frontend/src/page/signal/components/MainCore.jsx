@@ -6,7 +6,7 @@ import MiniChartPlaceholder from './MiniChartPlaceholder.jsx';
 import DivergenceBar from './DivergenceBar.jsx';
 import EnergyDiff from './EnergyDiff.jsx';
 
-export default function MainCore({ symbol, longEnergy, shortEnergy, longLiqTotal, shortLiqTotal, fundingRate, oiData = [], candleHistory = [], candleType, timeRange, displayCount, rangeMs, onCandleTime, onCandleUpdate }) {
+export default function MainCore({ symbol, longEnergy, shortEnergy, longLiqTotal, shortLiqTotal, fundingRate, oiData = [], candleHistory = [], candleType, timeRange, rangeMs, onCandleTime, onCandleUpdate }) {
     const getFundingBorder = () => {
         if (!fundingRate) return {};
 
@@ -59,7 +59,7 @@ export default function MainCore({ symbol, longEnergy, shortEnergy, longLiqTotal
             </div>
 
             <div style={{ flex: '40%' }}>
-                <MiniChartPlaceholder oiData={oiData} symbol={symbol} candleHistory={candleHistory} candleType={candleType} timeRange={timeRange} displayCount={displayCount} rangeMs={rangeMs} onCandleTime={onCandleTime} onCandleUpdate={onCandleUpdate} longEnergy={longEnergy} shortEnergy={shortEnergy} />
+                <MiniChartPlaceholder oiData={oiData} symbol={symbol} candleHistory={candleHistory} candleType={candleType} timeRange={timeRange} rangeMs={rangeMs} onCandleTime={onCandleTime} onCandleUpdate={onCandleUpdate} longEnergy={longEnergy} shortEnergy={shortEnergy} />
             </div>
         </div>
     );
